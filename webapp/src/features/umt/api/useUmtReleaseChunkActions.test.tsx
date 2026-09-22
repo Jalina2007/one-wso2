@@ -70,7 +70,11 @@ describe("useUmtCreateReleaseChunk", () => {
     });
 
     expect(authedPost).toHaveBeenCalledWith(umtServiceUrls.releaseChunks, "token", [1, 2, 3]);
-    expect(invalidatedKeys(invalidateQueries)).toEqual(["umt-release-chunks"]);
+    // The chunk's updates are locked into it now, so the lifecycle-state
+    // lists it was built from must not keep offering them.
+    expect(invalidatedKeys(invalidateQueries)).toEqual(
+      expect.arrayContaining(["umt-release-chunks", "umt-updates"]),
+    );
   });
 });
 

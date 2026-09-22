@@ -74,6 +74,25 @@ describe("useUmtUpdatesByLifecycleState", () => {
     expect(result.current.data?.data).toHaveLength(2);
   });
 
+  // The list goes stale whenever an update moves between lifecycle states, is
+  // locked into a chunk, or is demoted back out of one. Every mutation that
+  // does so already invalidates "umt-updates", so sharing that prefix is what
+  // keeps this list current rather than each of them having to know about it.
+  it("shares the umt-updates key prefix, so existing invalidations reach it", async () => {
+    authedGet.mockResolvedValue({ recordsTotal: 0, recordsFiltered: 0, data: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    renderHook(() => useUmtUpdatesByLifecycleState("UATStaging"), { wrapper: Wrapper });
+    await waitFor(() => expect(authedGet).toHaveBeenCalledTimes(1));
+
+    await client.invalidateQueries({ queryKey: ["umt-updates"] });
+
+    await waitFor(() => expect(authedGet).toHaveBeenCalledTimes(2));
+  });
+
   it("keeps each lifecycle state's result separate", async () => {
     authedGet.mockResolvedValue({ recordsTotal: 0, recordsFiltered: 0, data: [] });
     const Wrapper = wrapper();

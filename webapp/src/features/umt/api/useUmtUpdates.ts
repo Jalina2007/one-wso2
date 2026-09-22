@@ -63,7 +63,12 @@ export function useUmtUpdatesByLifecycleState(lifecycleState: string) {
   const userSub = subState.status === "ready" ? subState.sub : undefined;
 
   const query = useQuery<UmtUpdatesByLifecycleStateResponse>({
-    queryKey: ["umt-updates-by-lifecycle-state", userSub, lifecycleState],
+    // Keyed under "umt-updates" so that every mutation which already
+    // invalidates that prefix — a lifecycle transition, an unlock that demotes
+    // updates back out of a chunk, an edit, a completion — refreshes this list
+    // too. A key of its own would look tidier and would quietly go stale after
+    // all of them.
+    queryKey: ["umt-updates", "by-lifecycle-state", userSub, lifecycleState],
     enabled: isSignedIn && isUmtBackendConfigured() && Boolean(userSub),
     queryFn: async () =>
       authedGet<UmtUpdatesByLifecycleStateResponse>(

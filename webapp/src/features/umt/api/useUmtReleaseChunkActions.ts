@@ -22,6 +22,11 @@ import type { UmtCreateReleaseChunkRequest, UmtReleaseChunk } from "./umtRelease
 
 // POST /update/releaseChunk — body is the raw array of update ids, not an
 // object.
+//
+// Creating a chunk locks its updates into it, so the lifecycle-state lists the
+// chunk was assembled from no longer hold: without invalidating the updates
+// they came from, returning to the create screen offers the same updates again
+// and a second chunk can be built from updates already spoken for.
 export function useUmtCreateReleaseChunk() {
   const getAccessToken = useAccessToken();
   const queryClient = useQueryClient();
@@ -32,7 +37,10 @@ export function useUmtCreateReleaseChunk() {
       return authedPost<UmtReleaseChunk[]>(umtServiceUrls.releaseChunks, accessToken, updateIds);
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["umt-release-chunks"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["umt-release-chunks"] }),
+        queryClient.invalidateQueries({ queryKey: ["umt-updates"] }),
+      ]);
     },
   });
 }
