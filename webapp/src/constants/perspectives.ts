@@ -26,6 +26,7 @@ import {
   HouseIcon,
   LifeBuoyIcon,
   LayoutDashboard,
+  LucideLayoutGrid,
   MegaphoneIcon,
   NetworkIcon,
   RefreshCcw,
@@ -294,6 +295,7 @@ const ME_SECTIONS: PerspectiveSection[] = [
 
 const UMT_SECTIONS: PerspectiveSection[] = [
   { id: "umt-updates", label: "Updates", icon: RefreshCcw, path: "/umt/updates" },
+  { id: "umt-release-chunks", label: "Release Chunks", icon: LucideLayoutGrid, path: "/umt/release-chunks" },
 ];
 
 export interface PerspectiveDef {

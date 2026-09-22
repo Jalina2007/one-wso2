@@ -481,6 +481,55 @@ export const umtServiceUrls = {
   // POST — replaces an update's whole Integration Test Pull Requests list.
   updateTestPullRequests: (id: string | number) =>
     `${umtBackendUrl}/update/${encodeURIComponent(id)}/testPullRequest`,
+  // GET — pending (not yet released) release chunks. POST (with a raw
+  // `number[]` of update ids as the body, not an object) creates a new one.
+  releaseChunks: `${umtBackendUrl}/update/releaseChunk`,
+  // GET — released chunks only. Same resource as releaseChunks above, filtered
+  // by the backend's own `states` query param.
+  releasedChunks: `${umtBackendUrl}/update/releaseChunk?states=released`,
+  // GET — one chunk's lifecycle status (created/releasing/releasingFailed/
+  // releasingDockerFailed/retriggering) and per-update-level detail.
+  releaseChunk: (id: string | number) => `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}`,
+  // GET — per-update-level build/TG-build status plus the chunk's overall CST
+  // build status.
+  releaseChunkBuildStatus: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/buildStatus`,
+  // GET — per-product docker build statuses, shown in the Build Information
+  // dialog.
+  releaseChunkDockerBuildStatus: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/docker-build-statuses`,
+  // POST (null body) — retriggers one product/version/channel's build.
+  releaseChunkTriggerProductBuild: (
+    id: string | number,
+    productName: string,
+    productVersion: string,
+    channel: string,
+  ) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/${encodeURIComponent(productName)}/${encodeURIComponent(productVersion)}/${encodeURIComponent(channel)}/triggerBuild`,
+  // POST (null body) — retriggers one product/version/channel's TG build.
+  releaseChunkTriggerTgBuild: (
+    id: string | number,
+    productName: string,
+    productVersion: string,
+    channel: string,
+  ) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/${encodeURIComponent(productName)}/${encodeURIComponent(productVersion)}/${encodeURIComponent(channel)}/triggerTGBuild`,
+  // POST (null body) — triggers every build for the whole chunk ("Run test
+  // builds").
+  releaseChunkTriggerBuilds: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/triggerBuilds`,
+  // POST (null body) — (re)triggers the chunk's CST build.
+  releaseChunkTriggerCstBuild: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/triggerCSTBuild`,
+  // POST (null body) — retriggers failed docker builds for the chunk.
+  releaseChunkRetriggerDockerBuild: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/retriggerDockerBuild`,
+  // POST — releases the chunk with a required, non-blank release message.
+  releaseChunkRelease: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/release`,
+  // POST (null body) — sends the chunk's build-status email.
+  releaseChunkEmail: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/email`,
 };
 
 // ---- marketing-ops backend -------------------------------------------------

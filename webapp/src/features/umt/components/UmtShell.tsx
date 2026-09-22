@@ -118,8 +118,12 @@ function UmtBody({
     return <UmtLocked />;
   }
 
+  // flex/minHeight let a page that wants the full window height claim it —
+  // a grid that fills the screen rather than stopping where its rows end.
+  // A page that doesn't opt in is unaffected: these children size to their
+  // content either way.
   return (
-    <Stack spacing={3}>
+    <Stack spacing={3} sx={{ flex: 1, minHeight: 0 }}>
       {meta.isError && (
         <ErrorNotice
           error={meta.error}
