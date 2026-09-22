@@ -20,6 +20,7 @@
 import { csmUrl, isCsmConfigured, isIsacConfigured, isacUrl } from "@config/apiConfig";
 import { isPreviewEnabled } from "@config/previewFeatures";
 import {
+  BarChart3,
   CheckCheckIcon,
   ClipboardCheckIcon,
   DatabaseIcon,
@@ -294,6 +295,7 @@ const ME_SECTIONS: PerspectiveSection[] = [
 
 const UMT_SECTIONS: PerspectiveSection[] = [
   { id: "umt-updates", label: "Updates", icon: RefreshCcw, path: "/umt/updates" },
+  { id: "umt-statistics", label: "Statistics", icon: BarChart3, path: "/umt/statistics" },
 ];
 
 export interface PerspectiveDef {

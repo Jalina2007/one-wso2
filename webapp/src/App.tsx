@@ -130,6 +130,7 @@ import ViewImagePage from "@features/due-diligence/shared/pages/ViewImagePage";
 import ExpenseApprovalsScreen from "@features/finance/expense/approvals/ExpenseApprovalsScreen";
 import ExpenseLeadApprovalsScreen from "@features/finance/expense/approvals/ExpenseLeadApprovalsScreen";
 import UmtHomePage from "@features/umt/pages/UmtHomePage";
+import UmtStatisticsPage from "@features/umt/pages/UmtStatisticsPage";
 import UmtUpdateView from "@features/umt/pages/UmtUpdateView";
 import UmtUpdatesPage from "@features/umt/pages/UmtUpdatesPage";
 
@@ -150,6 +151,7 @@ export default function App() {
               <Route path="umt" element={<UmtHomePage />} />
               <Route path="umt/updates" element={<UmtUpdatesPage />} />
               <Route path="umt/updates/:id" element={<UmtUpdateView />} />
+              <Route path="umt/statistics" element={<UmtStatisticsPage />} />
             </>
           )}
           {/* My Team — placeholder for now; the real subordinates view is on

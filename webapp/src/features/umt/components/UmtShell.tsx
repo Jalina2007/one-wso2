@@ -119,7 +119,7 @@ function UmtBody({
   }
 
   return (
-    <Stack spacing={3}>
+    <Stack spacing={3} sx={{ flex: 1, minHeight: 0 }}>
       {meta.isError && (
         <ErrorNotice
           error={meta.error}
