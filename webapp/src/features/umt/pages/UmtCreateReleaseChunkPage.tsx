@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link as RouterLink, useNavigate } from "react-router";
 import {
   Alert,
@@ -37,12 +37,8 @@ import { EyeIcon } from "@wso2/oxygen-ui-icons-react";
 import { describeError } from "@api/errors";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useNotifications } from "@context/notifications/NotificationsContext";
-import {
-  EMPTY_UMT_UPDATE_FILTERS,
-  createUmtUpdateSearchRequest,
-  type UmtUpdateSummary,
-} from "../api/umtUpdates";
-import { useUmtUpdates } from "../api/useUmtUpdates";
+import type { UmtUpdateSummary } from "../api/umtUpdates";
+import { useUmtUpdatesByLifecycleState } from "../api/useUmtUpdates";
 import { useUmtCreateReleaseChunk } from "../api/useUmtReleaseChunkActions";
 import { useUmtGate } from "../api/useUmtGate";
 import { umtReleaseChunkCollisionProducts } from "../lib/umtReleaseChunks";
@@ -51,13 +47,6 @@ import { ChunkCell, ChunkLine } from "../components/release-chunks/umtReleaseChu
 import { UMT_CHUNK_GRID_SX } from "../components/release-chunks/umtReleaseChunkGridSx";
 
 const { DataGrid: DataGridComponent } = DataGrid;
-
-// There is no "list every update in a lifecycle state" endpoint, so the
-// paginated search is asked for one generously large page instead. Both lists
-// this page needs are small — updates waiting in UATStaging, and those already
-// in UAT — and both have to be complete for the collision check below to mean
-// anything.
-const ALL_UPDATES_PAGE_SIZE = 500;
 
 // Small pages by default: this is a list to read through and tick, not scan.
 const PAGE_SIZE_OPTIONS = [5, 10, 20];
@@ -100,28 +89,22 @@ function UmtCreateReleaseChunkForm() {
   const { showSuccess, showError } = useNotifications();
   const createChunk = useUmtCreateReleaseChunk();
 
-  const uatStagingRequest = useMemo(
-    () =>
-      createUmtUpdateSearchRequest(0, ALL_UPDATES_PAGE_SIZE, {
-        ...EMPTY_UMT_UPDATE_FILTERS,
-        lifecycleState: "UATStaging",
-      }),
-    [],
-  );
-  const uatRequest = useMemo(
-    () =>
-      createUmtUpdateSearchRequest(0, ALL_UPDATES_PAGE_SIZE, {
-        ...EMPTY_UMT_UPDATE_FILTERS,
-        lifecycleState: "UAT",
-      }),
-    [],
-  );
-  const uatStaging = useUmtUpdates(uatStagingRequest);
-  const uat = useUmtUpdates(uatRequest);
-  const rows = uatStaging.data?.updates ?? [];
+  // Both states are fetched whole: the chunk is assembled from everything in
+  // UATStaging, and checked against everything in UAT.
+  const uatStaging = useUmtUpdatesByLifecycleState("UATStaging");
+  const uat = useUmtUpdatesByLifecycleState("UAT");
+  const rows = uatStaging.data?.data ?? [];
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [collisionProducts, setCollisionProducts] = useState<string[] | null>(null);
+
+  // Creating is held until the UAT list is actually in hand. Without it the
+  // collision check compares the selection against nothing, finds nothing,
+  // and reports the selection clear — the same wrong answer it would give if
+  // there really were no conflict. An absent list is not evidence of a clear
+  // selection, so it blocks rather than passes.
+  const uatUpdates = uat.data?.data;
+  const canCreate = selectedIds.length > 0 && uatUpdates !== undefined && !createChunk.isPending;
 
   async function submitCreate(updateIds: number[]) {
     try {
@@ -134,9 +117,9 @@ function UmtCreateReleaseChunkForm() {
   }
 
   function handleCreateClick() {
-    if (selectedIds.length === 0) return;
+    if (!canCreate || uatUpdates === undefined) return;
     const selectedUpdates = rows.filter((row) => selectedIds.includes(row.id));
-    const collisions = umtReleaseChunkCollisionProducts(selectedUpdates, uat.data?.updates ?? []);
+    const collisions = umtReleaseChunkCollisionProducts(selectedUpdates, uatUpdates);
     if (collisions.length > 0) {
       setCollisionProducts(collisions);
       return;
@@ -285,7 +268,7 @@ function UmtCreateReleaseChunkForm() {
       <Box>
         <Button
           variant="contained"
-          disabled={selectedIds.length === 0 || createChunk.isPending}
+          disabled={!canCreate}
           loading={createChunk.isPending}
           onClick={handleCreateClick}
         >

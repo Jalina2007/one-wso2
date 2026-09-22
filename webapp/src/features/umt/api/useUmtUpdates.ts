@@ -16,12 +16,16 @@
 
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAsgardeo } from "@asgardeo/react";
-import { authedPost } from "@api/http";
+import { authedGet, authedPost } from "@api/http";
 import { httpRetry } from "@api/errors";
 import { isUmtBackendConfigured, umtServiceUrls } from "@config/apiConfig";
 import { useAccessToken } from "@hooks/useAccessToken";
 import { foldIdentityError, useAsgardeoSub } from "@hooks/useAsgardeoSub";
-import type { UmtUpdateSearchRequest, UmtUpdatesResponse } from "./umtUpdates";
+import type {
+  UmtUpdateSearchRequest,
+  UmtUpdatesByLifecycleStateResponse,
+  UmtUpdatesResponse,
+} from "./umtUpdates";
 
 export function useUmtUpdates(request: UmtUpdateSearchRequest) {
   const { isSignedIn } = useAsgardeo();
@@ -42,6 +46,30 @@ export function useUmtUpdates(request: UmtUpdateSearchRequest) {
       return response;
     },
     placeholderData: keepPreviousData,
+    retry: httpRetry,
+  });
+
+  return foldIdentityError(query, subState, retryIdentity);
+}
+
+// Every update in one lifecycle state, in a single request. The Create
+// Release Chunk screen needs whole states rather than pages of them: it lists
+// everything in UATStaging to choose from, and checks the choice against
+// everything in UAT, and a page of either would quietly make both incomplete.
+export function useUmtUpdatesByLifecycleState(lifecycleState: string) {
+  const { isSignedIn } = useAsgardeo();
+  const getAccessToken = useAccessToken();
+  const { state: subState, retry: retryIdentity } = useAsgardeoSub();
+  const userSub = subState.status === "ready" ? subState.sub : undefined;
+
+  const query = useQuery<UmtUpdatesByLifecycleStateResponse>({
+    queryKey: ["umt-updates-by-lifecycle-state", userSub, lifecycleState],
+    enabled: isSignedIn && isUmtBackendConfigured() && Boolean(userSub),
+    queryFn: async () =>
+      authedGet<UmtUpdatesByLifecycleStateResponse>(
+        umtServiceUrls.updatesByLifecycleState(lifecycleState),
+        await getAccessToken(),
+      ),
     retry: httpRetry,
   });
 

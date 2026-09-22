@@ -411,6 +411,15 @@ export function activeUmtFilterCount(filters: UmtUpdateFilters): number {
 
 // The UI page is zero-based. The backend computes its SQL offset with
 // `(page - 1) * pageSize`, so its contract is one-based.
+// GET /update?lifecycleState=X returns every match in one response, in the
+// record-count envelope that endpoint uses rather than the page envelope the
+// search endpoint returns.
+export interface UmtUpdatesByLifecycleStateResponse {
+  recordsTotal: number;
+  recordsFiltered: number;
+  data: UmtUpdateSummary[];
+}
+
 export function createUmtUpdateSearchRequest(
   uiPage: number,
   pageSize: number,

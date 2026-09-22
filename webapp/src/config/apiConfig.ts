@@ -411,6 +411,12 @@ export const umtServiceUrls = {
   updatesStats: `${umtBackendUrl}/update/stats`,
   // POST — filtered, server-paginated update summaries.
   updatesSearch: `${umtBackendUrl}/update/search`,
+  // GET — every update in one lifecycle state, unpaginated. Distinct from the
+  // paginated search above: callers that have to reason about a whole
+  // lifecycle state at once (is this product already in UAT?) cannot do it
+  // from one page of results.
+  updatesByLifecycleState: (lifecycleState: string) =>
+    `${umtBackendUrl}/update?lifecycleState=${encodeURIComponent(lifecycleState)}`,
   // POST — creates a new update (and, for a hotfix, a second cloned entity).
   createUpdate: `${umtBackendUrl}/update`,
   // GET — one update by its numeric id.
