@@ -32,6 +32,7 @@ import {
 import { BarChart } from "@wso2/oxygen-ui-charts-react";
 import { FilterIcon } from "@wso2/oxygen-ui-icons-react";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
+import { localIsoDate } from "@utils/localDate";
 import { useUmtMeta } from "../api/useUmtMeta";
 import { useUmtPlatformStats } from "../api/useUmtPlatformStats";
 import type {
@@ -150,14 +151,6 @@ function sixMonthsAgo(): Date {
   return date;
 }
 
-function formatDate(date: Date | null): string | undefined {
-  if (!date) return undefined;
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function statsRequest(
   platform: string,
   breakdown: (typeof FILTER_OPTIONS)[number] | null,
@@ -169,8 +162,8 @@ function statsRequest(
     platform,
     filter: breakdown?.value ?? "all",
     ...(product && breakdown?.value !== "product" ? { product: product.value } : {}),
-    ...(formatDate(fromDate) ? { from: formatDate(fromDate) } : {}),
-    ...(formatDate(toDate) ? { to: formatDate(toDate) } : {}),
+    ...(fromDate ? { from: localIsoDate(fromDate) } : {}),
+    ...(toDate ? { to: localIsoDate(toDate) } : {}),
   };
 }
 
@@ -200,6 +193,9 @@ function UmtStatisticsBody() {
 
     for (const [metadataName, products] of Object.entries(meta.data?.products ?? {})) {
       for (const metadataProduct of products) {
+        // /meta returns every product, platform or not. Only a product whose
+        // platform was backfilled can be charted: the stats endpoints are
+        // platform-scoped, so a null platform matches no valid selection.
         if (metadataProduct.platform === platform.value) {
           productNames.add(metadataProduct.name || metadataName);
         }
