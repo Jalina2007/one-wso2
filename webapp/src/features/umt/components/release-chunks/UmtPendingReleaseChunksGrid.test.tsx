@@ -71,7 +71,12 @@ vi.mock("../../api/useUmtReleaseChunks", () => ({
         id: 42,
         updateIds: [101, 102],
         overallCstBuildStatus: "SUCCESS",
-        updateLevels: [{ tgBuildStatus: "UNSTABLE" }, { tgBuildStatus: "SUCCESS" }],
+        // Deliberately the reverse of the chunk's own order, and named: the
+        // two endpoints are matched on product, so ordering must not matter.
+        updateLevels: [
+          { productName: "wso2is", productVersion: "7.0.0", tgBuildStatus: "SUCCESS" },
+          { productName: "wso2am", productVersion: "4.2.0", tgBuildStatus: "UNSTABLE" },
+        ],
       },
       chunkStatus: { id: 42, updateIds: [101, 102], status: "created" },
     },
@@ -154,6 +159,20 @@ describe("UmtPendingReleaseChunksGrid", () => {
       (line) => getComputedStyle(line).borderBottomStyle === "solid",
     );
     expect(unruled).toHaveLength(0);
+  });
+
+  it("shows each product's own TG build status, whatever order the status response is in", () => {
+    render(<UmtPendingReleaseChunksGrid />);
+
+    // The status response lists wso2is first and wso2am second, the reverse of
+    // the chunk. Joining the two by position would put wso2is's SUCCESS on
+    // wso2am's line and wso2am's UNSTABLE on wso2is's — each product wearing
+    // the other's build result, with nothing on screen to give it away.
+    const products = cellLines("updateLevels").map((line) => line.textContent);
+    const tgStatuses = cellLines("tgBuildStatus").map((line) => line.textContent);
+
+    expect(products).toEqual(["wso2am (4.2.0)", "wso2is (7.0.0)"]);
+    expect(tgStatuses).toEqual(["Unstable", "Successful"]);
   });
 
   it("rules under a group title only where the group has titles beneath it", () => {

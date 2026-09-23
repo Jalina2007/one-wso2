@@ -109,15 +109,30 @@ const ACTION_COPY: Record<
   },
 };
 
-// One update level's TG build status, keeping two different kinds of "missing"
-// apart. A level the backend returned without a TG status is a real answer and
-// reads as a failure; a row whose status request never came back is not an
-// answer at all and reads as not triggered. Collapsing both to undefined would
-// report a chunk nobody could get a status for as a chunk whose builds
-// failed.
-function tgBuildStatusOf(status: UmtReleaseChunkRowStatus | undefined, index: number): string {
-  if (!status?.buildStatus) return "UNKNOWN";
-  return status.buildStatus.updateLevels[index]?.tgBuildStatus || "N/A";
+// One update level's TG build status, which comes from a different request
+// than the update level itself. The two are matched on the product and
+// version they describe rather than on their position in each response:
+// nothing obliges two endpoints to order their update levels alike, or to
+// list the same ones, and a positional match that slips shows one product's
+// build status against another product's name with nothing to reveal it.
+//
+// Two kinds of "missing" stay apart. A product the status response does not
+// mention reads as not triggered, since there is no build to report; a
+// product it mentions without a TG status reads as a failure, which is what
+// an empty status on a build that should have one means.
+function tgBuildStatusOf(
+  status: UmtReleaseChunkRowStatus | undefined,
+  level: UmtReleaseChunkUpdateLevel,
+): string {
+  const levels = status?.buildStatus?.updateLevels;
+  if (!levels) return "UNKNOWN";
+  const match = levels.find(
+    (candidate) =>
+      candidate.productName === level.productName &&
+      candidate.productVersion === level.productVersion,
+  );
+  if (!match) return "UNKNOWN";
+  return match.tgBuildStatus || "N/A";
 }
 
 // The six per-update-level columns sit under one "Build Details" title, so it
@@ -316,12 +331,12 @@ export default function UmtPendingReleaseChunksGrid() {
         const status = rowStatuses[params.row.id];
         return (
           <ChunkCell divided>
-            {params.row.updateLevels.map((_level, index) => (
+            {params.row.updateLevels.map((level, index) => (
               <ChunkLine key={index}>
                 {status?.buildStatusLoading ? (
                   <Skeleton variant="text" width={80} />
                 ) : (
-                  <BuildStatusChip status={tgBuildStatusOf(status, index)} />
+                  <BuildStatusChip status={tgBuildStatusOf(status, level)} />
                 )}
               </ChunkLine>
             ))}
@@ -345,7 +360,7 @@ export default function UmtPendingReleaseChunksGrid() {
                       key={index}
                       chunkId={params.row.id}
                       level={level}
-                      status={tgBuildStatusOf(status, index)}
+                      status={tgBuildStatusOf(status, level)}
                     />
                   ))}
                 </ChunkCell>
