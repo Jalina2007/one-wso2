@@ -38,4 +38,34 @@ describe("UMT platform stats wire format", () => {
   it("returns no rows for an empty response", () => {
     expect(normalizeUmtPlatformStats({})).toEqual([]);
   });
+
+  // The declared wire type is only a cast over parsed JSON, so a backend shape
+  // change has to fail loudly here rather than chart nonsense series.
+  it("rejects a payload that is not an object keyed by month", () => {
+    expect(() => normalizeUmtPlatformStats(null)).toThrow(/expected an object keyed by month/);
+    expect(() => normalizeUmtPlatformStats(undefined)).toThrow(/expected an object keyed by month/);
+    expect(() => normalizeUmtPlatformStats([])).toThrow(/expected an object keyed by month/);
+    expect(() => normalizeUmtPlatformStats("nope")).toThrow(/expected an object keyed by month/);
+  });
+
+  it("rejects a month whose value is neither a count, a breakdown nor a list", () => {
+    expect(() => normalizeUmtPlatformStats({ "2026-01": "abc" })).toThrow(/value for 2026-01/);
+    expect(() => normalizeUmtPlatformStats({ "2026-01": true })).toThrow(/value for 2026-01/);
+    expect(() => normalizeUmtPlatformStats({ "2026-01": null })).toThrow(/value for 2026-01/);
+  });
+
+  it("rejects a breakdown whose counts are not numbers", () => {
+    expect(() => normalizeUmtPlatformStats({ "2026-01": { WSO2AM: "abc" } })).toThrow(
+      /counts for 2026-01/,
+    );
+    expect(() => normalizeUmtPlatformStats({ "2026-01": { WSO2AM: { nested: 1 } } })).toThrow(
+      /counts for 2026-01/,
+    );
+  });
+
+  it("rejects a version entry whose fields were renamed on the wire", () => {
+    expect(() =>
+      normalizeUmtPlatformStats({ "2026-01": [{ "product-name": "WSO2AM", version: "4.0.0", count: 2 }] }),
+    ).toThrow(/entry for 2026-01/);
+  });
 });

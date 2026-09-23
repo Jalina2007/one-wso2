@@ -145,9 +145,16 @@ function StatisticsChartSkeleton() {
   );
 }
 
+// setMonth alone overflows when the target month is shorter — on 31 August it
+// lands on "31 February", i.e. 3 March, silently dropping late February from
+// the default range. Move to the 1st first, then clamp to the month's length.
 function sixMonthsAgo(): Date {
   const date = new Date();
+  const dayOfMonth = date.getDate();
+  date.setDate(1);
   date.setMonth(date.getMonth() - 6);
+  const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  date.setDate(Math.min(dayOfMonth, lastDayOfMonth));
   return date;
 }
 
