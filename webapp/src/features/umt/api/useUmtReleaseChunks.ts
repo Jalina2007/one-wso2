@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { useMemo } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { useAsgardeo } from "@asgardeo/react";
 import { authedGet } from "@api/http";
@@ -128,21 +129,37 @@ export function useUmtReleaseChunkRowStatuses(ids: number[]): Record<number, Umt
     })),
   });
 
-  const statuses: Record<number, UmtReleaseChunkRowStatus> = {};
-  ids.forEach((id, index) => {
-    statuses[id] = {
-      buildStatus: buildStatusResults[index]?.data,
-      buildStatusLoading: buildStatusResults[index]?.isPending ?? false,
-      chunkStatus: chunkStatusResults[index]?.data,
-      chunkStatusLoading: chunkStatusResults[index]?.isPending ?? false,
-    };
-  });
-  return statuses;
+  // A signature of what the queries have produced. `dataUpdatedAt` changes
+  // exactly when a query's data changes, so this string stays equal across
+  // renders that changed nothing, and the object below keeps its identity with
+  // it. That matters because the grid rebuilds its entire column state, and
+  // re-measures every row, whenever the columns built from this are a new
+  // reference — which a freshly built object made them on every render.
+  const signature = [
+    ids.join(","),
+    buildStatusResults.map((result) => `${result.dataUpdatedAt}:${result.isPending}`).join(","),
+    chunkStatusResults.map((result) => `${result.dataUpdatedAt}:${result.isPending}`).join(","),
+  ].join("|");
+
+  return useMemo(() => {
+    const statuses: Record<number, UmtReleaseChunkRowStatus> = {};
+    ids.forEach((id, index) => {
+      statuses[id] = {
+        buildStatus: buildStatusResults[index]?.data,
+        buildStatusLoading: buildStatusResults[index]?.isPending ?? false,
+        chunkStatus: chunkStatusResults[index]?.data,
+        chunkStatusLoading: chunkStatusResults[index]?.isPending ?? false,
+      };
+    });
+    return statuses;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 }
 
 // Docker build statuses are only ever read inside the Build Information
 // dialog, so this stays disabled until that dialog opens for a given chunk
 // rather than fetching for every row on mount.
+
 export function useUmtReleaseChunkDockerBuildStatus(id: number | null, enabled: boolean) {
   const { isSignedIn } = useAsgardeo();
   const getAccessToken = useAccessToken();

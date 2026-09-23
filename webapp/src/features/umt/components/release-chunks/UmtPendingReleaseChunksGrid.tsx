@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Box,
   Button,
@@ -40,7 +40,10 @@ import {
 import { describeError } from "@api/errors";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useNotifications } from "@context/notifications/NotificationsContext";
-import type { UmtReleaseChunk, UmtReleaseChunkUpdateLevel } from "../../api/umtReleaseChunks";
+import type {
+  UmtReleaseChunk,
+  UmtReleaseChunkUpdateLevel,
+} from "../../api/umtReleaseChunks";
 import {
   useUmtRemoveReleaseChunk,
   useUmtReleaseChunk,
@@ -66,12 +69,17 @@ import {
 } from "../../lib/umtReleaseChunks";
 import UmtReleaseChunkBuildInfoDialog from "./UmtReleaseChunkBuildInfoDialog";
 import UmtReleaseChunkConfirmDialog from "./UmtReleaseChunkConfirmDialog";
-import { BuildStatusChip, ChunkCell, ChunkLine } from "./umtReleaseChunkGridPrimitives";
+import {
+  BuildStatusChip,
+  ChunkCell,
+  ChunkLine,
+} from "./umtReleaseChunkGridPrimitives";
 import { UMT_CHUNK_GRID_BORDERED_SX } from "./umtReleaseChunkGridSx";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
-type ActionKind = "email" | "trigger-tests" | "cst-retrigger" | "docker-retrigger" | "release";
+type ActionKind =
+  "email" | "trigger-tests" | "cst-retrigger" | "docker-retrigger" | "release";
 
 interface ActionTarget {
   kind: ActionKind;
@@ -80,26 +88,35 @@ interface ActionTarget {
 
 const ACTION_COPY: Record<
   ActionKind,
-  { title: string; message: (chunkId: number) => string; confirmLabel: string; confirmColor?: "error" }
+  {
+    title: string;
+    message: (chunkId: number) => string;
+    confirmLabel: string;
+    confirmColor?: "error";
+  }
 > = {
   email: {
     title: "Confirm Email Sending",
-    message: (id) => `Are you sure you want to send the status email for release chunk ID: ${id}?`,
+    message: (id) =>
+      `Are you sure you want to send the status email for release chunk ID: ${id}?`,
     confirmLabel: "Confirm",
   },
   "trigger-tests": {
     title: "Trigger Tests",
-    message: (id) => `Are you sure you want to trigger test builds for release chunk ID: ${id}?`,
+    message: (id) =>
+      `Are you sure you want to trigger test builds for release chunk ID: ${id}?`,
     confirmLabel: "Confirm",
   },
   "cst-retrigger": {
     title: "Trigger CST Build?",
-    message: (id) => `Are you sure you want to trigger CST build for release chunk ID: ${id}?`,
+    message: (id) =>
+      `Are you sure you want to trigger CST build for release chunk ID: ${id}?`,
     confirmLabel: "Confirm",
   },
   "docker-retrigger": {
     title: "Retrigger Docker Builds",
-    message: (id) => `Are you sure you want to retrigger failed Docker builds for release chunk ID: ${id}?`,
+    message: (id) =>
+      `Are you sure you want to retrigger failed Docker builds for release chunk ID: ${id}?`,
     confirmLabel: "Confirm",
   },
   release: {
@@ -139,10 +156,20 @@ function tgBuildStatusOf(
 // is clear at a glance which columns describe a level and which describe the
 // chunk. The three standalone columns carry their name on the group instead of
 // on the column, which is why their own headerName is blank below.
-function columnGroupingModel(isAdmin: boolean): DataGrid.GridColumnGroupingModel {
+function columnGroupingModel(
+  isAdmin: boolean,
+): DataGrid.GridColumnGroupingModel {
   return [
-    { groupId: "releaseChunkDetails", headerName: "Release Chunk ID", children: [{ field: "id" }] },
-    { groupId: "updateIdsGroup", headerName: "Update IDs", children: [{ field: "updateIds" }] },
+    {
+      groupId: "releaseChunkDetails",
+      headerName: "Release Chunk ID",
+      children: [{ field: "id" }],
+    },
+    {
+      groupId: "updateIdsGroup",
+      headerName: "Update IDs",
+      children: [{ field: "updateIds" }],
+    },
     {
       groupId: "buildDetails",
       headerName: "Build Details",
@@ -157,7 +184,11 @@ function columnGroupingModel(isAdmin: boolean): DataGrid.GridColumnGroupingModel
         ...(isAdmin ? [{ field: "cstBuildAction" }] : []),
       ],
     },
-    { groupId: "actionsGroup", headerName: "Actions", children: isAdmin ? [{ field: "actions" }] : [] },
+    {
+      groupId: "actionsGroup",
+      headerName: "Actions",
+      children: isAdmin ? [{ field: "actions" }] : [],
+    },
   ];
 }
 
@@ -185,29 +216,35 @@ export default function UmtPendingReleaseChunksGrid() {
     dockerMutation.isPending ||
     releaseMutation.isPending;
 
-  function requestAction(kind: ActionKind, chunkId: number) {
+  // Stable, so that the column definitions closing over it can be too.
+  const requestAction = useCallback((kind: ActionKind, chunkId: number) => {
     setActionTarget({ kind, chunkId });
-  }
+  }, []);
 
   // Release is offered only once every update level has built successfully.
   // The status comes from what the row already fetched, so the case where it
   // has none is answered rather than waved through — see umtReleaseReadiness.
-  function handleReleaseClick(chunkId: number) {
-    switch (umtReleaseReadiness(rowStatuses[chunkId]?.buildStatus)) {
-      case "ready":
-        requestAction("release", chunkId);
-        return;
-      case "blocked":
-        showWarning(
-          "Cannot release the release chunk with integration test failures, please escalate to the relevant product teams to get them successful.",
-        );
-        return;
-      default:
-        showWarning(
-          "Build status for this release chunk is unavailable, so it cannot be released yet. Reload the page and try again.",
-        );
-    }
-  }
+  const handleReleaseClick = useCallback(
+    (chunkId: number) => {
+      switch (umtReleaseReadiness(rowStatuses[chunkId]?.buildStatus)) {
+        case "ready":
+          requestAction("release", chunkId);
+          return;
+        case "blocked":
+          showWarning(
+            "Cannot release the release chunk with integration test failures, please escalate to the relevant product teams to get them successful.",
+          );
+          return;
+        default:
+          showWarning(
+            "Build status for this release chunk is unavailable, so it cannot be released yet. Reload the page and try again.",
+          );
+      }
+    },
+    // rowStatuses is what decides this, so it has to be a dependency: a stale
+    // capture here would read an old build status as permission to release.
+    [requestAction, rowStatuses, showWarning],
+  );
 
   async function handleConfirm() {
     if (!actionTarget) return;
@@ -241,221 +278,259 @@ export default function UmtPendingReleaseChunksGrid() {
     }
   }
 
-  const columns: DataGrid.GridColDef<UmtReleaseChunk>[] = [
-    {
-      field: "id",
-      headerName: "",
-      width: 80,
-      sortable: false,
-      renderCell: (params) => (
-        <ChunkCell>
-          <ChunkLine>
-            <Typography variant="body2" sx={{ fontWeight: 700 }}>
-              {params.row.id}
-            </Typography>
-          </ChunkLine>
-        </ChunkCell>
-      ),
-    },
-    {
-      field: "updateIds",
-      headerName: "",
-      width: 110,
-      sortable: false,
-      renderCell: (params) => (
-        <ChunkCell>
-          {params.row.updateIds.map((id) => (
-            <ChunkLine key={id}>
-              <Typography variant="body2">{id}</Typography>
-            </ChunkLine>
-          ))}
-        </ChunkCell>
-      ),
-    },
-    {
-      field: "updateLevels",
-      headerName: "Update Levels",
-      flex: 2,
-      minWidth: 220,
-      sortable: false,
-      renderCell: (params) => (
-        <ChunkCell divided>
-          {params.row.updateLevels.map((level, index) => (
-            <ChunkLine key={index}>
-              <Typography variant="body2">
-                {level.productName ?? "N/A"} ({level.productVersion ?? "N/A"})
+  // Memoized because the grid rebuilds its whole column state whenever this
+  // array is a new reference — its own guard for that is a reference check —
+  // and with auto row heights that re-measures every row. Without this, every
+  // dialog opening and every mutation's pending flag redid the table's layout.
+  const columns: DataGrid.GridColDef<UmtReleaseChunk>[] = useMemo(
+    () => [
+      {
+        field: "id",
+        headerName: "",
+        width: 80,
+        sortable: false,
+        renderCell: (params) => (
+          <ChunkCell>
+            <ChunkLine>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {params.row.id}
               </Typography>
             </ChunkLine>
-          ))}
-        </ChunkCell>
-      ),
-    },
-    {
-      field: "buildStatus",
-      headerName: "Build Status",
-      width: 150,
-      sortable: false,
-      renderCell: (params) => (
-        <ChunkCell divided>
-          {params.row.updateLevels.map((level, index) => (
-            <ChunkLine key={index}>
-              <BuildStatusChip status={level.buildStatus} />
-            </ChunkLine>
-          ))}
-        </ChunkCell>
-      ),
-    },
-    ...(gate.isAdmin
-      ? [
-          {
-            field: "buildAction",
-            headerName: "Build Action",
-            width: 110,
-            sortable: false,
-            renderCell: (params: DataGrid.GridRenderCellParams<UmtReleaseChunk>) => (
-              <ChunkCell divided>
-                {params.row.updateLevels.map((level, index) => (
-                  <ProductBuildRetriggerButton key={index} chunkId={params.row.id} level={level} />
-                ))}
-              </ChunkCell>
-            ),
-          } as DataGrid.GridColDef<UmtReleaseChunk>,
-        ]
-      : []),
-    {
-      field: "tgBuildStatus",
-      headerName: "TG Build Status",
-      width: 150,
-      sortable: false,
-      renderCell: (params) => {
-        const status = rowStatuses[params.row.id];
-        return (
-          <ChunkCell divided>
-            {params.row.updateLevels.map((level, index) => (
-              <ChunkLine key={index}>
-                {status?.buildStatusLoading ? (
-                  <Skeleton variant="text" width={80} />
-                ) : (
-                  <BuildStatusChip status={tgBuildStatusOf(status, level)} />
-                )}
+          </ChunkCell>
+        ),
+      },
+      {
+        field: "updateIds",
+        headerName: "",
+        width: 110,
+        sortable: false,
+        renderCell: (params) => (
+          <ChunkCell>
+            {params.row.updateIds.map((id) => (
+              <ChunkLine key={id}>
+                <Typography variant="body2">{id}</Typography>
               </ChunkLine>
             ))}
           </ChunkCell>
-        );
+        ),
       },
-    },
-    ...(gate.isAdmin
-      ? [
-          {
-            field: "tgBuildActions",
-            headerName: "TG Build Action",
-            width: 110,
-            sortable: false,
-            renderCell: (params: DataGrid.GridRenderCellParams<UmtReleaseChunk>) => {
-              const status = rowStatuses[params.row.id];
-              return (
+      {
+        field: "updateLevels",
+        headerName: "Update Levels",
+        flex: 2,
+        minWidth: 220,
+        sortable: false,
+        renderCell: (params) => (
+          <ChunkCell divided>
+            {params.row.updateLevels.map((level, index) => (
+              <ChunkLine key={index}>
+                <Typography variant="body2">
+                  {level.productName ?? "N/A"} ({level.productVersion ?? "N/A"})
+                </Typography>
+              </ChunkLine>
+            ))}
+          </ChunkCell>
+        ),
+      },
+      {
+        field: "buildStatus",
+        headerName: "Build Status",
+        width: 150,
+        sortable: false,
+        renderCell: (params) => (
+          <ChunkCell divided>
+            {params.row.updateLevels.map((level, index) => (
+              <ChunkLine key={index}>
+                <BuildStatusChip status={level.buildStatus} />
+              </ChunkLine>
+            ))}
+          </ChunkCell>
+        ),
+      },
+      ...(gate.isAdmin
+        ? [
+            {
+              field: "buildAction",
+              headerName: "Build Action",
+              width: 110,
+              sortable: false,
+              renderCell: (
+                params: DataGrid.GridRenderCellParams<UmtReleaseChunk>,
+              ) => (
                 <ChunkCell divided>
                   {params.row.updateLevels.map((level, index) => (
-                    <TgBuildRetriggerButton
+                    <ProductBuildRetriggerButton
                       key={index}
                       chunkId={params.row.id}
                       level={level}
-                      status={tgBuildStatusOf(status, level)}
                     />
                   ))}
                 </ChunkCell>
-              );
-            },
-          } as DataGrid.GridColDef<UmtReleaseChunk>,
-        ]
-      : []),
-    {
-      field: "cstBuildStatus",
-      headerName: "CST Build Status",
-      width: 150,
-      sortable: false,
-      renderCell: (params) => {
-        const status = rowStatuses[params.row.id];
-        return (
-          <ChunkCell>
-            <ChunkLine>
-              {status?.buildStatusLoading ? (
-                <Skeleton variant="text" width={80} />
-              ) : (
-                <BuildStatusChip status={status?.buildStatus?.overallCstBuildStatus ?? "UNKNOWN"} />
-              )}
-            </ChunkLine>
-          </ChunkCell>
-        );
+              ),
+            } as DataGrid.GridColDef<UmtReleaseChunk>,
+          ]
+        : []),
+      {
+        field: "tgBuildStatus",
+        headerName: "TG Build Status",
+        width: 150,
+        sortable: false,
+        renderCell: (params) => {
+          const status = rowStatuses[params.row.id];
+          return (
+            <ChunkCell divided>
+              {params.row.updateLevels.map((level, index) => (
+                <ChunkLine key={index}>
+                  {status?.buildStatusLoading ? (
+                    <Skeleton variant="text" width={80} />
+                  ) : (
+                    <BuildStatusChip status={tgBuildStatusOf(status, level)} />
+                  )}
+                </ChunkLine>
+              ))}
+            </ChunkCell>
+          );
+        },
       },
-    },
-    ...(gate.isAdmin
-      ? [
-          {
-            field: "cstBuildAction",
-            headerName: "CST Build Action",
-            width: 110,
-            sortable: false,
-            renderCell: (params: DataGrid.GridRenderCellParams<UmtReleaseChunk>) => {
-              const status = rowStatuses[params.row.id];
-              const cstStatus = status?.buildStatus?.overallCstBuildStatus ?? "UNKNOWN";
-              return (
-                <ChunkCell>
-                  <ChunkLine>
-                    {umtCanRetriggerCstBuild(cstStatus) ? (
-                      <Tooltip title="Retrigger CST Job">
-                        <IconButton
-                          size="small"
-                          aria-label="Retrigger CST Job"
-                          onClick={() => requestAction("cst-retrigger", params.row.id)}
-                        >
-                          <RotateCwIcon size={16} />
-                        </IconButton>
-                      </Tooltip>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        N/A
-                      </Typography>
-                    )}
-                  </ChunkLine>
-                </ChunkCell>
-              );
-            },
-          } as DataGrid.GridColDef<UmtReleaseChunk>,
-        ]
-      : []),
-    ...(gate.isAdmin
-      ? [
-          {
-            field: "actions",
-            headerName: "",
-            flex: 1.5,
-            minWidth: 200,
-            sortable: false,
-            renderCell: (params: DataGrid.GridRenderCellParams<UmtReleaseChunk>) => {
-              const chunkStatus = rowStatuses[params.row.id]?.chunkStatus;
-              const action = umtReleaseChunkRowAction(chunkStatus?.status, chunkStatus?.failedReason);
-              return (
-                <RowActionsCell
-                  action={action}
-                  chunkId={params.row.id}
-                  onRelease={handleReleaseClick}
-                  onRequestAction={requestAction}
-                  onShowBuildInfo={setBuildInfoChunkId}
-                />
-              );
-            },
-          } as DataGrid.GridColDef<UmtReleaseChunk>,
-        ]
-      : []),
-  ];
+      ...(gate.isAdmin
+        ? [
+            {
+              field: "tgBuildActions",
+              headerName: "TG Build Action",
+              width: 110,
+              sortable: false,
+              renderCell: (
+                params: DataGrid.GridRenderCellParams<UmtReleaseChunk>,
+              ) => {
+                const status = rowStatuses[params.row.id];
+                return (
+                  <ChunkCell divided>
+                    {params.row.updateLevels.map((level, index) => (
+                      <TgBuildRetriggerButton
+                        key={index}
+                        chunkId={params.row.id}
+                        level={level}
+                        status={tgBuildStatusOf(status, level)}
+                      />
+                    ))}
+                  </ChunkCell>
+                );
+              },
+            } as DataGrid.GridColDef<UmtReleaseChunk>,
+          ]
+        : []),
+      {
+        field: "cstBuildStatus",
+        headerName: "CST Build Status",
+        width: 150,
+        sortable: false,
+        renderCell: (params) => {
+          const status = rowStatuses[params.row.id];
+          return (
+            <ChunkCell>
+              <ChunkLine>
+                {status?.buildStatusLoading ? (
+                  <Skeleton variant="text" width={80} />
+                ) : (
+                  <BuildStatusChip
+                    status={
+                      status?.buildStatus?.overallCstBuildStatus ?? "UNKNOWN"
+                    }
+                  />
+                )}
+              </ChunkLine>
+            </ChunkCell>
+          );
+        },
+      },
+      ...(gate.isAdmin
+        ? [
+            {
+              field: "cstBuildAction",
+              headerName: "CST Build Action",
+              width: 110,
+              sortable: false,
+              renderCell: (
+                params: DataGrid.GridRenderCellParams<UmtReleaseChunk>,
+              ) => {
+                const status = rowStatuses[params.row.id];
+                const cstStatus =
+                  status?.buildStatus?.overallCstBuildStatus ?? "UNKNOWN";
+                return (
+                  <ChunkCell>
+                    <ChunkLine>
+                      {umtCanRetriggerCstBuild(cstStatus) ? (
+                        <Tooltip title="Retrigger CST Job">
+                          <IconButton
+                            size="small"
+                            aria-label="Retrigger CST Job"
+                            onClick={() =>
+                              requestAction("cst-retrigger", params.row.id)
+                            }
+                          >
+                            <RotateCwIcon size={16} />
+                          </IconButton>
+                        </Tooltip>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          N/A
+                        </Typography>
+                      )}
+                    </ChunkLine>
+                  </ChunkCell>
+                );
+              },
+            } as DataGrid.GridColDef<UmtReleaseChunk>,
+          ]
+        : []),
+      ...(gate.isAdmin
+        ? [
+            {
+              field: "actions",
+              headerName: "",
+              flex: 1.5,
+              minWidth: 200,
+              sortable: false,
+              renderCell: (
+                params: DataGrid.GridRenderCellParams<UmtReleaseChunk>,
+              ) => {
+                const chunkStatus = rowStatuses[params.row.id]?.chunkStatus;
+                const action = umtReleaseChunkRowAction(
+                  chunkStatus?.status,
+                  chunkStatus?.failedReason,
+                );
+                return (
+                  <RowActionsCell
+                    action={action}
+                    chunkId={params.row.id}
+                    onRelease={handleReleaseClick}
+                    onRequestAction={requestAction}
+                    onShowBuildInfo={setBuildInfoChunkId}
+                  />
+                );
+              },
+            } as DataGrid.GridColDef<UmtReleaseChunk>,
+          ]
+        : []),
+    ],
+    [gate.isAdmin, handleReleaseClick, requestAction, rowStatuses],
+  );
+
+  const groupingModel = useMemo(
+    () => columnGroupingModel(gate.isAdmin),
+    [gate.isAdmin],
+  );
 
   const activeCopy = actionTarget ? ACTION_COPY[actionTarget.kind] : null;
 
   return (
     <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
       {chunks.isError && (
-        <ErrorNotice error={chunks.error} onRetry={() => void chunks.refetch()} retrying={chunks.isFetching}>
+        <ErrorNotice
+          error={chunks.error}
+          onRetry={() => void chunks.refetch()}
+          retrying={chunks.isFetching}
+        >
           Couldn&apos;t load pending release chunks.
         </ErrorNotice>
       )}
@@ -473,12 +548,14 @@ export default function UmtPendingReleaseChunksGrid() {
         }}
       >
         {chunks.isFetching && !chunks.isPending && (
-          <LinearProgress sx={{ left: 0, position: "absolute", right: 0, top: 0, zIndex: 4 }} />
+          <LinearProgress
+            sx={{ left: 0, position: "absolute", right: 0, top: 0, zIndex: 4 }}
+          />
         )}
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <DataGridComponent
             columnHeaderHeight={40}
-            columnGroupingModel={columnGroupingModel(gate.isAdmin)}
+            columnGroupingModel={groupingModel}
             columns={columns}
             disableColumnMenu
             disableRowSelectionOnClick
@@ -497,7 +574,9 @@ export default function UmtPendingReleaseChunksGrid() {
         title={activeCopy?.title ?? ""}
         message={actionTarget ? activeCopy!.message(actionTarget.chunkId) : ""}
         confirmLabel={activeCopy?.confirmLabel}
-        confirmColor={activeCopy?.confirmColor === "error" ? "error" : "primary"}
+        confirmColor={
+          activeCopy?.confirmColor === "error" ? "error" : "primary"
+        }
         busy={confirmBusy}
         onCancel={() => setActionTarget(null)}
         onConfirm={() => void handleConfirm()}
@@ -507,7 +586,10 @@ export default function UmtPendingReleaseChunksGrid() {
         open={buildInfoChunkId !== null}
         chunkId={buildInfoChunkId}
         onClose={() => setBuildInfoChunkId(null)}
-        onRetriggerDocker={() => buildInfoChunkId !== null && requestAction("docker-retrigger", buildInfoChunkId)}
+        onRetriggerDocker={() =>
+          buildInfoChunkId !== null &&
+          requestAction("docker-retrigger", buildInfoChunkId)
+        }
         retriggerBusy={dockerMutation.isPending}
       />
     </Stack>
@@ -533,7 +615,11 @@ function RowActionsCell({
         <ChunkCell>
           <ChunkLine>
             <Tooltip title="Release">
-              <IconButton size="small" aria-label="Release" onClick={() => onRelease(chunkId)}>
+              <IconButton
+                size="small"
+                aria-label="Release"
+                onClick={() => onRelease(chunkId)}
+              >
                 <RocketIcon size={16} />
               </IconButton>
             </Tooltip>
@@ -560,7 +646,11 @@ function RowActionsCell({
                 <ContainerIcon size={16} />
               </IconButton>
             </Tooltip>
-            <Button size="small" variant="outlined" onClick={() => onShowBuildInfo(chunkId)}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => onShowBuildInfo(chunkId)}
+            >
               See build info
             </Button>
           </ChunkLine>
@@ -606,7 +696,11 @@ function RowActionsCell({
               </IconButton>
             </Tooltip>
             <Tooltip title="Release">
-              <IconButton size="small" aria-label="Release" onClick={() => onRelease(chunkId)}>
+              <IconButton
+                size="small"
+                aria-label="Release"
+                onClick={() => onRelease(chunkId)}
+              >
                 <RocketIcon size={16} />
               </IconButton>
             </Tooltip>
@@ -638,7 +732,11 @@ function UnlockChunkButton({ chunkId }: { chunkId: number }) {
           }
         }}
       >
-        {unlock.isPending ? <CircularProgress size={16} /> : <LockOpenIcon size={16} />}
+        {unlock.isPending ? (
+          <CircularProgress size={16} />
+        ) : (
+          <LockOpenIcon size={16} />
+        )}
       </IconButton>
     </Tooltip>
   );
@@ -678,7 +776,11 @@ function ProductBuildRetriggerButton({
             }
           }}
         >
-          {trigger.isPending ? <CircularProgress size={16} /> : <RotateCwIcon size={16} />}
+          {trigger.isPending ? (
+            <CircularProgress size={16} />
+          ) : (
+            <RotateCwIcon size={16} />
+          )}
         </IconButton>
       </Tooltip>
     </ChunkLine>
@@ -719,7 +821,11 @@ function TgBuildRetriggerButton({
             }
           }}
         >
-          {trigger.isPending ? <CircularProgress size={16} /> : <RotateCwIcon size={16} />}
+          {trigger.isPending ? (
+            <CircularProgress size={16} />
+          ) : (
+            <RotateCwIcon size={16} />
+          )}
         </IconButton>
       </Tooltip>
     </ChunkLine>
@@ -728,7 +834,15 @@ function TgBuildRetriggerButton({
 
 function PendingChunksEmptyState() {
   return (
-    <Stack sx={{ alignItems: "center", color: "text.disabled", height: "100%", justifyContent: "center" }} spacing={1}>
+    <Stack
+      sx={{
+        alignItems: "center",
+        color: "text.disabled",
+        height: "100%",
+        justifyContent: "center",
+      }}
+      spacing={1}
+    >
       <InboxIcon size={36} />
       <Typography variant="body2">No pending release chunks</Typography>
     </Stack>
