@@ -29,7 +29,7 @@
 // act on every row at once.
 import { useMemo, useState } from "react";
 import { Alert, Box, Button, Skeleton, Typography } from "@wso2/oxygen-ui";
-import { Download, NetworkIcon } from "@wso2/oxygen-ui-icons-react";
+import { Download } from "@wso2/oxygen-ui-icons-react";
 import { HttpError } from "@api/http";
 import { describeError } from "@api/errors";
 import { isOrgChartConfigured, useEmployeeDirectory } from "../api/useOrgChart";
@@ -255,8 +255,7 @@ export default function OrgChartPage() {
 
   return (
     <OrgChartShell
-      eyebrow={{ icon: NetworkIcon, label: "Org Chart" }}
-      title="Org chart"
+      title="Org Chart"
       subtitle="The company's reporting hierarchy, from the Chairman down."
       configured={configured}
       configKey="ONE_WSO2_PEOPLE_BACKEND_URL"

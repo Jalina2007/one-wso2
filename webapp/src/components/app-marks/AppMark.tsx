@@ -75,11 +75,28 @@ export function MeMark({ size }: MarkProps) {
   const t = appMarkTones("me")!;
   return (
     <Svg size={size}>
+      {/* Pale silhouette, then the roof and door in lead — the same build every
+          other mark here uses: a large shape in `field`, with `lead` carrying
+          the identifying form.
+
+          The house was previously one solid `lead` block with a `detail` door,
+          which made it the darkest mark in the launcher by a wide margin —
+          mean L* 54.7 against 57.1–76.3 for the other five. This lands at 67.9,
+          beside People at 66.4.
+
+          The roof reuses the silhouette's own arc, closed straight across at
+          the wall line. Drawing separate roof and wall paths renders
+          identically but duplicates that bottom edge, leaving two things to
+          keep in sync when the outline is ever adjusted. */}
       <path
         d="M6 20a4 4 0 0 1 1.418-3.056l14-12a4 4 0 0 1 5.164 0l14 12A4 4 0 0 1 42 20v18a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z"
+        fill={t.field}
+      />
+      <path
+        d="M6 20a4 4 0 0 1 1.418-3.056l14-12a4 4 0 0 1 5.164 0l14 12A4 4 0 0 1 42 20z"
         fill={t.lead}
       />
-      <path d="M30 42v-16a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v16z" fill={t.detail} />
+      <path d="M30 42v-16a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v16z" fill={t.lead} />
     </Svg>
   );
 }

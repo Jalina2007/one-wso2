@@ -60,41 +60,34 @@ export function useFinanceGate(enabled = true): FinanceGate {
 
   const canSee = (itemId: string): boolean => {
     switch (itemId) {
-      // Claim approval, in the Finance perspective. The rules are the two
-      // standalone apps' own, unchanged — only where they are read has moved.
-      //
-      // The entry appears when ANY claim is approvable by this person, so
-      // holding one flag of the three is enough to get a screen with one thing
-      // in it. Each tab inside is gated by its own id at its own route.
+      // Claim approval, in the Finance perspective — just its two tabs now,
+      // Needs You and Decided, both spanning every claim type. CC does not
+      // feed into this — its own approving lives entirely under Credit Card
+      // Expenses, not here — so only the OPD and Expense flags decide whether
+      // this entry appears at all.
       case "claim-approval":
         return opdFinance || expenseLead || expenseFinance;
-      // Either stage. userSlice-style independence: a person can hold both, or
-      // just one, and the tab is the same screen either way.
-      case "claim-approval-expense":
-        return expenseLead || expenseFinance;
-      // No lead stage exists for OPD — the backend grants role 555 or nothing.
-      case "claim-approval-opd":
-        return opdFinance;
-      // Behind a preview flag until the Finance and Me new-claim entry points
-      // are reconciled. Answered here as well as by removing the registry
-      // entry, because the Finance overview builds its tiles by hand and asks
-      // the gate by id — a registry-only change would leave that tile offering
-      // a route that no longer exists.
-      case "expense-new":
-        return isPreviewEnabled("expenseSubmitter");
-      // Approving expense claims, beside filing them. One entry per stage, each
-      // on its own flag — `appDataSlice.ts:104-109` decides which of the source
-      // app's two sidebar entries exist the same way. Both cases are required,
-      // not optional: each item declares `requires`, so an unmapped id falls
-      // through to the default and fails closed for everyone.
-      case "expense-lead-approvals":
-        return expenseLead;
-      case "expense-finance-approvals":
-        return expenseFinance;
+      // OPD analytics, in the Finance perspective. `routes.tsx:20-24` puts the
+      // source's dashboard behind View.FINANCE — it is every employee's spend,
+      // not your own — so the approver role is what opens it.
+      //
+      // `opd.isError` counts as a yes: a lookup that FAILED is not the same
+      // answer as one that came back without the role, and treating them alike
+      // would drop OPD out of the menu whenever its backend had a bad minute,
+      // with nothing on screen to say why. The screen behind it carries its own
+      // error notice and a retry.
+      case "opd-dashboard":
+        return isPreviewEnabled("financeOverview") && (opdFinance || opd.isError);
       case "cc-approve":
         return ccLeadOrFinance;
       case "cc-settings":
         return ccFinance;
+      // Finance → Overview → Credit Card Expenses dashboard. `requires:
+      // ["employee"]` on the registry item exists only to force this case —
+      // it is everyone's own numbers to read, same as the dashboard always
+      // was; the group's own flag is the actual gate.
+      case "cc-dashboard":
+        return isPreviewEnabled("financeOverview");
       default:
         // Per-user views (New / Pending / History) are open; any other item
         // that declares `requires` but reaches here fails closed rather than

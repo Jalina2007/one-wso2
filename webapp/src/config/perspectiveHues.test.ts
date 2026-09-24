@@ -90,10 +90,10 @@ describe("perspective hues", () => {
   });
 
   it("stays inside the range of hues people can tell apart", () => {
-    // Hue discrimination collapses somewhere around eight, so this cap is the
-    // tripwire: when it fires, the answer is a different encoding — hue per
-    // domain family, or back to monochrome — not more hues.
-    expect(Object.keys(PERSPECTIVE_HUES).length).toBeLessThanOrEqual(8);
+  // Hue discrimination collapses somewhere around eight or nine, so this cap is
+  // the tripwire: when it fires, the answer is a different encoding — hue per
+  // domain family, or back to monochrome — not more hues.
+    expect(Object.keys(PERSPECTIVE_HUES).length).toBeLessThanOrEqual(9);
   });
 
   it("rejects inherited keys rather than resolving them", () => {

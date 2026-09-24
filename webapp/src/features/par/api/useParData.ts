@@ -21,18 +21,19 @@ import { useAccessToken } from "@hooks/useAccessToken";
 import { parBackendUrl, parServiceUrls } from "@config/apiConfig";
 import { digiopsHeaders } from "@features/my/util/digiopsHeaders";
 import type { ParCycle, ParEmployeeInfo, ParRating } from "./types";
+import { useParLeadEmployees } from "./useLeadHistory";
 
 // GET par-app's own /employees/{workEmail} — carries `leadEmail`, the exact
 // field OngoingCycleView.tsx gates its tab set on. Not people-app's
 // `managerEmail`: the two don't reliably agree, so this fetches par-app's
 // own field directly rather than assuming the equivalent from elsewhere.
-export function useParEmployeeInfo(workEmail: string | undefined) {
+export function useParEmployeeInfo(workEmail: string | undefined, enabled = true) {
   const { isSignedIn } = useAsgardeo();
   const getAccessToken = useAccessToken();
   const backendConfigured = Boolean(parBackendUrl);
   return useQuery<ParEmployeeInfo>({
     queryKey: ["par-employee-info", workEmail],
-    enabled: isSignedIn && backendConfigured && Boolean(workEmail),
+    enabled: enabled && isSignedIn && backendConfigured && Boolean(workEmail),
     queryFn: async () => {
       const accessToken = await getAccessToken();
       return authedGet<ParEmployeeInfo>(
@@ -67,6 +68,81 @@ export function useParHasLead(workEmail: string | undefined, workEmailLoading: b
   return {
     hasLead: !(info.isSuccess && info.data.leadEmail === null),
     isLoading: workEmailLoading,
+  };
+}
+
+/**
+ * Whether the signed-in employee should see the Lead Portal — par-app's own
+ * `Role.TEAM_LEAD` gate on `/lead-portal` (route.ts), sourced from this same
+ * `isTeamLead` field. Unlike useParHasLead, this fails CLOSED: hiding a nav
+ * item from someone who isn't a lead has no downside, whereas showing it to
+ * everyone while the lookup is in flight would flash an empty Lead Portal
+ * for every non-lead on every load.
+ *
+ * Used both by the route guard (always enabled) and by SideRail's nav-item
+ * gate, which passes `enabled` so this only fetches while People Ops is the
+ * active perspective — same reasoning as useFinanceGate/useLeaveGate.
+ */
+export function useParIsTeamLead(workEmail: string | undefined, enabled = true) {
+  const info = useParEmployeeInfo(workEmail, enabled);
+  return {
+    isTeamLead: info.isSuccess && info.data.isTeamLead,
+    isLoading: info.isLoading,
+    isError: info.isError,
+    error: info.error,
+    isFetching: info.isFetching,
+    refetch: info.refetch,
+  };
+}
+
+/**
+ * Whether the signed-in employee should see the Lead Portal nav item.
+ * isTeamLead is scoped to the active cycle (see ParEmployeeInfo), so this
+ * ORs in the org-chart signal (GET /employees?leadEmail=) to keep it visible
+ * once a lead's cycle closes — matching ParRequiresTeamLeadRoute, the route
+ * guard that actually enforces access. Only fetches that fallback once
+ * isTeamLead resolves false. Fails CLOSED while either is unresolved, same
+ * as useParIsTeamLead alone.
+ */
+export function useParCanSeeLeadPortal(workEmail: string | undefined, enabled = true) {
+  const employeeInfo = useParIsTeamLead(workEmail, enabled);
+  const directReports = useParLeadEmployees(
+    enabled && !employeeInfo.isLoading && !employeeInfo.isTeamLead ? workEmail : undefined,
+  );
+  return {
+    canSee: employeeInfo.isTeamLead || (directReports.isSuccess && directReports.data.length > 0),
+    isLoading: employeeInfo.isLoading || (!employeeInfo.isTeamLead && directReports.isLoading),
+    // Exposed so callers needing distinct error UI for each fetch (e.g.
+    // ParRequiresTeamLeadRoute) don't have to re-derive this same
+    // loading-guarded fallback query themselves.
+    employeeInfo,
+    directReports,
+  };
+}
+
+/**
+ * Whether the signed-in employee currently has an OPEN par cycle — drives
+ * ParGroupPage.tsx's tab-set gate down to just PAR History when there isn't
+ * one, since every other tab (Employee Feedback, Request/Provide 360°, F2F)
+ * only makes sense inside a running cycle.
+ *
+ * `isActive` fails OPEN, same reasoning as useParHasLead: true unless the
+ * fetch has actually succeeded and come back with no OPEN cycles — a failed
+ * fetch must never hide tabs that would otherwise be available. Unlike
+ * useParHasLead, `isLoading` also waits on this hook's own query (not just
+ * the caller's profile fetch): the fail-open default is only safe to hand a
+ * route guard once the cycle check has actually settled (success or error),
+ * otherwise a route can render its cycle-only children for one tick and
+ * then yank them away the moment the query resolves to "no cycle".
+ */
+export function useParHasActiveCycle(
+  workEmail: string | undefined,
+  workEmailLoading: boolean,
+): { isActive: boolean; isLoading: boolean } {
+  const cycles = useActiveParCycle(workEmail);
+  return {
+    isActive: !(cycles.isSuccess && cycles.data.length === 0),
+    isLoading: workEmailLoading || cycles.isLoading,
   };
 }
 

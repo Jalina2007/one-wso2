@@ -56,6 +56,11 @@ export interface AppMarkTones {
 
 /** Keyed by `PerspectiveDef.key`, same keys as PERSPECTIVE_HUES. */
 export const APP_MARK_TONES: Record<string, AppMarkTones> = {
+  // `detail` is unused by MeMark, which is field + lead only — see the note
+  // there on why the house stopped being a solid block. Kept rather than made
+  // optional: every other perspective needs all three, and the contrast tests
+  // below check the full set per key. Don't reach for it to add a third tone
+  // here without re-measuring the mark's weight against its neighbours.
   me: { field: "#F8AA95", lead: "#F14E23", detail: "#C6401D" },
   people: { field: "#9BC9F0", lead: "#2E8FE0", detail: "#2675B8" },
   finance: { field: "#95D3C1", lead: "#22A37D", detail: "#1C8666" },

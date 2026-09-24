@@ -270,6 +270,20 @@ export async function refreshAccessToken(): Promise<string> {
   return token;
 }
 
+/**
+ * The cached id_token, read and nothing else.
+ *
+ * Deliberately NOT refreshIdToken: no refreshSession, so calling this can never
+ * provoke a silent re-auth and therefore can never raise the session-expired
+ * verdict. It exists so a caller can ask "has this token expired?" before
+ * deciding whether a re-auth is warranted at all — asking that question must
+ * not itself be the thing that answers it.
+ */
+export async function rawIdToken(): Promise<string> {
+  if (!getIdTokenAccessor) throw new Error("Auth accessors not registered yet");
+  return (await getIdTokenAccessor()) ?? "";
+}
+
 export async function refreshIdToken(): Promise<string> {
   await refreshSession();
   if (!getIdTokenAccessor) throw new Error("Auth accessors not registered yet");

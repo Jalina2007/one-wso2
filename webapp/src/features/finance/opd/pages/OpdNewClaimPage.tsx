@@ -31,16 +31,25 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { CheckIcon, PencilIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
+import { ArrowLeftIcon, CheckIcon, PencilIcon, ReceiptTextIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { useNotifications } from "@context/notifications/NotificationsContext";
-import { isOpdBackendConfigured } from "@config/apiConfig";
+import { isOpdBackendConfigured, opdServiceUrls } from "@config/apiConfig";
+import { useAccessToken } from "@hooks/useAccessToken";
 import FinanceShell from "../../components/FinanceShell";
 import { DraftStatusChip } from "../../components/DraftStatusChip";
+import { ReceiptViewer } from "../../components/ReceiptViewer";
 import { describeError } from "../../util/financeError";
 import { money, todayIso, startOfYearIso, endOfYearIso, formatNice } from "../../util/financeFormat";
-import { RECEIPT_ACCEPT, OPD_RECEIPT_MAX_BYTES, maxSizeLabel } from "../../util/financeReceipts";
+import {
+  RECEIPT_ACCEPT,
+  OPD_RECEIPT_MAX_BYTES,
+  maxSizeLabel,
+  fetchReceiptObjectUrl,
+  type ReceiptSource,
+} from "../../util/financeReceipts";
 import { useDraftAutosave } from "../../util/useDraftAutosave";
 import { useOpdAppData, useOpdUserInfo } from "../useOpd";
 import { useOpdDraftSync, useOpdReceiptUpload, useSubmitOpdClaim } from "../useOpdMutations";
@@ -61,7 +70,7 @@ export default function OpdNewClaimPage() {
     <FinanceShell
       eyebrow={FINANCE_EYEBROW.claims}
       title="New OPD claim"
-      subtitle="Add each outpatient bill as a line — bill date, amount, a short description and its receipt — then submit the whole claim to finance. Your remaining OPD balance is shown as you go."
+      subtitle="Add each outpatient bill with its receipt, then submit them together to finance."
       configured={isOpdBackendConfigured()}
       configKey="ONE_WSO2_OPD_BACKEND_URL"
     >
@@ -88,6 +97,11 @@ function NewClaimBody() {
   // still carries last year's remaining balance while it is claimable.
   const [pickedYear, setPickedYear] = useState<ClaimYear>("current");
   const [pendingYear, setPendingYear] = useState<ClaimYear | null>(null);
+  // The receipt being looked at, as a thunk the viewer calls on open. Null is
+  // closed; stored as a function so `useState` does not invoke it as an
+  // updater.
+  const [viewing, setViewing] = useState<(() => Promise<ReceiptSource>) | null>(null);
+  const getAccessToken = useAccessToken();
 
   const email = userInfo.data?.workEmail ?? "";
   const lastYearSummary = appData.data?.lastYearClaimSummary ?? null;
@@ -173,7 +187,7 @@ function NewClaimBody() {
 
   if (userInfo.isLoading || appData.isLoading) {
     return (
-      <Stack spacing={1.75} sx={{ maxWidth: 880 }}>
+      <Stack spacing={1.75}>
         <Skeleton variant="rectangular" height={96} sx={{ borderRadius: 1.5 }} />
         <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 1.5 }} />
       </Stack>
@@ -236,7 +250,18 @@ function NewClaimBody() {
   };
 
   return (
-    <Stack spacing={1.75} sx={{ maxWidth: 880 }}>
+    <Stack spacing={1.75}>
+      {/* FinanceShell has no back affordance of its own, and this form is
+          reached with no other way out but the sidebar. */}
+      <IconButton
+        size="small"
+        aria-label="Back to claims"
+        onClick={() => navigate(claimTabPath("opd"))}
+        sx={{ alignSelf: "flex-start" }}
+      >
+        <ArrowLeftIcon size={18} />
+      </IconButton>
+
       {/* NewClaim.tsx:129-172,382 — only offered when the backend still reports
           a last-year balance; otherwise there is nothing to claim against. */}
       {lastYearSummary && (
@@ -339,12 +364,45 @@ function NewClaimBody() {
                     {it.comment}
                   </Typography>
                   <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>
-                    {formatNice(it.date)} · {it.receiptUrl ? "receipt attached" : "no receipt"}
+                    {formatNice(it.date)}
                   </Typography>
                 </Box>
                 <Typography sx={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                   {money(it.amount)}
                 </Typography>
+                {/* Reading the receipt comes before altering the bill. Absent
+                    rather than disabled when there is nothing to open: the form
+                    requires a receipt, but a draft restored from older data can
+                    carry a bill without one.
+
+                    One button, not a view/download pair — ReceiptViewer carries
+                    its own Download in the dialog's footer. */}
+                {it.receiptUrl && (
+                  <Tooltip describeChild title="View or download the receipt" arrow>
+                    <IconButton
+                      size="small"
+                      aria-label={`View or download receipt for ${it.comment}`}
+                      onClick={() => {
+                        const fileName = it.receiptUrl;
+                        if (!fileName) return;
+                        setViewing(() => async () =>
+                          fetchReceiptObjectUrl(
+                            opdServiceUrls.receiptFile(fileName),
+                            await getAccessToken(),
+                          ),
+                        );
+                      }}
+                      sx={{
+                        borderRadius: 1,
+                        bgcolor: "grey.500",
+                        color: "white",
+                        "&:hover": { bgcolor: "grey.700" },
+                      }}
+                    >
+                      <ReceiptTextIcon size={14} />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 {/* AccessMode.EDIT_DELETE (NewClaim.tsx:185) — a bill can be
                     corrected in place, not just removed and retyped. */}
                 <IconButton
@@ -381,9 +439,11 @@ function NewClaimBody() {
           disabled={items.length === 0 || submit.isPending}
           sx={{ fontWeight: 600 }}
         >
-          {submit.isPending ? "Submitting…" : `Submit claim (${money(claimedInList)})`}
+          {submit.isPending ? "Submitting…" : "Submit claim"}
         </Button>
       </Box>
+
+      <ReceiptViewer title="Receipt" load={viewing} onClose={() => setViewing(null)} />
 
       <AddBillDialog
         open={dialogOpen}

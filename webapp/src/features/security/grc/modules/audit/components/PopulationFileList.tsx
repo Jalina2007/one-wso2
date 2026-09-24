@@ -23,6 +23,8 @@ import type { PopulationFile } from "@features/security/grc/modules/audit/api/us
 import { useDeletePopulationFile } from "@features/security/grc/modules/audit/api/useDeletePopulationFile";
 import { downloadBlob, viewOrDownloadBlob } from "@features/security/grc/modules/audit/utils/fileView";
 import { formatTimestamp } from "@features/security/grc/modules/audit/utils/format";
+import { groupFilesIntoBatches } from "@features/security/grc/modules/audit/utils/evidenceBatches";
+import RoundStatusChip from "@features/security/grc/modules/audit/components/RoundStatusChip";
 
 function sizeLabel(bytes: number | null): string {
   if (bytes === null) return "";
@@ -37,9 +39,14 @@ function sizeLabel(bytes: number | null): string {
  * button, for the states where the caller is still editing the round
  * (resubmission, or the auditor updating a submitted sample).
  *
- * `attributionLabel` opens each file's own header line ("Submitted" for team
- * population files, "Uploaded" for the auditor's sample) — per file, not
- * batched, since there's no persisted submission id to group by.
+ * `attributionLabel` opens each header line ("Submitted" for team population
+ * files, "Selected" for the auditor's sample). Files from one upload action
+ * (same uploader, rows written together) share a single header, grouped the
+ * same way as evidence since no submission id is persisted.
+ *
+ * `roundStatus` puts the round's status chip on every header, like the
+ * evidence list — the status covers the whole round, so a later batch in a
+ * round needs to show its verdict too.
  */
 export default function PopulationFileList({
   files,
@@ -48,6 +55,7 @@ export default function PopulationFileList({
   controlId,
   canDelete = false,
   attributionLabel = "Submitted",
+  roundStatus,
 }: {
   files: PopulationFile[];
   emptyText: string;
@@ -55,6 +63,7 @@ export default function PopulationFileList({
   controlId?: number;
   canDelete?: boolean;
   attributionLabel?: string;
+  roundStatus?: string;
 }): JSX.Element {
   const authFetch = useAuthApiClient();
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -99,6 +108,8 @@ export default function PopulationFileList({
   }
 
   const canRemove = canDelete && auditId !== undefined && controlId !== undefined;
+  // Oldest upload first, like the files inside an evidence round.
+  const batches = groupFilesIntoBatches(files, files[0].populationId);
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
@@ -111,59 +122,65 @@ export default function PopulationFileList({
           {downloadError ?? deleteError}
         </Alert>
       )}
-      {files.map((f) => (
-        <Box key={f.id} sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-          {(f.createdByName || f.createdBy) && (
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
-              {attributionLabel} {formatTimestamp(f.createdAt)} · {f.createdByName || f.createdBy}
-            </Typography>
+      {batches.map((batch) => (
+        <Box key={batch.key} sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+          {(batch.byName || roundStatus) && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                {attributionLabel} {formatTimestamp(batch.at)}{batch.byName ? ` · ${batch.byName}` : ""}
+              </Typography>
+              {roundStatus && <RoundStatusChip status={roundStatus} />}
+            </Box>
           )}
-          <Box
-            sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.85, borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}
-          >
-            <FileText size={15} />
-            <Typography variant="body2" sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {f.fileName}
-            </Typography>
-            {f.fileSize !== null && (
-              <Typography variant="caption" color="text.secondary">{sizeLabel(f.fileSize)}</Typography>
-            )}
-            {f.readUrl ? (
-              <>
-                <Button
-                  size="small"
-                  onClick={() => { void handleView(f.readUrl as string, f.fileName); }}
-                  startIcon={<ExternalLink size={13} />}
-                  sx={{ textTransform: "none", minWidth: 0 }}
-                >
-                  View
-                </Button>
+          {batch.files.map((f) => (
+            <Box
+              key={f.id}
+              sx={{ display: "flex", alignItems: "center", gap: 1, px: 1.25, py: 0.85, borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}
+            >
+              <FileText size={15} />
+              <Typography variant="body2" sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {f.fileName}
+              </Typography>
+              {f.fileSize !== null && (
+                <Typography variant="caption" color="text.secondary">{sizeLabel(f.fileSize)}</Typography>
+              )}
+              {f.readUrl ? (
+                <>
+                  <Button
+                    size="small"
+                    onClick={() => { void handleView(f.readUrl as string, f.fileName); }}
+                    startIcon={<ExternalLink size={13} />}
+                    sx={{ textTransform: "none", minWidth: 0 }}
+                  >
+                    View
+                  </Button>
+                  <IconButton
+                    size="small"
+                    aria-label={`Download ${f.fileName}`}
+                    onClick={() => { void handleDownload(f.readUrl as string, f.fileName); }}
+                    sx={{ p: 0.5 }}
+                  >
+                    <Download size={14} />
+                  </IconButton>
+                </>
+              ) : (
+                <Typography variant="caption" color="text.disabled">unavailable</Typography>
+              )}
+              {canRemove && (
                 <IconButton
                   size="small"
-                  aria-label={`Download ${f.fileName}`}
-                  onClick={() => { void handleDownload(f.readUrl as string, f.fileName); }}
-                  sx={{ p: 0.5 }}
+                  aria-label={`Remove ${f.fileName}`}
+                  disabled={deleteFile.isPending}
+                  onClick={() => handleDelete(f.id)}
+                  sx={{ p: 0.5, color: "error.main", "&:hover": { bgcolor: "rgba(220,38,38,0.06)" } }}
                 >
-                  <Download size={14} />
+                  {deleteFile.isPending && deleteFile.variables?.fileId === f.id
+                    ? <CircularProgress size={13} color="inherit" />
+                    : <Trash2 size={14} />}
                 </IconButton>
-              </>
-            ) : (
-              <Typography variant="caption" color="text.disabled">unavailable</Typography>
-            )}
-            {canRemove && (
-              <IconButton
-                size="small"
-                aria-label={`Remove ${f.fileName}`}
-                disabled={deleteFile.isPending}
-                onClick={() => handleDelete(f.id)}
-                sx={{ p: 0.5, color: "error.main", "&:hover": { bgcolor: "rgba(220,38,38,0.06)" } }}
-              >
-                {deleteFile.isPending && deleteFile.variables?.fileId === f.id
-                  ? <CircularProgress size={13} color="inherit" />
-                  : <Trash2 size={14} />}
-              </IconButton>
-            )}
-          </Box>
+              )}
+            </Box>
+          ))}
         </Box>
       ))}
     </Box>

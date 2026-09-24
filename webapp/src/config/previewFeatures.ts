@@ -24,7 +24,7 @@
  * branching the build or holding work out of `main`.
  *
  * ```js
- * ONE_WSO2_PREVIEW_FEATURES: { expenseSubmitter: true },
+ * ONE_WSO2_PREVIEW_FEATURES: { financeOverview: true },
  * ```
  *
  * ## Absent means off
@@ -55,17 +55,12 @@
  */
 export type PreviewFeature =
   /**
-   * Finance → Expense Claims → New Claim, the standalone submitter page added
-   * in #43. Held back because Me → Claims already offers a new-claim flow and
-   * the two entry points need reconciling before both are shown.
+   * Finance → Overview, the new dashboards section above the claim apps.
+   * Held back as a whole: it is new ground (an OPD Claims dashboard and a
+   * Credit Card Expenses dashboard, with an expense dashboard to follow),
+   * and it has not run against a real account yet.
    */
-  | "expenseSubmitter"
-  /**
-   * People Ops → Performance, par-app's Employee Portal ported in #61. Held back until
-   * the Lead Portal, Admin Portal, Report Chain and F2F follow it over — see
-   * docs/ported-apps/par-app.md §7.
-   */
-  | "par"
+  | "financeOverview"
   /**
    * The whole UMT perspective — rail entry, launcher tile, landing-page
    * option, favourites eligibility, and the `/umt` route. UMT is still being
@@ -75,7 +70,12 @@ export type PreviewFeature =
    * route inside it. `useUmtGate`'s own role check against the UMT backend is
    * unrelated and keeps working the same regardless of this flag.
    */
-  | "umt";
+  | "umt"
+  /**
+   * The whole Infra Portal perspective. Still being ported, so the waffle
+   * tile, landing option, and `/infra` route stay hidden until this is on.
+   */
+  | "infra";
 
 /**
  * Whether a preview feature should be shown.

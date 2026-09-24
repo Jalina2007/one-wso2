@@ -20,6 +20,7 @@ import type { JSX } from "react";
 import { useNavigate } from "react-router";
 import type { Audit } from "@features/security/grc/modules/audit/types/audit";
 import { DUE_OVERDUE } from "./dueDate";
+import { auditPaths } from "@features/security/grc/modules/audit/paths";
 
 // Per-audit completion rows built from the audits list controlCounts —
 // no extra API needed (reuses GET /api/v1/audits).
@@ -57,8 +58,8 @@ export default function AuditProgressList({ audits }: { audits: Audit[] }): JSX.
             key={audit.id}
             role="button"
             tabIndex={0}
-            onClick={() => void navigate(`/security/audit/audits/${audit.id}`)}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void navigate(`/security/audit/audits/${audit.id}`); } }}
+            onClick={() => void navigate(auditPaths.detail(audit.id))}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void navigate(auditPaths.detail(audit.id)); } }}
             sx={{
               cursor: "pointer",
               borderRadius: 1.5,

@@ -81,95 +81,43 @@ describe("the Claim approval entry", () => {
     expect(gate().canSee("claim-approval")).toBe(true);
   });
 
-  it("is withheld from someone who approves no claims", () => {
-    roles.opd = [444]; // can submit, cannot approve
-    roles.cc = ["lead", "finance"]; // credit card is not a claim type here
+  // CC approving does not live here at all — it is decided entirely under
+  // Credit Card Expenses — so holding only a CC role does not open this entry.
+  it("is withheld from someone who only approves credit card submissions", () => {
+    roles.cc = ["lead"];
     expect(gate().canSee("claim-approval")).toBe(false);
   });
-});
 
-describe("the OPD tab", () => {
-  // userSlice.ts:39-40 — 444 grants the submit view, 555 grants approvals.
-  it("needs the approver role, not the submitter one", () => {
-    roles.opd = [444];
-    expect(gate().canSee("claim-approval-opd")).toBe(false);
-    roles.opd = [444, 555];
-    expect(gate().canSee("claim-approval-opd")).toBe(true);
-  });
-
-  // There is no lead stage in OPD, so no expense flag can open it.
-  it("is not opened by either expense flag", () => {
-    roles.expenseLead = true;
-    roles.expenseFinance = true;
-    expect(gate().canSee("claim-approval-opd")).toBe(false);
-  });
-});
-
-describe("the expense tab", () => {
-  // appDataSlice.ts:99-103 — the two flags are pushed independently.
-  it("opens on either flag alone", () => {
-    roles.expenseLead = true;
-    expect(gate().canSee("claim-approval-expense")).toBe(true);
-    roles.expenseLead = false;
-    roles.expenseFinance = true;
-    expect(gate().canSee("claim-approval-expense")).toBe(true);
-  });
-
-  it("is not opened by the OPD role", () => {
-    roles.opd = [555];
-    expect(gate().canSee("claim-approval-expense")).toBe(false);
-  });
-});
-
-// Under Finance → Expense Claims, one entry per review stage — the source
-// app's own two sidebar entries, each on its own backend flag.
-describe("the expense approval entries", () => {
-  it("shows a lead only the lead entry", () => {
-    roles.expenseLead = true;
-    expect(gate().canSee("expense-lead-approvals")).toBe(true);
-    expect(gate().canSee("expense-finance-approvals")).toBe(false);
-  });
-
-  it("shows finance only the finance entry", () => {
-    roles.expenseFinance = true;
-    expect(gate().canSee("expense-finance-approvals")).toBe(true);
-    expect(gate().canSee("expense-lead-approvals")).toBe(false);
-  });
-
-  it("shows both to somebody holding both", () => {
-    roles.expenseLead = true;
-    roles.expenseFinance = true;
-    expect(gate().canSee("expense-lead-approvals")).toBe(true);
-    expect(gate().canSee("expense-finance-approvals")).toBe(true);
-  });
-
-  // Both items declare `requires`, so an unmapped id would fall through to the
-  // default and fail closed — withheld from everyone, silently.
-  it("withholds both from somebody who approves nothing", () => {
-    expect(gate().canSee("expense-lead-approvals")).toBe(false);
-    expect(gate().canSee("expense-finance-approvals")).toBe(false);
+  it("is withheld from someone who approves no claims", () => {
+    roles.opd = [444]; // can submit, cannot approve
+    expect(gate().canSee("claim-approval")).toBe(false);
   });
 });
 
 // The entries that stayed under Me keep the rules they had.
 describe("what stayed behind", () => {
-  it("still gates credit card approval on its own privileges", () => {
-    expect(gate().canSee("cc-approve")).toBe(false);
-    roles.cc = ["lead"];
-    expect(gate().canSee("cc-approve")).toBe(true);
-  });
-
   it("leaves the per-user views open", () => {
     expect(gate().canSee("claims")).toBe(true);
     expect(gate().canSee("cc-history")).toBe(true);
   });
 
-  // The three approval ids are gone from the registry, so their cases were dead
-  // code answering a question nothing asks. They fall through to the open
-  // default now, which is safe precisely because no rail entry names them —
-  // asserted so that a future entry reusing the name cannot quietly go open.
+  // The approval ids are gone from the registry — Lead/Finance Approvals were
+  // retired once Claim Approval's own Expense tab covered the same queues —
+  // so their cases were dead code answering a question nothing asks. They
+  // fall through to the open default now, which is safe precisely because no
+  // rail entry names them — asserted so that a future entry reusing the name
+  // cannot quietly go open. cc-approve is NOT one of these: it is a live item
+  // again, restored under Credit Card Expenses.
   it("no longer carries the retired approval ids", () => {
-    for (const retired of ["opd-approvals", "expense-lead", "expense-finance"]) {
+    for (const retired of [
+      "opd-approvals",
+      "expense-lead",
+      "expense-finance",
+      "expense-lead-approvals",
+      "expense-finance-approvals",
+      "expense-new",
+      "expense-history",
+    ]) {
       expect(FINANCE_ITEM_IDS.has(retired), `${retired} is still a rail item`).toBe(false);
     }
   });
@@ -182,25 +130,62 @@ describe("what stayed behind", () => {
   });
 });
 
-// The tile on the Finance overview asks the gate by this id, so the flag has to
-// be answered here and not only by dropping the registry entry.
-describe("a preview-gated item", () => {
+// Approve Submissions — the only place a CC submission is decided on, now
+// that it no longer has a tab in Claim Approval.
+describe("the cc-approve item", () => {
+  it("opens on either privilege alone", () => {
+    roles.cc = ["lead"];
+    expect(gate().canSee("cc-approve")).toBe(true);
+    roles.cc = ["finance"];
+    expect(gate().canSee("cc-approve")).toBe(true);
+  });
+
+  it("is not opened by the OPD or expense roles", () => {
+    roles.opd = [555];
+    roles.expenseLead = true;
+    roles.expenseFinance = true;
+    expect(gate().canSee("cc-approve")).toBe(false);
+  });
+});
+
+// The Overview group has two dashboard tiles now, gated differently: Credit
+// Card Expenses has no backend role of its own — it is everyone's own
+// numbers — so its group's preview flag is the only gate. OPD Claims has its
+// own backend role too, but the group's preview flag comes first: holding
+// the role means nothing while Overview itself is hidden.
+describe("the Finance Overview dashboards", () => {
   const originalConfig = window.config;
   afterEach(() => {
     window.config = originalConfig;
   });
 
-  it("is refused when the preview flag is absent", () => {
+  it("refuses the credit card dashboard when the group's flag is absent", () => {
     window.config = { ...(window.config ?? {}) } as Window["config"];
     delete (window.config as { ONE_WSO2_PREVIEW_FEATURES?: unknown }).ONE_WSO2_PREVIEW_FEATURES;
-    expect(gate().canSee("expense-new")).toBe(false);
+    expect(gate().canSee("cc-dashboard")).toBe(false);
   });
 
-  it("is allowed when the preview flag is on", () => {
+  it("allows the credit card dashboard when the group's flag is on", () => {
     window.config = {
       ...(window.config ?? {}),
-      ONE_WSO2_PREVIEW_FEATURES: { expenseSubmitter: true },
+      ONE_WSO2_PREVIEW_FEATURES: { financeOverview: true },
     } as Window["config"];
-    expect(gate().canSee("expense-new")).toBe(true);
+    expect(gate().canSee("cc-dashboard")).toBe(true);
+  });
+
+  it("refuses the OPD dashboard when the group's flag is absent, role or not", () => {
+    window.config = { ...(window.config ?? {}) } as Window["config"];
+    delete (window.config as { ONE_WSO2_PREVIEW_FEATURES?: unknown }).ONE_WSO2_PREVIEW_FEATURES;
+    roles.opd = [555];
+    expect(gate().canSee("opd-dashboard")).toBe(false);
+  });
+
+  it("allows the OPD dashboard when the group's flag is on and the role is held", () => {
+    window.config = {
+      ...(window.config ?? {}),
+      ONE_WSO2_PREVIEW_FEATURES: { financeOverview: true },
+    } as Window["config"];
+    roles.opd = [555];
+    expect(gate().canSee("opd-dashboard")).toBe(true);
   });
 });

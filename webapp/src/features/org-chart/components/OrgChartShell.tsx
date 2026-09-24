@@ -19,26 +19,12 @@
 // MenuShell / the finance shell — each feature owns its own copy of this.
 
 import type { ReactNode } from "react";
-import { Alert, Box, Chip, Typography } from "@wso2/oxygen-ui";
-import type { LucideIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Typography } from "@wso2/oxygen-ui";
 
 // Shrinks an element to a 1x1px clipped box instead of hiding it outright —
 // unlike display:none/visibility:hidden, this keeps it in the accessibility
 // tree, so assistive tech still sees it while sighted users don't.
-const visuallyHidden = {
-  border: 0,
-  clip: "rect(0 0 0 0)",
-  height: "1px",
-  margin: "-1px",
-  overflow: "hidden",
-  padding: 0,
-  position: "absolute",
-  whiteSpace: "nowrap",
-  width: "1px",
-} as const;
-
 export default function OrgChartShell({
-  eyebrow,
   title,
   subtitle,
   configured,
@@ -46,7 +32,6 @@ export default function OrgChartShell({
   action,
   children,
 }: {
-  eyebrow: { icon: LucideIcon; label: string };
   title: string;
   subtitle?: string;
   configured: boolean;
@@ -61,23 +46,18 @@ export default function OrgChartShell({
     <Box>
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2 }}>
         <Box sx={{ minWidth: 0 }}>
-          <Chip
-            icon={<eyebrow.icon size={14} />}
-            label={eyebrow.label}
-            color="primary"
-            variant="outlined"
-            size="small"
-            sx={{ mb: 0.5 }}
-          />
-          {/* A real h1, not a styled div — a screen-reader user navigating
-              by headings needs one (same reasoning as MenuShell). Visually
-              hidden rather than dropped: the eyebrow Chip already shows
-              "Org Chart" on screen, so a second, visible "Org chart"
-              heading directly under it read as a duplicate — but removing
-              the h1 outright would leave the page with no heading at all
-              for assistive tech, since neither the Chip (a div) nor any
-              layout above this contributes one. */}
-          <Typography component="h1" variant="h5" sx={{ mb: 0.5, ...visuallyHidden }}>
+          {/* A real, VISIBLE h1. This used to be visually hidden with a Chip
+              above it saying "Org Chart" over a title of "Org chart" — the same
+              two words, disagreeing on capitalisation. The duplicate was real,
+              but hiding the heading fixed the wrong half: the rail is
+              collapsible, and collapsing sets every label to
+              `opacity: 0; width: 0`, so with it collapsed this title is the
+              only text naming where you are.
+
+              No chip now. Org Chart is a bare section under People Ops, not a
+              screen inside an app, so there was never an app name to put above
+              the title — and "Org chart" identifies itself. */}
+          <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
             {title}
           </Typography>
         </Box>

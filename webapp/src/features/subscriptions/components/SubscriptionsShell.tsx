@@ -15,8 +15,7 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Alert, Box, Chip, CircularProgress, Stack, Typography } from "@wso2/oxygen-ui";
-import type { LucideIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, CircularProgress, Stack, Typography } from "@wso2/oxygen-ui";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { isSubscriptionBackendConfigured } from "../api/useSubscriptionData";
 import type { SubscriptionGate } from "../api/useSubscriptionGate";
@@ -41,7 +40,6 @@ import type { SubscriptionGate } from "../api/useSubscriptionGate";
 // yourself in is not an HR-team action — so the admin screen is the one that
 // opts in to the gate.
 export default function SubscriptionsShell({
-  eyebrow,
   title,
   subtitle,
   gate,
@@ -51,7 +49,6 @@ export default function SubscriptionsShell({
   // An icon + label rather than a string with an emoji in it: a colour emoji
   // sits inside the chip as its own palette and reads as pasted-in, where a
   // Lucide icon inherits the chip's colour. Same shape as the sibling shells.
-  eyebrow: { icon: LucideIcon; label: string };
   title: string;
   subtitle?: ReactNode;
   gate: SubscriptionGate;
@@ -60,16 +57,11 @@ export default function SubscriptionsShell({
 }) {
   return (
     <Box>
-      <Chip
-        icon={<eyebrow.icon size={14} />}
-        label={eyebrow.label}
-        color="primary"
-        // Outlined, not filled — white-on-orange at chip text sizes measures
-        // ~3.6:1 and fails WCAG AA. Routes through the a11y overlay instead.
-        variant="outlined"
-        size="small"
-        sx={{ mb: 0.5 }}
-      />
+      {/* No parent chip. Both screens under this shell — "My subscriptions"
+          and "Manage subscriptions" — already carry the app's name in their
+          own title, so a "Subscriptions" chip above said it a second time.
+          A chip earns its place only above a title that would not identify the
+          screen alone ("Dashboard", "History", "Settings"). */}
       {/* A real h1: the page's heading, so heading navigation has a landmark. */}
       <Typography component="h1" variant="h5" sx={{ mb: 0.5, mt: 0 }}>
         {title}

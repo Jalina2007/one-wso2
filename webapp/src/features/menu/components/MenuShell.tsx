@@ -14,21 +14,30 @@
 // specific language governing permissions and limitations
 // under the License.
 import type { ReactNode } from "react";
-import { Alert, Box, Chip, Typography } from "@wso2/oxygen-ui";
-import type { LucideIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Typography } from "@wso2/oxygen-ui";
 
-// Page frame for the cafeteria screen: eyebrow chip, title, subtitle, and the
-// one place the "backend not connected" state is rendered. Same arrangement as
-// the finance shell, with the eyebrow passed in rather than baked in.
+// Page frame for the cafeteria screen: title, subtitle, and the one place the
+// "backend not connected" state is rendered.
+//
+// A screen names itself ONCE, in its title. A parent chip above it earns its
+// place only when the title alone would not identify the screen — "Dashboard",
+// "History", "Settings" mean nothing without the app they belong to, while
+// "Cafeteria" and "Claims" already are the app.
+//
+// The title itself always stays: the rail is collapsible, and collapsing sets
+// every label to `opacity: 0; width: 0`, so with it collapsed the page title is
+// the only text naming where you are.
+//
+// So no eyebrow here. Cafeteria is a one-screen app whose title IS the app
+// name — a chip above it read "Menu / Cafeteria", which named the same thing
+// twice and disagreed with itself while doing it.
 export default function MenuShell({
-  eyebrow,
   title,
   subtitle,
   configured,
   configKey,
   children,
 }: {
-  eyebrow: { icon: LucideIcon; label: string };
   title: string;
   subtitle?: string;
   configured: boolean;
@@ -37,17 +46,6 @@ export default function MenuShell({
 }) {
   return (
     <Box>
-      <Chip
-        icon={<eyebrow.icon size={14} />}
-        label={eyebrow.label}
-        color="primary"
-        // Outlined, not filled: white-on-orange at chip text sizes is ~3.6:1 and
-        // fails WCAG AA. Outlined routes through the a11y overlay, which shifts
-        // the label and border to primary.dark in light mode.
-        variant="outlined"
-        size="small"
-        sx={{ mb: 0.5 }}
-      />
       {/* An h1, not a styled div: this is the page's heading, and a
           screen-reader user navigating by headings needs it. */}
       <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>

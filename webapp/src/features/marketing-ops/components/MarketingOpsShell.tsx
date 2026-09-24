@@ -18,8 +18,8 @@ import type { ReactNode } from "react";
 import { Alert, Box, Chip, CircularProgress, Stack, Typography } from "@wso2/oxygen-ui";
 import type { LucideIcon } from "@wso2/oxygen-ui-icons-react";
 import { isMarketingOpsBackendConfigured } from "@config/apiConfig";
+import { Navigate } from "react-router";
 import { useMarketingOpsGate } from "../api/useMarketingOpsGate";
-import MarketingOpsLocked from "./MarketingOpsLocked";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 
 // Shared page frame for every Marketing Ops screen: an operation eyebrow chip,
@@ -30,10 +30,16 @@ import ErrorNotice from "@components/error-notice/ErrorNotice";
 //   1. backend URL not set        → say which config key is missing
 //   2. /api/me still in flight    → spinner, never a premature denial
 //   3. /api/me failed             → an error with a retry, NOT a denial
-//   4. authorized: false          → say plainly that access is missing
+//   4. authorized: false          → back to /marketing-ops, which says so once
 //
 // States 3 and 4 are the pair worth keeping distinct; see the note on
-// MarketingOpsGate.isError for why collapsing them misleads the reader.
+// MarketingOpsGate.isError for why collapsing them misleads the reader. State 4
+// used to be a card of its own here (MarketingOpsLocked), naming the Asgardeo
+// groups and listing the operations behind them. It said its piece well, but it
+// was the second place in the app that answered "you cannot see anything in this
+// perspective" — the perspective landing now answers that for all of them, so a
+// screen reached by URL hands the question back to it rather than answering it
+// again, differently.
 //
 // Same role as FinanceShell, with the authorization states added. Finance
 // doesn't need them because its three backends have no equivalent of Marketing
@@ -41,14 +47,10 @@ import ErrorNotice from "@components/error-notice/ErrorNotice";
 // 200 with `authorized: false` rather than a 403, precisely so the UI can
 // explain the situation instead of surfacing a raw failure.
 //
-// `requireAuthorized` exists for the eventual overview page, which should still
-// render its deep-links out to Marketing Ops for someone who lacks access here —
-// telling them where the real thing is beats a dead end.
 export default function MarketingOpsShell({
   eyebrow,
   title,
   subtitle,
-  requireAuthorized = true,
   children,
 }: {
   // Which operation this screen belongs to — informational, not decorative: the
@@ -59,28 +61,28 @@ export default function MarketingOpsShell({
   // didn't already say, in a different visual language. Same shape as
   // FinanceShell's eyebrow.
   //
-  // Optional because the perspective landing page has no single operation to
-  // name, and there the chip only restated the page title — see MarketingOpsPage.
+  // Optional because not every screen belongs to exactly one operation.
   eyebrow?: { icon: LucideIcon; label: string };
   title: string;
   subtitle?: string;
-  requireAuthorized?: boolean;
   children: ReactNode;
 }) {
   const configured = isMarketingOpsBackendConfigured();
   // Only ask the backend who we are once we know there's a backend to ask.
   const gate = useMarketingOpsGate(configured);
 
-  // The header changes on the locked state, so the shell has to know which
-  // branch the body below will take. This mirrors the LAST rung of that ladder —
-  // every earlier rung has to be excluded, or a caller whose /api/me is still in
-  // flight (or failed) would be treated as denied for one render.
+  // Every earlier rung has to be excluded here, or a caller whose /api/me is
+  // still in flight (or failed) is treated as denied for one render — which is
+  // now a NAVIGATION, so getting it wrong would throw someone off the screen
+  // they asked for while the answer was still arriving.
+  //
+  // Returned before the header rather than inside the body below: there is
+  // nothing worth showing on a page we are leaving, and this is also what
+  // removes the duplicate condition the header used to carry alongside the
+  // body's own copy of it.
   const isLocked =
-    configured &&
-    requireAuthorized &&
-    !gate.isResolving &&
-    !gate.isError &&
-    !gate.isAuthorized;
+    configured && !gate.isResolving && !gate.isError && !gate.isAuthorized;
+  if (isLocked) return <Navigate to="/marketing-ops" replace />;
 
   return (
     <Box>
@@ -103,22 +105,13 @@ export default function MarketingOpsShell({
       <Typography component="h1" variant="h5" sx={{ mb: 0.5, mt: 0 }}>
         {title}
       </Typography>
-      {/* The subtitle sells the screen — "Campaign operations, event lists and
-          CRM ingestion" — which is right on a page you can use and wrong above a
-          panel that is about to refuse you. The locked panel names the operations
-          itself, so this would only be a pitch for something withheld. Dropped on
-          THAT state alone; every screen you can open keeps it. */}
-      {subtitle && !isLocked && (
+      {subtitle && (
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25, maxWidth: "70ch" }}>
           {subtitle}
         </Typography>
       )}
 
-      <MarketingOpsBody
-        configured={configured}
-        gate={gate}
-        requireAuthorized={requireAuthorized}
-      >
+      <MarketingOpsBody configured={configured} gate={gate}>
         {children}
       </MarketingOpsBody>
     </Box>
@@ -131,12 +124,10 @@ export default function MarketingOpsShell({
 function MarketingOpsBody({
   configured,
   gate,
-  requireAuthorized,
   children,
 }: {
   configured: boolean;
   gate: ReturnType<typeof useMarketingOpsGate>;
-  requireAuthorized: boolean;
   children: ReactNode;
 }) {
   if (!configured) {
@@ -152,7 +143,7 @@ function MarketingOpsBody({
   // Hold the page until the authorization decision lands. Rendering the
   // unauthorized state first and correcting it a moment later would flash a
   // denial at people who do have access, on every single load.
-  if (requireAuthorized && gate.isResolving) {
+  if (gate.isResolving) {
     return (
       <Stack direction="row" spacing={1.25} sx={{ alignItems: "center", mt: 2 }}>
         <CircularProgress size={16} />
@@ -167,7 +158,7 @@ function MarketingOpsBody({
   // us with no capabilities, so the order here is what stops a gateway timeout
   // from being reported as a missing permission — which would send someone
   // chasing an Asgardeo group they already have.
-  if (requireAuthorized && gate.isError) {
+  if (gate.isError) {
     return (
       <ErrorNotice onRetry={gate.retry} sx={{ mt: 1.5 }}>
         Couldn't check your Marketing Ops access. {gate.errorMessage}
@@ -175,11 +166,6 @@ function MarketingOpsBody({
     );
   }
 
-  // Not an Alert: this is a locked door, not a fault. MarketingOpsLocked carries
-  // the reasoning, and `isLocked` above has to agree with this condition.
-  if (requireAuthorized && !gate.isAuthorized) {
-    return <MarketingOpsLocked />;
-  }
-
+  // No unauthorized rung here: `isLocked` above has already navigated away.
   return <>{children}</>;
 }

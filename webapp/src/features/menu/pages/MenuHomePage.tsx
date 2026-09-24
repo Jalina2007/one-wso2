@@ -15,7 +15,7 @@
 // under the License.
 import { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Skeleton, Typography } from "@wso2/oxygen-ui";
-import { MessageSquareIcon, UtensilsIcon } from "@wso2/oxygen-ui-icons-react";
+import { MessageSquareIcon } from "@wso2/oxygen-ui-icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { HttpError } from "@api/http";
 import { MEAL_SLOTS } from "../api/menuTypes";
@@ -85,7 +85,6 @@ export default function MenuHomePage() {
 
   return (
     <MenuShell
-      eyebrow={{ icon: UtensilsIcon, label: "Menu" }}
       title="Cafeteria"
       subtitle="Today's menu, lunch feedback, and dinner on demand."
       configured={configured}

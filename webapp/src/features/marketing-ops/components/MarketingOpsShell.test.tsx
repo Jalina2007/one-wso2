@@ -16,16 +16,17 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import MarketingOpsShell from "@features/marketing-ops/components/MarketingOpsShell";
 import type { MarketingOpsGate } from "@features/marketing-ops/api/useMarketingOpsGate";
 
-// The shell's whole job is a four-rung state ladder, and the locked rung now
-// changes the HEADER as well as the body — the subtitle is suppressed there. That
-// makes the shell hold the same condition twice: once as `isLocked` for the
-// header, once as the last `if` in the body. These tests exist because those two
-// can drift apart silently, and the failure mode is ugly: an authorized caller
-// seeing a denial for one render while /api/me is still in flight.
+// The shell's whole job is a four-rung state ladder, and the last rung is now a
+// NAVIGATION: a caller in no Marketing Ops group is sent back to the perspective
+// landing, which is the one place that says so. That raises the cost of getting
+// the rung wrong — three of the four states leave the gate without capabilities
+// exactly as a denial does, and mistaking one of them for a denial no longer
+// shows the wrong panel, it throws someone off the screen they asked for while
+// the answer is still arriving. Hence a test per rung.
 
 const configured = vi.hoisted(() => ({ value: true }));
 vi.mock("@config/apiConfig", () => ({
@@ -48,16 +49,31 @@ const AUTHORIZED: MarketingOpsGate = {
 
 const SUBTITLE = "Campaign operations, event lists and CRM ingestion.";
 
+function UrlProbe() {
+  return <div data-testid="url">{useLocation().pathname}</div>;
+}
+
 function renderShell(g: Partial<MarketingOpsGate> = {}) {
   gate.value = { ...AUTHORIZED, ...g };
   return render(
-    <MemoryRouter>
-      <MarketingOpsShell title="Marketing Ops" subtitle={SUBTITLE}>
-        <div>the real page</div>
-      </MarketingOpsShell>
+    <MemoryRouter initialEntries={["/marketing-ops/events/mine"]}>
+      <UrlProbe />
+      <Routes>
+        <Route
+          path="/marketing-ops/events/mine"
+          element={
+            <MarketingOpsShell title="My Events" subtitle={SUBTITLE}>
+              <div>the real page</div>
+            </MarketingOpsShell>
+          }
+        />
+        <Route path="/marketing-ops" element={<div>the landing</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
+
+const stayedPut = () => expect(screen.getByTestId("url")).toHaveTextContent("/marketing-ops/events/mine");
 
 beforeEach(() => {
   configured.value = true;
@@ -68,56 +84,32 @@ describe("MarketingOpsShell", () => {
     renderShell();
     expect(screen.getByText("the real page")).toBeInTheDocument();
     expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
-    expect(screen.queryByText("You don't have access yet")).not.toBeInTheDocument();
+    stayedPut();
   });
 
-  it("locks the page when the caller is in no Marketing Ops group", () => {
+  // A screen reached by URL by someone in no Marketing Ops group hands the
+  // question back to the perspective landing rather than answering it here.
+  it("sends a caller in no Marketing Ops group back to the landing", () => {
     renderShell({ isAuthorized: false, canSee: () => false });
-    expect(screen.getByText("You don't have access yet")).toBeInTheDocument();
+    expect(screen.getByTestId("url")).toHaveTextContent("/marketing-ops");
+    expect(screen.getByText("the landing")).toBeInTheDocument();
     expect(screen.queryByText("the real page")).not.toBeInTheDocument();
-  });
-
-  it("drops the subtitle on the locked state only", () => {
-    renderShell({ isAuthorized: false, canSee: () => false });
-    // The title still says where you are; the subtitle would be selling a screen
-    // that is about to refuse you.
-    expect(screen.getByRole("heading", { name: "Marketing Ops" })).toBeInTheDocument();
-    expect(screen.queryByText(SUBTITLE)).not.toBeInTheDocument();
-  });
-
-  it("names the operations so the reader can ask for the right group", () => {
-    renderShell({ isAuthorized: false, canSee: () => false });
-    for (const name of [
-      "Email Workbench",
-      "Ad Campaigns",
-      "Events",
-      "CRM Upload",
-      "Utilities",
-      "Marketing Admin",
-    ]) {
-      expect(screen.getByText(name)).toBeInTheDocument();
-    }
-  });
-
-  it("offers a way out", () => {
-    renderShell({ isAuthorized: false, canSee: () => false });
-    expect(screen.getByRole("link", { name: /back to home/i })).toHaveAttribute("href", "/me");
   });
 
   // ---- the rungs that must NOT read as locked -----------------------------
   //
   // Each of these leaves the gate without capabilities, exactly like a denial
   // does, which is what makes them easy to collapse into one branch by accident.
+  // Now that a denial navigates, collapsing one of them would bounce someone off
+  // a screen they can open.
 
-  it("shows the spinner, not the lock, while the check is in flight", () => {
+  it("shows the spinner, not a redirect, while the check is in flight", () => {
     renderShell({ isAuthorized: false, isResolving: true, canSee: () => false });
     expect(screen.getByText(/checking your marketing ops access/i)).toBeInTheDocument();
-    expect(screen.queryByText("You don't have access yet")).not.toBeInTheDocument();
-    // The header is untouched here — only the locked rung suppresses the subtitle.
-    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+    stayedPut();
   });
 
-  it("shows the retryable error, not the lock, when the check fails", () => {
+  it("shows the retryable error, not a redirect, when the check fails", () => {
     renderShell({
       isAuthorized: false,
       isError: true,
@@ -126,30 +118,13 @@ describe("MarketingOpsShell", () => {
     });
     expect(screen.getByText(/couldn't check your marketing ops access/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
-    expect(screen.queryByText("You don't have access yet")).not.toBeInTheDocument();
-    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
+    stayedPut();
   });
 
-  it("shows the config hint, not the lock, when the backend URL is unset", () => {
+  it("shows the config hint, not a redirect, when the backend URL is unset", () => {
     configured.value = false;
     renderShell({ isAuthorized: false, canSee: () => false });
     expect(screen.getByText(/isn't connected yet/i)).toBeInTheDocument();
-    expect(screen.queryByText("You don't have access yet")).not.toBeInTheDocument();
-    expect(screen.getByText(SUBTITLE)).toBeInTheDocument();
-  });
-
-  // requireAuthorized={false} exists so a page can render for someone without
-  // access. It must not be locked out.
-  it("renders the page unlocked when the screen opts out of the check", () => {
-    gate.value = { ...AUTHORIZED, isAuthorized: false, canSee: () => false };
-    render(
-      <MemoryRouter>
-        <MarketingOpsShell title="Marketing Ops" subtitle={SUBTITLE} requireAuthorized={false}>
-          <div>the real page</div>
-        </MarketingOpsShell>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText("the real page")).toBeInTheDocument();
-    expect(screen.queryByText("You don't have access yet")).not.toBeInTheDocument();
+    stayedPut();
   });
 });

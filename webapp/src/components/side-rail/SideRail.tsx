@@ -19,24 +19,12 @@ import { Box, Link, Sidebar, Typography } from "@wso2/oxygen-ui";
 import { ExternalLinkIcon, SettingsIcon } from "@wso2/oxygen-ui-icons-react";
 import { Link as RouterLink, matchPath, useLocation, useNavigate } from "react-router";
 import { useActivePerspective } from "@context/perspective/PerspectiveContext";
-import { SUBSCRIPTION_ITEM_IDS, type PerspectiveSection } from "@constants/perspectives";
-import { capabilitiesFromPrivileges, type Capability } from "@constants/appMenu";
-import { FINANCE_ITEM_IDS } from "@constants/financeApps";
-import { LEAVE_ITEM_IDS } from "@constants/meApps";
-import { DUE_DILIGENCE_ITEM_IDS } from "@constants/dueDiligenceApps";
-import { SECURITY_ITEM_IDS } from "@constants/securityApps";
-import { useUserInfo } from "@api/useUserInfo";
-import { useFinanceGate } from "@features/finance/api/useFinanceGate";
-import { useLeaveGate } from "@features/leave/api/useLeaveGate";
+import type { PerspectiveSection } from "@constants/perspectives";
 import {
   activeGroupIds as activeGroupIdsFor,
   activeItemId as activeItemIdFor,
 } from "./railActive";
-import { useMarketingOpsGate } from "@features/marketing-ops/api/useMarketingOpsGate";
-import { useDueDiligenceGate } from "@features/due-diligence/api/useDueDiligenceGate";
-import { useSecurityGate } from "@features/security/api/useSecurityGate";
-import { useSubscriptionGate } from "@features/subscriptions/api/useSubscriptionGate";
-import { isSriLankaWorkLocation } from "@features/subscriptions/util/locationGate";
+import { usePerspectiveVisibility } from "./usePerspectiveVisibility";
 
 // Context-sensitive left rail, built on Oxygen's compound `Sidebar`.
 //
@@ -101,93 +89,14 @@ const ELLIPSIS_SX = {
 
 export default function SideRail({ collapsed }: SideRailProps): JSX.Element {
   const active = useActivePerspective();
-  const userInfo = useUserInfo();
-  const caps = capabilitiesFromPrivileges(userInfo.data?.privileges);
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Finance items (OPD/credit-card/expense, surfaced under Me) gate on each
-  // finance app's OWN backend roles, not the coarse people-app capabilities
-  // — so someone who is a people-app lead but not a cc-expenses lead/finance
-  // doesn't see "Approve Submissions". Dispatched per item id rather than
-  // per perspective since Finance items are just some of Me's sections now.
-  // Only fetch those roles while Me is active.
-  // Both perspectives: the claim apps' own screens are under Me, and Claim
-  // approval is under Finance. One gate answers for both, so it has to be
-  // asked in either place.
-  const financeGate = useFinanceGate(active.key === "me" || active.key === "finance");
-
-  // Leave is the same problem again: its backend numbers LEAD 879 /
-  // PEOPLE_OPS_TEAM 789, unrelated to people-app's 993 / 999. Reading
-  // `requires` against `caps` showed Reports to a people-app lead who cannot
-  // use it, and hid it from a leave lead who can.
-  const leaveGate = useLeaveGate(active.key === "me");
-
-  // Marketing Ops is the same shape of problem and needs the same treatment:
-  // its rail gates on the MARKETING OPS backend's own Asgardeo groups
-  // (app-marketingops-*), which bear no relation to the people-app privilege
-  // numbers `caps` is built from. Reading `requires` against `caps` would show
-  // a people-app admin every marketing screen — including ones the marketing
-  // backend then 403s — and hide them from an actual Marketing Ops admin who
-  // happens not to be a people-app admin. The registry says as much at
-  // @constants/perspectives: the `requires` on those sections is a coarse hint,
-  // and whatever renders them has to ask this gate.
-  const isMarketingOps = active.key === "marketing";
-  const marketingOpsGate = useMarketingOpsGate(isMarketingOps);
-
-  // Due Diligence is the same shape of problem again, and needs the same
-  // treatment: it gates on ITS OWN backend's roles, which bear no relation to
-  // the people-app privilege numbers `caps` is built from. It is reachable
-  // from two perspectives (Finance and Legal — see DUE_DILIGENCE_APPS), so
-  // the gate is enabled for either.
-  const dueDiligenceGate = useDueDiligenceGate(active.key === "finance" || active.key === "legal");
-  const securityGate = useSecurityGate(active.key === "security");
-
-  // Subscriptions (People Ops → PickMe Commute / LaaS) is the same shape of
-  // problem once more, with one extra wrinkle worth naming: its backend
-  // publishes the NAMES of its two admin Asgardeo groups on
-  // /subscriptions/meta-info and leaves the comparison against the caller's own
-  // groups to the client, because it has no `/me` of its own. So the gate here
-  // is a join of that response and the id_token, not a single backend verdict —
-  // see useSubscriptionGate. Only fetched while People Ops is the active
-  // perspective; every other perspective has no business calling it.
-  const isPeopleOps = active.key === "people";
-  const subscriptionGate = useSubscriptionGate(isPeopleOps);
-
-  // Both services are a Colombo-office perk, so the section as a whole is
-  // Sri-Lanka-only — see isSriLankaWorkLocation. `userInfo` is the SAME call
-  // `caps` above already makes (people-app's /user-info), so this piggybacks
-  // on an existing fetch rather than adding one: no new request, just one more
-  // field read off a response already in flight for every perspective. While
-  // it's unresolved, `workLocation` reads as undefined and this returns false
-  // — the same fail-closed-while-loading behaviour `caps`-gated items already
-  // get from `capabilitiesFromPrivileges` defaulting privileges to `[]`, so a
-  // gate is never mistakenly satisfied just because its data hasn't landed
-  // yet.
-  //
-  // Beyond that: the group and the self-service screen are open to every Sri
-  // Lanka employee — opting yourself in and out is not an HR-team action.
-  // Only the manage-on-behalf screen ALSO needs a group, and it stays hidden
-  // while that gate is still resolving too: showing it first and withdrawing
-  // it a moment later reads as the rail flickering, and failing CLOSED is the
-  // right default for an admin entry point either way.
-  const isSriLankaEmployee = isSriLankaWorkLocation(userInfo.data?.workLocation);
-  const subscriptionCanSee = (id: string): boolean => {
-    if (!isSriLankaEmployee) return false;
-    return id === "people-subscriptions-manage"
-      ? subscriptionGate.isAdmin && !subscriptionGate.isResolving
-      : true;
-  };
-
-  const resolveVisible = (s: PerspectiveSection): boolean => {
-    if (DUE_DILIGENCE_ITEM_IDS.has(s.id)) return dueDiligenceGate.canSee(s.id);
-    if (SECURITY_ITEM_IDS.has(s.id)) return securityGate.canSee(s.id);
-    if (FINANCE_ITEM_IDS.has(s.id)) return financeGate.canSee(s.id);
-    if (LEAVE_ITEM_IDS.has(s.id)) return leaveGate.canSee(s.id);
-    if (SUBSCRIPTION_ITEM_IDS.has(s.id)) return subscriptionCanSee(s.id);
-    if (isMarketingOps) return marketingOpsGate.canSee(s.id);
-    return sectionAllowed(s.requires, caps);
-  };
+  // Who can see what. This used to be ~100 lines of gate wiring right here,
+  // which made the rail the only thing in the app that knew — see
+  // usePerspectiveVisibility for why the perspective landing routes need the
+  // same answer and why a second copy of it would drift.
+  const { resolveVisible } = usePerspectiveVisibility();
 
   // Memoised because `?? []` would otherwise hand a fresh array to the
   // dependency lists below on every render, defeating both useMemos.
@@ -327,8 +236,15 @@ export default function SideRail({ collapsed }: SideRailProps): JSX.Element {
 
           {/* The perspective's own landing page. Previously this was a
               clickable eyebrow label; as a real row it can also be
-              highlighted when you're on it. */}
-          {active.path && (
+              highlighted when you're on it.
+
+              Dropped for the perspectives whose landing only forwards you to
+              the first row below it — see `forwardsToFirstItem`. The route is
+              still there and still reached (switching perspective goes to it),
+              but as a rail row it would be a destination that bounces, and one
+              that renders as selected for a split second on a screen you are
+              about to leave. */}
+          {active.path && !active.forwardsToFirstItem && (
             <RouteItem id={OVERVIEW_ID} to={active.path} fromPerspective={active.key}>
               <Sidebar.Item id={OVERVIEW_ID}>
                 <Sidebar.ItemIcon>
@@ -375,11 +291,6 @@ export default function SideRail({ collapsed }: SideRailProps): JSX.Element {
       </Sidebar.Footer>
     </Sidebar>
   );
-}
-
-function sectionAllowed(requires: Capability[] | undefined, caps: Set<Capability>): boolean {
-  if (!requires || requires.length === 0) return true;
-  return requires.some((r) => caps.has(r));
 }
 
 /**

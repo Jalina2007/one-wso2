@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthApiClient } from "@features/security/grc/shim/useAuthApiClient";
 import { BACKEND_BASE_URL } from "@features/security/grc/shim/apiConfig";
 import { extractErrorMessage } from "@features/security/grc/modules/audit/api/apiError";
+import type { RoundStatus } from "@features/security/grc/modules/audit/types/audit";
 
 export interface EvidenceFile {
   id: number;
@@ -25,14 +26,18 @@ export interface EvidenceFile {
   fileType: string | null;
   fileSize: number | null;
   readUrl: string | null; // short-lived read SAS URL for viewing/downloading
+  // Who uploaded this file, and when. Not necessarily the round's submitter:
+  // "Add Files" appends to an open round, so a round can hold files from
+  // several people and several moments — see SubmittedEvidenceList.
   createdBy: string;
+  createdByName: string;
   createdAt: string;
 }
 
 export interface EvidenceSubmission {
   id: number;
   controlId: number;
-  status: string;
+  status: RoundStatus;
   folderPath: string | null;
   files: EvidenceFile[] | null; // null when a submission round has no files
   // Written justification for a round with no files (fileless completion).

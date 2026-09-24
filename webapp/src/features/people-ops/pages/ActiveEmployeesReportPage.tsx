@@ -33,7 +33,7 @@ export default function ActiveEmployeesReportPage() {
   return (
     <PeopleOpsShell
       eyebrow={REPORTS_EYEBROW}
-      title="Active employees"
+      title="Active Employees"
       subtitle="Everyone currently employed, with the filters and columns you choose. Preview here, then export the full dataset as CSV."
     >
       <EmployeeReportTable

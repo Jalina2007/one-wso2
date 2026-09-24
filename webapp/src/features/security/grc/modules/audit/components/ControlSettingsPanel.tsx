@@ -46,6 +46,7 @@ import {
 } from "@wso2/oxygen-ui";
 import { Pencil, Plus, Trash2, X } from "@wso2/oxygen-ui-icons-react";
 import { useState, type JSX } from "react";
+import { useGetAudit } from "@features/security/grc/modules/audit/api/useGetAudit";
 import { useGetControls } from "@features/security/grc/modules/audit/api/useGetControls";
 import { useGetUsers } from "@features/security/grc/modules/audit/api/useGetUsers";
 import { useGetAuditorCandidates } from "@features/security/grc/modules/audit/api/useGetAuditorCandidates";
@@ -53,6 +54,7 @@ import { useGetTeams } from "@features/security/grc/modules/audit/api/useGetTeam
 import { useAddControl } from "@features/security/grc/modules/audit/api/useAddControl";
 import { useUpdateControl } from "@features/security/grc/modules/audit/api/useUpdateControl";
 import { DeleteControlError, useDeleteControl } from "@features/security/grc/modules/audit/api/useDeleteControl";
+import { todayUtcDateOnlyString } from "@features/security/grc/utils/dateTime";
 import { useAuditPrivileges } from "@features/security/grc/modules/audit/hooks/useAuditPrivileges";
 import { AuditPrivilege } from "@features/security/grc/modules/audit/privileges";
 import type {
@@ -66,15 +68,6 @@ import type {
   UpdateControlRequest,
 } from "@features/security/grc/modules/audit/types/audit";
 import type { AuditUser } from "@features/security/grc/modules/audit/types/user";
-
-// Local YYYY-MM-DD for today, so a due date can't be set in the past.
-function todayISO(): string {
-  const d = new Date();
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
 
 // ── Control form state (used for both Add and Edit dialogs) ──────────────────
 
@@ -170,6 +163,8 @@ interface ControlFormDialogProps {
   editMode?: boolean;
   /** Edit mode only: whether the control is still untouched. */
   requirementTypeEditable?: boolean;
+  /** Lifts the past-date warning, e.g. when the audit period has already ended. */
+  allowPastDueDate: boolean;
   onSave: (form: ControlFormState) => void;
   onClose: () => void;
 }
@@ -185,6 +180,7 @@ function ControlFormDialog({
   error,
   editMode = false,
   requirementTypeEditable = false,
+  allowPastDueDate,
   onSave,
   onClose,
 }: ControlFormDialogProps): JSX.Element {
@@ -197,22 +193,19 @@ function ControlFormDialog({
     setForm((prev) => ({ ...prev, [key]: val }));
 
   const isOE = form.requirementType === "OE";
-  // A due date can't be moved into the past — but editing a control that's
-  // already overdue must not be blocked as long as its due date is left
-  // untouched (only a newly-picked date is checked against today). An empty
-  // field is caught separately by isValid below (via "required"), not here —
-  // otherwise the past-date message would show before the user has typed
-  // anything.
-  const dueDateInPast =
-    form.dueDate.length > 0 &&
-    form.dueDate < todayISO() &&
-    !(editMode && form.dueDate === initialValues.dueDate);
-  const dueDateValid = form.dueDate.length > 0 && !dueDateInPast;
-  const populationDueDateInPast =
-    form.populationDueDate.length > 0 &&
-    form.populationDueDate < todayISO() &&
-    !(editMode && form.populationDueDate === initialValues.populationDueDate);
-  const populationDueDateValid = form.populationDueDate.length > 0 && !populationDueDateInPast;
+  // This dialog is only reachable via the "Add Control"/edit actions, both
+  // gated on AuditPrivilege.ManageControls (compliance-admin only) — so due
+  // dates here aren't hard-blocked when in the past; admins may backdate them
+  // (e.g. to reflect a control that was already effective before onboarding).
+  // Like Create Audit, a past date is still flagged softly (never blocks
+  // saving), since it's more often a typo than an intentional backdate.
+  // Only dates the user changed are flagged: an existing control that is
+  // already overdue would otherwise warn on every unrelated edit.
+  const isPastDate = (d: string, initial: string) =>
+    !allowPastDueDate && d.length > 0 && d !== initial && d < todayUtcDateOnlyString();
+  const PAST_DATE_HINT = "This date is in the past - double-check before saving";
+  const dueDateValid = form.dueDate.length > 0;
+  const populationDueDateValid = form.populationDueDate.length > 0;
   const isValid =
     form.controlNumber.trim().length > 0 &&
     form.description.trim().length > 0 &&
@@ -353,9 +346,8 @@ function ControlFormDialog({
             onChange={(e) => set("dueDate", e.target.value)}
             size="small"
             InputLabelProps={{ shrink: true }}
-            inputProps={{ min: todayISO() }}
-            error={dueDateInPast}
-            helperText={dueDateInPast ? "Due Date cannot be in the past" : " "}
+            error={isPastDate(form.dueDate, initialValues.dueDate)}
+            helperText={isPastDate(form.dueDate, initialValues.dueDate) ? PAST_DATE_HINT : undefined}
           />
 
           <TextField
@@ -398,9 +390,8 @@ function ControlFormDialog({
                 size="small"
                 InputLabelProps={{ shrink: true }}
                 fullWidth
-                inputProps={{ min: todayISO() }}
-                error={populationDueDateInPast}
-                helperText={populationDueDateInPast ? "Population Due Date cannot be in the past" : " "}
+                error={isPastDate(form.populationDueDate, initialValues.populationDueDate)}
+                helperText={isPastDate(form.populationDueDate, initialValues.populationDueDate) ? PAST_DATE_HINT : undefined}
               />
 
               <TextField
@@ -528,6 +519,7 @@ export default function ControlSettingsPanel({
   const canManage = can(AuditPrivilege.ManageControls);
 
   const { data: controlsData, isLoading: controlsLoading } = useGetControls(auditId);
+  const { data: audit } = useGetAudit(auditId);
   const { data: users = [] } = useGetUsers();
   const { data: auditorCandidates = [] } = useGetAuditorCandidates();
   const { data: teams = [] } = useGetTeams();
@@ -543,6 +535,10 @@ export default function ControlSettingsPanel({
   const [mutationError, setMutationError] = useState<string | null>(null);
 
   const controls = controlsData?.items ?? [];
+  // A retrospective audit (period already over) is expected to have past due dates.
+  // Until the audit loads we can't tell, so don't warn yet rather than flash a
+  // past-date hint on a retrospective audit.
+  const allowPastDueDate = audit === undefined || audit.periodEnd < todayUtcDateOnlyString();
 
   function handleAdd(form: ControlFormState) {
     setMutationError(null);
@@ -791,6 +787,7 @@ export default function ControlSettingsPanel({
         teams={teams}
         isSaving={addMutation.isPending}
         error={mutationError}
+        allowPastDueDate={allowPastDueDate}
         onSave={handleAdd}
         onClose={() => setAddDialogOpen(false)}
       />
@@ -807,6 +804,7 @@ export default function ControlSettingsPanel({
         error={mutationError}
         editMode
         requirementTypeEditable={editingControl ? canChangeRequirementType(editingControl) : false}
+        allowPastDueDate={allowPastDueDate}
         onSave={handleEdit}
         onClose={() => setEditingControl(null)}
       />

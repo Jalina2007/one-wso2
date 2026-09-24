@@ -23,16 +23,20 @@
 // alongside the things you do for yourself. Submitting a claim and looking up
 // what you submitted stay there; only the deciding moves.
 //
-// Credit card keeps its own Approve Submissions under Me for now.
+// Just two tabs, both spanning every claim type: the per-type Expense claims
+// and OPD claims tabs that used to sit beside Needs You and Decided were
+// retired once those two grew the same filters (by employee, by claim id) and
+// the same lead/finance toggle the per-type tabs offered — there was nothing
+// left for a second, narrower view to do.
+//
+// Credit card is the one type with no tab here at all: its own Approve
+// Submissions screen under Credit Card Expenses is the ONLY place to approve
+// a card submission.
 
 /** Permissions, resolved by `useFinanceGate().canSee`. */
 export type ClaimApprovalGateId =
   /** Any claim at all is approvable by this person. */
-  | "claim-approval"
-  /** Expense claims, at either stage — the two flags are independent. */
-  | "claim-approval-expense"
-  /** OPD claims. There is no lead stage: the backend's role 555 or nobody. */
-  | "claim-approval-opd";
+  "claim-approval";
 
 export interface ClaimApprovalTabDef {
   segment: string;
@@ -43,14 +47,9 @@ export interface ClaimApprovalTabDef {
 export const CLAIM_APPROVAL_PATH = "/finance/claim-approval";
 
 export const CLAIM_APPROVAL_TABS: readonly ClaimApprovalTabDef[] = [
-  // The default, and the question anyone opens this screen with. Grouped by
-  // claim type rather than merged, so each group keeps the column that matters
-  // to it and nothing is flattened to fit a shared shape.
+  // The question anyone opens this screen with — every claim waiting on them,
+  // across both apps, one stage at a time via its own toggle.
   { segment: "needs-you", label: "Needs you", gateId: "claim-approval" },
-  // The per-type views, for working through one kind in volume. Same screens as
-  // before, with their own Pending / Approved / Rejected split and filters.
-  { segment: "expense", label: "Expense claims", gateId: "claim-approval-expense" },
-  { segment: "opd", label: "OPD claims", gateId: "claim-approval-opd" },
   // Named "Decided", not "Decided by you": the expense DTO records
   // `financeApproverEmail` but has no lead equivalent — only `leadApprovedDate`
   // and `leadRejectedDate` — so a lead's own decisions cannot be told apart

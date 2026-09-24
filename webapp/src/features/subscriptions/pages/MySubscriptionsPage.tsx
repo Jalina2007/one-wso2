@@ -15,7 +15,6 @@
 // under the License.
 
 import { Alert, Box } from "@wso2/oxygen-ui";
-import { TicketIcon } from "@wso2/oxygen-ui-icons-react";
 import { useAsgardeoUser } from "@hooks/useAsgardeoUser";
 import { SERVICES } from "../api/subscriptionTypes";
 import { useSubscriptionGate } from "../api/useSubscriptionGate";
@@ -54,7 +53,6 @@ export default function MySubscriptionsPage() {
 
   return (
     <SubscriptionsShell
-      eyebrow={{ icon: TicketIcon, label: "Subscriptions" }}
       title="My subscriptions"
       subtitle="Opt in and out of PickMe Commute and LaaS. Each has a monthly window — the card tells you which one applies and when it's open."
       gate={gate}

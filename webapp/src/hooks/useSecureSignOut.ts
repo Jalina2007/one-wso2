@@ -18,6 +18,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAsgardeo } from "@asgardeo/react";
 import { SIGNING_OUT_EVENT } from "@constants/appEvents";
+import { resetUnauthorizedOrigins } from "@api/tokenExpiry";
 
 // Sign out AND purge client-held state. React Query keeps fetched profile /
 // leave / finance data in memory; Asgardeo signOut() alone leaves it there
@@ -29,6 +30,9 @@ export function useSecureSignOut(): () => void {
   const { signOut } = useAsgardeo();
   const qc = useQueryClient();
   return useCallback(() => {
+    // Origins that refused the OLD token must not corroborate a doubt about
+    // the next one.
+    resetUnauthorizedOrigins();
     try {
       qc.clear();
     } catch {
