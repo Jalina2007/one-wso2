@@ -123,22 +123,42 @@ export function useUmtTriggerCstBuild(chunkId: number) {
   });
 }
 
+export interface UmtRetriggerDockerBuildResult {
+  // Whether the chunk's own status was read back after the retrigger. When it
+  // wasn't, the builds were still retriggered, but the row is showing a
+  // status that no longer holds.
+  statusRefreshed: boolean;
+}
+
 // Retriggers a chunk's failed docker builds. The chunk's own status moves
 // with it, so both it and the docker statuses are refetched afterwards.
+//
+// The refetch happens here rather than in onSuccess because its outcome has
+// to reach the caller, and a failed refetch must not reject: that would
+// report the retrigger itself as failed, inviting a second one. Only this
+// chunk's status counts — the query key carries the user between its name and
+// the chunk id, so a predicate picks it out where a key prefix can't, and a
+// failure on some other row stays that row's business.
 export function useUmtRetriggerDockerBuild(chunkId: number) {
   const getAccessToken = useAccessToken();
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, void>({
+  return useMutation<UmtRetriggerDockerBuildResult, Error, void>({
     mutationFn: async () => {
       const accessToken = await getAccessToken();
       await authedPost(umtServiceUrls.releaseChunkRetriggerDockerBuild(chunkId), accessToken, null);
-    },
-    onSuccess: async () => {
-      await Promise.all([
+
+      const [, chunkStatus] = await Promise.allSettled([
         queryClient.invalidateQueries({ queryKey: ["umt-release-chunk-docker-build-status"] }),
-        queryClient.invalidateQueries({ queryKey: ["umt-release-chunk-status"] }),
+        queryClient.invalidateQueries(
+          {
+            predicate: (query) =>
+              query.queryKey[0] === "umt-release-chunk-status" && query.queryKey[2] === chunkId,
+          },
+          { throwOnError: true },
+        ),
       ]);
+      return { statusRefreshed: chunkStatus.status === "fulfilled" };
     },
   });
 }
