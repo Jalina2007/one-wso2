@@ -53,6 +53,9 @@ export function normalizeUmtPlatformStats(data: unknown): UmtPlatformStatsRow[] 
       if (Object.values(breakdown).some((count) => typeof count !== "number")) {
         throw new Error(`Unexpected platform statistics counts for ${month}.`);
       }
+      if (Object.prototype.hasOwnProperty.call(breakdown, "month")) {
+        throw new Error(`Unexpected "month" series in platform statistics for ${month}.`);
+      }
 
       return { month, ...(breakdown as Record<string, number>) };
     });

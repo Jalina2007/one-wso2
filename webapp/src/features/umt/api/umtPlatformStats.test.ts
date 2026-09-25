@@ -68,4 +68,12 @@ describe("UMT platform stats wire format", () => {
       normalizeUmtPlatformStats({ "2026-01": [{ "product-name": "WSO2AM", version: "4.0.0", count: 2 }] }),
     ).toThrow(/entry for 2026-01/);
   });
+
+  // A breakdown series literally named "month" would spread over the row's
+  // own month label instead of joining it as a series.
+  it("rejects a breakdown series named the same as the row's own month field", () => {
+    expect(() => normalizeUmtPlatformStats({ "2026-01": { month: 4, WSO2AM: 2 } })).toThrow(
+      /"month" series.*2026-01/,
+    );
+  });
 });

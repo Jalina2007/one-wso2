@@ -242,7 +242,18 @@ function UmtStatisticsBody() {
     setRequest(statsRequest(platform.value, null, null, defaultFrom, defaultTo));
   };
 
+  // A picker can hand back a non-null Date that fails to parse what the user
+  // typed (MUI's own docs note this), so "not null" isn't enough to trust it.
+  const fromDateError = fromDate && Number.isNaN(fromDate.getTime()) ? "Invalid date." : null;
+  const toDateError = toDate && Number.isNaN(toDate.getTime()) ? "Invalid date." : null;
+  const rangeError =
+    !fromDateError && !toDateError && fromDate && toDate && fromDate.getTime() > toDate.getTime()
+      ? "From date must be before To date."
+      : null;
+  const dateRangeValid = !fromDateError && !toDateError && !rangeError;
+
   const applyFilters = () => {
+    if (!dateRangeValid) return;
     setRequest(statsRequest(platform.value, breakdown, selectedProduct, fromDate, toDate));
   };
 
@@ -335,14 +346,26 @@ function UmtStatisticsBody() {
                 label="From"
                 value={fromDate}
                 onChange={setFromDate}
-                slotProps={{ textField: { size: "small" } }}
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    error: !!(fromDateError ?? rangeError),
+                    helperText: fromDateError ?? rangeError ?? undefined,
+                  },
+                }}
                 sx={{ width: 200 }}
               />
               <DatePicker
                 label="To"
                 value={toDate}
                 onChange={setToDate}
-                slotProps={{ textField: { size: "small" } }}
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    error: !!(toDateError ?? rangeError),
+                    helperText: toDateError ?? rangeError ?? undefined,
+                  },
+                }}
                 sx={{ width: 200 }}
               />
             </LocalizationProvider>
@@ -350,7 +373,7 @@ function UmtStatisticsBody() {
             <Button variant="outlined" onClick={resetFilters}>
               Reset
             </Button>
-            <Button variant="contained" onClick={applyFilters}>
+            <Button variant="contained" onClick={applyFilters} disabled={!dateRangeValid}>
               Apply
             </Button>
           </Stack>
@@ -377,7 +400,7 @@ function UmtStatisticsBody() {
             >
               Couldn&apos;t load statistics.
             </ErrorNotice>
-          ) : statistics.data?.length ? (
+          ) : statistics.data?.length && chartBars.length ? (
             <BarChart
               data={statistics.data}
               xAxisDataKey="month"
