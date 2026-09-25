@@ -302,8 +302,17 @@ function EditableWorstCaseDate({
     setEditing(false);
   };
 
+  // The picker enforces these rules only on its calendar; its text field also
+  // accepts a typed date, which must pass the same checks before it is saved.
+  const minSelectableDate = parseDate(value) ?? new Date();
+  const isSelectableDate = (date: Date | null): date is Date => {
+    if (!date || Number.isNaN(date.getTime())) return false;
+    if (date.getDay() !== UMT_RELEASE_WEEKDAY) return false;
+    return startOfDay(date) >= startOfDay(minSelectableDate);
+  };
+
   const save = async () => {
-    if (!draft || Number.isNaN(draft.getTime())) return;
+    if (!isSelectableDate(draft)) return;
     try {
       await onSave({ field: "worstCaseEstimate", value: toDateInputValue(draft) });
       setEditing(false);
@@ -360,15 +369,15 @@ function EditableWorstCaseDate({
               label={label}
               value={draft}
               onChange={setDraft}
-              minDate={parseDate(value) ?? new Date()}
-              shouldDisableDate={(date) => date.getDay() !== 4}
+              minDate={minSelectableDate}
+              shouldDisableDate={(date) => date.getDay() !== UMT_RELEASE_WEEKDAY}
               slotProps={{ textField: { required: true, size: "small" } }}
             />
           </LocalizationProvider>
           <EditActions
             label={label}
             saving={saving}
-            saveDisabled={!draft || Number.isNaN(draft.getTime())}
+            saveDisabled={!isSelectableDate(draft)}
             onCancel={cancel}
             onSave={() => void save()}
           />
@@ -593,6 +602,16 @@ function toDateInputValue(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+// UMT releases on Thursdays; Date.getDay() numbers Sunday 0..Saturday 6.
+const UMT_RELEASE_WEEKDAY = 4;
+
+// Day-granularity comparison, matching how the DatePicker applies `minDate`:
+// comparing raw timestamps would reject today whenever `minDate` defaults to
+// `new Date()`, which carries the current time of day.
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
 function displayValue(value: string | number | null | undefined): string {
