@@ -143,8 +143,10 @@ import TradeReferenceDeactivatedPage from "@features/due-diligence/trade-referen
 import DueDiligencePreferencesPage from "@features/due-diligence/preferences/pages/PreferencesPage";
 import ViewPdfPage from "@features/due-diligence/shared/pages/ViewPdfPage";
 import ViewImagePage from "@features/due-diligence/shared/pages/ViewImagePage";
+import UmtCreateReleaseChunkPage from "@features/umt/pages/UmtCreateReleaseChunkPage";
 import UmtHomePage from "@features/umt/pages/UmtHomePage";
 import UmtProductsPage from "@features/umt/pages/UmtProductsPage";
+import UmtReleaseChunksPage from "@features/umt/pages/UmtReleaseChunksPage";
 import UmtUpdateView from "@features/umt/pages/UmtUpdateView";
 import UmtUpdatesPage from "@features/umt/pages/UmtUpdatesPage";
 import InfraHomePage from "@features/infra/pages/InfraHomePage";
@@ -169,6 +171,8 @@ export default function App() {
               {/* Admin-only: UmtProductsPage itself enforces this via UmtShell's
                   requireAdmin, independent of the rail item's own visibility. */}
               <Route path="umt/products" element={<UmtProductsPage />} />
+              <Route path="umt/release-chunks" element={<UmtReleaseChunksPage />} />
+              <Route path="umt/release-chunks/new" element={<UmtCreateReleaseChunkPage />} />
             </>
           )}
           {isPreviewEnabled("infra") && (

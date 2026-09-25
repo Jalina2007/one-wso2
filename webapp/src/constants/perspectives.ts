@@ -27,6 +27,7 @@ import {
   HouseIcon,
   LifeBuoyIcon,
   LayoutDashboard,
+  LucideLayoutGrid,
   MegaphoneIcon,
   NetworkIcon,
   RadioIcon,
@@ -341,6 +342,7 @@ const UMT_SECTIONS: PerspectiveSection[] = [
   // UMT_ADMIN_ITEM_IDS below instead, the same way Finance/Leave/Subscriptions
   // items are (see the comment above SUBSCRIPTION_ITEM_IDS).
   { id: "umt-products", label: "Product Management", icon: BoxIcon, path: "/umt/products" },
+  { id: "umt-release-chunks", label: "Release Chunks", icon: LucideLayoutGrid, path: "/umt/release-chunks" },
 ];
 
 
