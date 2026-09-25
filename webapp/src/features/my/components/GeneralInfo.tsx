@@ -14,7 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Card, Skeleton, Stack, Typography } from "@wso2/oxygen-ui";
+import type { ReactNode } from "react";
+import { Box, Card, Skeleton, Stack, Typography } from "@wso2/oxygen-ui";
 import type { Employee } from "../api/types";
 import { DASH, display, formatDate, fullName, serviceLength } from "../api/derive";
 import FieldGrid, { type FieldDef } from "./FieldGrid";
@@ -89,14 +90,48 @@ export default function GeneralInfo({
     { label: "Probation end date", value: formatDate(employee.probationEndDate) },
     { label: "Subordinates", value: display(employee.subordinateCount) },
 
-    { label: "Lead email", value: display(employee.managerEmail), span: 2 },
-    { label: "Additional lead emails", value: display(employee.additionalManagerEmails), span: 2 },
+    // 1 + 1 + 2 = the grid's four columns, so these three sit on one row with
+    // nothing left over. Giving Lead email two columns as well came to five,
+    // which the grid cannot fit — it wrapped the last field to its own row and
+    // left a hole beside the first.
+    //
+    // A quarter column holds a full address on one line; the additional ones
+    // get the double width because there can be several, one per line.
+    { label: "Lead email", value: display(employee.managerEmail) },
+    {
+      label: "Additional lead emails",
+      value: emailLines(employee.additionalManagerEmails),
+      span: 2,
+    },
   ];
 
   return (
     <Card variant="outlined" sx={{ p: 2 }}>
       <FieldGrid fields={fields} />
     </Card>
+  );
+}
+
+// The source splits this on commas and renders one address per line
+// (people-app view/me/index.tsx:1055-1078). Left as the raw string it wraps
+// mid-address, so two leads read as one malformed one.
+//
+// Spans rather than divs: FieldGrid renders a value inside a Typography, which
+// is a <p>, and a <div> there is invalid nesting.
+function emailLines(raw: string | null | undefined): ReactNode {
+  const emails = (raw ?? "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+  if (emails.length === 0) return DASH;
+  return (
+    <Box component="span" sx={{ display: "flex", flexDirection: "column", gap: 0.25 }}>
+      {emails.map((email) => (
+        <Box component="span" key={email}>
+          {email}
+        </Box>
+      ))}
+    </Box>
   );
 }
 

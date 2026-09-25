@@ -23,7 +23,6 @@ import {
   Button,
   Chip,
   Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
@@ -38,18 +37,23 @@ import { describeError } from "@api/errors";
 // Picks colleagues to add as 360° reviewers — par-app's ReviewRequestModal,
 // with the picker itself reused from Leave's "Notify people" field rather
 // than rebuilt (same shape: search-and-multi-select over the org).
-export default function Par360RequestDialog({
+//
+// Split into a bare picker (no Dialog chrome, for inline use — the
+// Employee Portal's Request 360° Feedback tab) and a thin Dialog wrapper
+// around it (kept for ParLead360ReviewsTab.tsx, which still opens this from
+// a Fab).
+export function Par360RequestPicker({
   open,
-  onClose,
   selfEmail,
   leadEmail,
   existingEmails,
   onSubmit,
+  onCancel,
   isSubmitting,
   error,
 }: {
+  /** Gates `useLeaveEmployees` the same way the Dialog's own `open` did. */
   open: boolean;
-  onClose: () => void;
   /** The caller's own address — excluded, matching EmailAutocomplete.tsx's
    * `ownEmail` exclusion (this screen only ever requests for yourself). */
   selfEmail: string | undefined;
@@ -60,6 +64,7 @@ export default function Par360RequestDialog({
   /** Already a reviewer — excluded from the options so it can't be re-added. */
   existingEmails: string[];
   onSubmit: (reviewerEmails: string[]) => void;
+  onCancel: () => void;
   isSubmitting: boolean;
   error: unknown;
 }) {
@@ -82,10 +87,10 @@ export default function Par360RequestDialog({
   const options = useMemo(() => offerable.map((e) => e.workEmail), [offerable]);
   const byEmail = useMemo(() => new Map(offerable.map((e) => [e.workEmail, e])), [offerable]);
 
-  const handleClose = () => {
+  const handleCancel = () => {
     setSelected([]);
     setInputValue("");
-    onClose();
+    onCancel();
   };
 
   // EmailAutocomplete.tsx's own handlePaste: a comma/semicolon/newline
@@ -121,14 +126,9 @@ export default function Par360RequestDialog({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-      {/* ReviewRequestModal.tsx: title, a divider under it, then "From:"
-          labelling the picker — not just the field on its own. */}
-      <DialogTitle sx={{ pb: 2 }}>Request 360° Feedback</DialogTitle>
-      <Divider />
-      <DialogContent>
-        <Typography sx={{ pb: 2, pt: 2 }}>From:</Typography>
-        <Autocomplete
+    <>
+      <Typography sx={{ pb: 2 }}>From:</Typography>
+      <Autocomplete
           multiple
           size="small"
           options={options}
@@ -151,15 +151,17 @@ export default function Par360RequestDialog({
             const employee = byEmail.get(option);
             return (
               <li {...props} key={option}>
-                <div style={{ display: "flex", alignItems: "center", height: 30 }}>
+                <Box sx={{ display: "flex", alignItems: "center", height: 30 }}>
                   <Avatar
                     src={employee?.employeeThumbnail || undefined}
                     slotProps={{ img: { referrerPolicy: "no-referrer" } }}
                     sx={{ width: 24, height: 24, marginRight: "8px" }}
                   />
                   {employee ? employeeDisplayName(employee) : null}
-                  <span style={{ color: "gray", marginLeft: 8 }}>{option}</span>
-                </div>
+                  <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                    {option}
+                  </Typography>
+                </Box>
               </li>
             );
           }}
@@ -208,11 +210,10 @@ export default function Par360RequestDialog({
               onKeyDown={handleKeyDown}
             />
           )}
-        />
-        {error !== undefined && <Alert severity="error" sx={{ mt: 2 }}>{describeError(error)}</Alert>}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose}>Cancel</Button>
+      />
+      {error !== undefined && <Alert severity="error" sx={{ mt: 2 }}>{describeError(error)}</Alert>}
+      <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5, mt: 2 }}>
+        <Button onClick={handleCancel}>Cancel</Button>
         <Button
           variant="contained"
           disabled={selected.length === 0 || isSubmitting}
@@ -220,7 +221,50 @@ export default function Par360RequestDialog({
         >
           {isSubmitting ? "Requesting…" : "Request"}
         </Button>
-      </DialogActions>
+      </Box>
+    </>
+  );
+}
+
+// Dialog wrapper around the bare picker above — still used by
+// ParLead360ReviewsTab.tsx, whose own Fab isn't part of this change.
+export default function Par360RequestDialog({
+  open,
+  onClose,
+  selfEmail,
+  leadEmail,
+  existingEmails,
+  onSubmit,
+  isSubmitting,
+  error,
+}: {
+  open: boolean;
+  onClose: () => void;
+  selfEmail: string | undefined;
+  leadEmail: string | undefined;
+  existingEmails: string[];
+  onSubmit: (reviewerEmails: string[]) => void;
+  isSubmitting: boolean;
+  error: unknown;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      {/* ReviewRequestModal.tsx: title, a divider under it, then "From:"
+          labelling the picker — not just the field on its own. */}
+      <DialogTitle sx={{ pb: 2 }}>Request 360° Feedback</DialogTitle>
+      <Divider />
+      <DialogContent sx={{ pt: 2 }}>
+        <Par360RequestPicker
+          open={open}
+          selfEmail={selfEmail}
+          leadEmail={leadEmail}
+          existingEmails={existingEmails}
+          onSubmit={onSubmit}
+          onCancel={onClose}
+          isSubmitting={isSubmitting}
+          error={error}
+        />
+      </DialogContent>
     </Dialog>
   );
 }

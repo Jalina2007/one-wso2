@@ -17,7 +17,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAsgardeo } from "@asgardeo/react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { getSessionExpiredSnapshot, refreshIdToken } from "@api/authBridge";
+import { getSessionExpiredSnapshot, rawIdToken, refreshIdToken } from "@api/authBridge";
+import { classifyToken } from "@api/tokenExpiry";
 
 // Resolves the current Asgardeo user's `sub` claim. Used as an identity
 // discriminator in downstream query keys so a sign-out → different-user
@@ -64,6 +65,22 @@ export type SubState =
   | { status: "ready"; sub: string }
   | { status: "error"; message: string };
 
+/**
+ * Whether the cached id_token is still within its own lifetime.
+ *
+ * Reads the RAW token — `getDecodedIdToken()` is the call that just failed, so
+ * asking it again proves nothing. Anything unreadable answers `false`, which
+ * routes to the pre-existing re-auth path: this check may only ever narrow
+ * when a re-auth is attempted, never widen it.
+ */
+async function idTokenStillLive(): Promise<boolean> {
+  try {
+    return classifyToken(await rawIdToken()).kind === "live";
+  } catch {
+    return false;
+  }
+}
+
 export function useAsgardeoSub(): { state: SubState; retry: () => void } {
   const { isSignedIn, getDecodedIdToken } = useAsgardeo();
   const [state, setState] = useState<SubState>({ status: "loading" });
@@ -95,13 +112,44 @@ export function useAsgardeoSub(): { state: SubState; retry: () => void } {
       })
       .catch(async (decodeError: unknown) => {
         if (cancelled) return;
-        // getDecodedIdToken() rejects once the cached id_token has expired
-        // (~15min in practice) — try one silent re-auth via the same
-        // bridge @api/http uses for 401s, then retry the decode, instead
-        // of leaving every sub-keyed query (useUserInfo, useLeaveUserInfo,
-        // useLeaves, ...) silently disabled with no visible error.
+        // getDecodedIdToken() rejects once the cached id_token has expired —
+        // try one silent re-auth via the same bridge @api/http uses for 401s,
+        // then retry the decode, instead of leaving every sub-keyed query
+        // (useUserInfo, useLeaveUserInfo, useLeaves, ...) silently disabled
+        // with no visible error.
+        //
+        // But ONLY once the token has actually expired. A silent re-auth is
+        // not free: failing one raises the app-wide, non-dismissable
+        // session-expired dialog, and this path can reach it with no HTTP
+        // request involved at all — which is how a decode that failed for some
+        // other reason (the SDK mid-operation, a transient fault) came to tell
+        // every user their session had ended while it was perfectly healthy.
+        //
+        // The token says whether that is plausible. If `exp` is still in the
+        // future, the session is fine and the decode failed for its own
+        // reasons: retry the decode rather than reaching for the session.
+        // Same rule @api/http applies to a 401 — see api/tokenExpiry.ts.
         let recoveryFailure: unknown;
         try {
+          const stillLive = await idTokenStillLive();
+          // Checked BEFORE either recovery path, not just the decode inside the
+          // live branch. A sign-out or unmount during that await used to fall
+          // straight through to refreshIdToken() — starting a silent re-auth
+          // for a session the user has just ended.
+          if (cancelled) return;
+          if (stillLive) {
+            const retried = await getDecodedIdToken();
+            if (cancelled) return;
+            const s = (retried as { sub?: string } | null | undefined)?.sub;
+            if (typeof s === "string" && s.length > 0) {
+              setState({ status: "ready", sub: s });
+              return;
+            }
+            // Live token, and it still will not decode. Fall through to the
+            // error state WITHOUT a re-auth: whatever is wrong, an expired
+            // session is not it, so declaring one would be a lie.
+            throw new Error("id_token is unexpired but still did not decode");
+          }
           await refreshIdToken();
           const token = await getDecodedIdToken();
           if (cancelled) return;

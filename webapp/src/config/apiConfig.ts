@@ -152,6 +152,27 @@ export const bankingServiceUrls = {
 export const parBackendUrl: string =
   window.config?.ONE_WSO2_PAR_BACKEND_URL ?? "";
 
+// The Lead Portal's evidence-attachment picker (ParLeadReviewPanel.tsx) is
+// the only caller — a plain OAuth client ID, not a backend URL, so it lives
+// here rather than in parServiceUrls.
+export const googleOAuthClientId: string =
+  window.config?.ONE_WSO2_PAR_GOOGLE_OAUTH_CLIENT_ID ?? "";
+// Optional — par-app's own useGoogleDrivePicker.ts never calls
+// PickerBuilder.setDeveloperKey either and works without it. Only needed if
+// Google's "API developer key is invalid" error shows up in practice.
+export const googlePickerApiKey: string =
+  window.config?.ONE_WSO2_PAR_GOOGLE_PICKER_API_KEY ?? "";
+
+// par-app's own admin-configurable rating names that trigger the Top 5%/20%
+// checkbox and the evidence-attachment requirement — real config, not
+// hardcoded constants, since Admin Portal → Configurations lets an admin
+// freely rename or remove entries from the org-wide parRatings list, and a
+// hardcoded trigger name would silently stop matching if that happened.
+export const top5p20pEnabledRating: string =
+  window.config?.ONE_WSO2_PAR_TOP5P20P_ENABLED_RATING ?? "Successful";
+export const evidenceEnabledRating: string =
+  window.config?.ONE_WSO2_PAR_EVIDENCE_ENABLED_RATING ?? "Needs Improvement";
+
 export const parServiceUrls = {
   // GET /employees/{workEmail} — par-app's OWN employee record, distinct
   // from people-app's. Carries `leadEmail: string?` — the exact field
@@ -206,6 +227,61 @@ export const parServiceUrls = {
   par360Participants: (parCycleId: number) =>
     `${parBackendUrl}/par-cycles/${parCycleId}/participants`,
 
+  // ---- Lead Portal -------------------------------------------------------------
+  //
+  // GET .../teams?leadEmail= — every team this lead owns (a lead can have
+  // more than one). `leadEmail` is a query param, not a path segment, so
+  // the backend can also resolve it from the token when self-querying.
+  parTeams: (parCycleId: number, leadEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/teams?leadEmail=${encodeURIComponent(leadEmail)}`,
+  // GET .../teams/{teamId} — one team's roster (ParTeamDetails.details).
+  parTeamDetails: (parCycleId: number, parTeamId: number) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/teams/${parTeamId}`,
+  // PATCH .../reminders/schedule-360-reminders — no body; scoped to the
+  // calling lead's own reports server-side (isLeadInActiveParCycle), not a
+  // global send. MultiTeamSummary.tsx's "Send 360° Reminder" button.
+  parSchedule360Reminders: () => `${parBackendUrl}/reminders/schedule-360-reminders`,
+  // GET .../special-rating-groups-quota?leadEmail= — SpecialRatingAllocationView's
+  // own fetchQuotaGroupRatings. Non-admin callers may only pass their own
+  // email (enforced server-side); leadEmail stays a required param here
+  // since the Lead Portal never omits it (that's the admin-only "everyone"
+  // view, out of scope for this portal).
+  parSpecialRatingAllocations: (parCycleId: number, leadEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/special-rating-groups-quota?leadEmail=${encodeURIComponent(leadEmail)}`,
+  // GET .../reports?leadEmail= — EmployeeReportView.tsx's own
+  // fetchDirectAndIndirectReports. Returns both direct and indirect reports;
+  // the Additional Reports tab keeps only the indirect ones.
+  parAdditionalReports: (parCycleId: number, leadEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/reports?leadEmail=${encodeURIComponent(leadEmail)}`,
+  // GET .../report-levels?leadEmail= — ReportChainView.tsx's own
+  // fetchDirectEmployeePars. One drill-down level: the direct reports of
+  // whichever email is passed, not always the caller's own.
+  parReportLevels: (parCycleId: number, leadEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/report-levels?leadEmail=${encodeURIComponent(leadEmail)}`,
+  // GET /employees?leadEmail= — EmployeeReportView.tsx's own
+  // fetchEntityEmployees. Org-chart direct reports, not PAR-cycle-scoped.
+  parLeadEmployees: (leadEmail: string) => `${parBackendUrl}/employees?leadEmail=${encodeURIComponent(leadEmail)}`,
+  // GET /par-cycles?status=CLOSED, no email — EmployeeHistoryView.tsx's own
+  // fetchClosedParCycles: every closed cycle org-wide, gated only on the
+  // caller being a lead in the active cycle (or admin), not scoped to their
+  // own participation the way parCycles(email, "CLOSED") above is.
+  parAllClosedCycles: () => `${parBackendUrl}/par-cycles?status=CLOSED`,
+  // GET .../participants?leadEmail= — same endpoint parServiceUrls.par360Participants
+  // hits with no leadEmail (org-wide); EmployeeHistoryView.tsx's own
+  // fetchParticipants scopes it to the calling lead's own reports instead.
+  parHistoryParticipants: (parCycleId: number, leadEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/participants?leadEmail=${encodeURIComponent(leadEmail)}`,
+  // GET .../employees/{email}/reviews — every review ABOUT that employee
+  // (reviewer, rating, comment, status), regardless of who's asking, as
+  // opposed to par360Review (the caller's OWN review of someone else).
+  parEmployeeReviews: (parCycleId: number, employeeEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/employees/${encodeURIComponent(employeeEmail)}/reviews`,
+  // GET /legacy-par-history/{employeeEmail} — pre-migration PeopleHR export
+  // data. 360 feedback is server-side stripped when the caller IS the
+  // employee (self-view); a lead viewing a report's history gets it intact.
+  parLegacyHistory: (employeeEmail: string) =>
+    `${parBackendUrl}/legacy-par-history/${encodeURIComponent(employeeEmail)}`,
+
   // ---- F2F scheduling ---------------------------------------------------------
   //
   // Flat top-level paths on the same par-app backend, not nested under
@@ -222,6 +298,45 @@ export const parServiceUrls = {
   // shows the Meet link itself, only a "meeting scheduled" confirmation —
   // see ParScheduleF2fDialog.tsx.
   calendarScheduleF2f: () => `${parBackendUrl}/calendar/schedule-f2f`,
+
+  // ---- Admin Portal -------------------------------------------------------------
+  //
+  // Admin-gated server-side already (invokerDetails.isAdmin) — same backend
+  // as above, no separate deployment. Org-wide variants just drop the
+  // scoping param the Lead Portal builders require.
+
+  parCyclesByStatus: (status: "PENDING_QUOTA" | "OPEN" | "PENDING" | "CLOSED") =>
+    `${parBackendUrl}/par-cycles?status=${status}`,
+  parCycleCreate: () => `${parBackendUrl}/par-cycles`,
+  // Same resource edits cycle settings and drives OPEN/CLOSED transitions.
+  parCycleModify: (parCycleId: number) => `${parBackendUrl}/par-cycles/${parCycleId}`,
+  parGlobalConfig: () => `${parBackendUrl}/meta/configurations`,
+  parAdminTeams: (parCycleId: number) => `${parBackendUrl}/par-cycles/${parCycleId}/teams`,
+  parAdminSpecialRatingGroups: (parCycleId: number) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/special-rating-groups`,
+  // GET returns SpecialRatingAllocation[] — reuse ParSpecialRatingAllocation,
+  // not ParSpecialRatingQuotaWithName (that one's POST-only, see types.ts).
+  parAdminQuotaGroups: (parCycleId: number) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/special-rating-groups-quota`,
+  parRejectedReviews: (parCycleId: number) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/rejected-reviews`,
+  parAllRatings: (parCycleId: number) => `${parBackendUrl}/par-cycles/${parCycleId}/par-ratings`,
+  parSyncEmployee: (parCycleId: number, workEmail: string) =>
+    `${parBackendUrl}/par-cycles/${parCycleId}/employees/${encodeURIComponent(workEmail)}/sync`,
+  // Restoring a rejected review reuses par360Review's PATCH above, called
+  // here on the reviewee's behalf by an admin — no separate endpoint.
+  // Distinct from parSchedule360Reminders above (a different resource,
+  // gated on isLeadInActiveParCycle, scoped to the caller's own reports).
+  parBulkReminder: (kind: "employee" | "lead" | "special-rating") =>
+    `${parBackendUrl}/reminders/schedule-${kind}-reminders`,
+  // GET every distinct legacy (pre-par-app) cycle, org-wide — the History
+  // tab's merged cycle list, admin-gated the same way as the per-employee
+  // legacy endpoint above.
+  legacyParHistoryCycles: () => `${parBackendUrl}/legacy-par-history-cycles`,
+  // GET every employee's legacy row for one cycle name — the History tab's
+  // legacy drill-down.
+  legacyParHistoryCyclesParticipants: (cycleName: string) =>
+    `${parBackendUrl}/legacy-par-history-cycles/${encodeURIComponent(cycleName)}/participants`,
 };
 
 // Leave app backend (people-ops-suite/apps/leave-app). Its own service
@@ -291,6 +406,8 @@ export function isOpdBackendConfigured(): boolean {
 export const opdServiceUrls = {
   userInfo: `${opdBackendUrl}/user-info`,
   appData: `${opdBackendUrl}/app-data`,
+  // Finance-only: the whole analytics screen in one request.
+  dashboardSummary: `${opdBackendUrl}/dashboard-summary`,
   searchClaims: `${opdBackendUrl}/search-claims`,
   claims: `${opdBackendUrl}/claims`,
   claimDrafts: `${opdBackendUrl}/claim-drafts`,
@@ -334,6 +451,9 @@ export const ccServiceUrls = {
   transactionSummary: `${ccBackendUrl}/transactions/new-transaction-summary`,
   submittedByCategory: `${ccBackendUrl}/transactions/submitted-transaction-summary`,
   cardHolderCompliance: `${ccBackendUrl}/transactions/card-holder-compliance-summary`,
+  // Lead view: every lead's approval backlog, and one lead's team within it.
+  leadApprovalSummary: `${ccBackendUrl}/transactions/lead-approval-summary`,
+  leadTeamCardHolders: `${ccBackendUrl}/transactions/lead-team-card-holder-summary`,
   expenseTypes: `${ccBackendUrl}/configurations/expense-types`,
   subRegions: `${ccBackendUrl}/configurations/sub-regions`,
   productAndBusinessUnits: `${ccBackendUrl}/configurations/product-and-business-units`,
@@ -419,6 +539,12 @@ export const umtServiceUrls = {
   platformStatsExtendedSupport: `${umtBackendUrl}/update/platform-stats/extended-support`,
   // POST — filtered, server-paginated update summaries.
   updatesSearch: `${umtBackendUrl}/update/search`,
+  // GET — every update in one lifecycle state, unpaginated. Distinct from the
+  // paginated search above: callers that have to reason about a whole
+  // lifecycle state at once (is this product already in UAT?) cannot do it
+  // from one page of results.
+  updatesByLifecycleState: (lifecycleState: string) =>
+    `${umtBackendUrl}/update?lifecycleState=${encodeURIComponent(lifecycleState)}`,
   // POST — creates a new update (and, for a hotfix, a second cloned entity).
   createUpdate: `${umtBackendUrl}/update`,
   // GET — one update by its numeric id.
@@ -462,6 +588,13 @@ export const umtServiceUrls = {
   // PUT — replaces an update's product list (distinct from product-analysis
   // results, which live at updateProductAnalysis above).
   updateProducts: (id: string | number) => `${umtBackendUrl}/update/${encodeURIComponent(id)}/products`,
+  // GET — the admin-only Product Management screen's base product catalog,
+  // distinct from the per-update product lists above.
+  baseProducts: `${umtBackendUrl}/update/base-product`,
+  // POST — adds a base product (name/version/lead+ED email/FTP connection details).
+  createBaseProduct: `${umtBackendUrl}/update/product`,
+  // PUT — deprecates an existing base product by name+version.
+  deprecateBaseProduct: `${umtBackendUrl}/update/product/deprecate`,
   // PUT — per-product description/instruction update (only these 3 keys are
   // ever sent), distinct from updateProducts's whole-list replace above.
   updateProductsDetails: (id: string | number) =>
@@ -489,6 +622,55 @@ export const umtServiceUrls = {
   // POST — replaces an update's whole Integration Test Pull Requests list.
   updateTestPullRequests: (id: string | number) =>
     `${umtBackendUrl}/update/${encodeURIComponent(id)}/testPullRequest`,
+  // GET — pending (not yet released) release chunks. POST (with a raw
+  // `number[]` of update ids as the body, not an object) creates a new one.
+  releaseChunks: `${umtBackendUrl}/update/releaseChunk`,
+  // GET — released chunks only. Same resource as releaseChunks above, filtered
+  // by the backend's own `states` query param.
+  releasedChunks: `${umtBackendUrl}/update/releaseChunk?states=released`,
+  // GET — one chunk's lifecycle status (created/releasing/releasingFailed/
+  // releasingDockerFailed/retriggering) and per-update-level detail.
+  releaseChunk: (id: string | number) => `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}`,
+  // GET — per-update-level build/TG-build status plus the chunk's overall CST
+  // build status.
+  releaseChunkBuildStatus: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/buildStatus`,
+  // GET — per-product docker build statuses, shown in the Build Information
+  // dialog.
+  releaseChunkDockerBuildStatus: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/docker-build-statuses`,
+  // POST (null body) — retriggers one product/version/channel's build.
+  releaseChunkTriggerProductBuild: (
+    id: string | number,
+    productName: string,
+    productVersion: string,
+    channel: string,
+  ) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/${encodeURIComponent(productName)}/${encodeURIComponent(productVersion)}/${encodeURIComponent(channel)}/triggerBuild`,
+  // POST (null body) — retriggers one product/version/channel's TG build.
+  releaseChunkTriggerTgBuild: (
+    id: string | number,
+    productName: string,
+    productVersion: string,
+    channel: string,
+  ) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/${encodeURIComponent(productName)}/${encodeURIComponent(productVersion)}/${encodeURIComponent(channel)}/triggerTGBuild`,
+  // POST (null body) — triggers every build for the whole chunk ("Run test
+  // builds").
+  releaseChunkTriggerBuilds: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/triggerBuilds`,
+  // POST (null body) — (re)triggers the chunk's CST build.
+  releaseChunkTriggerCstBuild: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/triggerCSTBuild`,
+  // POST (null body) — retriggers failed docker builds for the chunk.
+  releaseChunkRetriggerDockerBuild: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/retriggerDockerBuild`,
+  // POST — releases the chunk with a required, non-blank release message.
+  releaseChunkRelease: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/release`,
+  // POST (null body) — sends the chunk's build-status email.
+  releaseChunkEmail: (id: string | number) =>
+    `${umtBackendUrl}/update/releaseChunk/${encodeURIComponent(id)}/email`,
 };
 
 // ---- marketing-ops backend -------------------------------------------------
@@ -960,6 +1142,24 @@ export function isCsmConfigured(): boolean {
   return Boolean(csmUrl);
 }
 
+// Infra Portal backend (infra-operations/apps/infra-portal/backend).
+// Same Choreo Bearer → x-jwt-assertion rewrite as leave. Empty string =
+// not configured; the placeholder (and later InfraShell) must not fire
+// requests. Strip trailing slashes so builders do not produce "//user-info".
+export const infraBackendUrl: string = (
+  window.config?.ONE_WSO2_INFRA_BACKEND_URL ?? ""
+).replace(/\/+$/, "");
+
+export function isInfraBackendConfigured(): boolean {
+  return Boolean(infraBackendUrl);
+}
+
+export const infraServiceUrls = {
+  // GET /user-info — privileges, name, workEmail, githubUsername.
+  // Callers not in employee/approver/admin groups get HTTP 403.
+  userInfo: `${infraBackendUrl}/user-info`,
+};
+
 export const promotionServiceUrls = {
   // GET /employee-info?employeeWorkEmail=<email> — returns the caller's
   // EmployeeInfoWithLead (startDate, jobBand, lastPromotedDate, reportingLead,
@@ -1018,6 +1218,45 @@ export const subscriptionBackendUrl: string =
 export function isSubscriptionBackendConfigured(): boolean {
   return Boolean(subscriptionBackendUrl);
 }
+
+// ---------------------------------------------------------------------------
+// Email Group Manager backend (digiops-infra/apps/email-group-manager). Lets
+// an employee browse the company's Google Groups mailing lists, subscribe or
+// unsubscribe themselves, and — client-side only, no backend of its own —
+// build an email signature. See docs/ported-apps/email-group-manager.md for
+// the contract.
+//
+// The source app's own GET /user-info is NOT reused here: this webapp already
+// has an identical call (people-app's, via @api/useUserInfo) for the
+// signed-in caller's name, designation and work email, and asking a second
+// backend the same question would just be a second round trip for the same
+// answer. `isAdmin` on the source response was dead code even in the
+// original — nothing in its UI branched on it — so it has no equivalent here.
+export const emailGroupsBackendUrl: string =
+  window.config?.ONE_WSO2_EMAIL_GROUPS_BACKEND_URL ?? "";
+
+export function isEmailGroupsBackendConfigured(): boolean {
+  return Boolean(emailGroupsBackendUrl);
+}
+
+export const emailGroupsServiceUrls = {
+  // Groups every employee is subscribed to automatically. Read-only — there is
+  // no endpoint to leave one.
+  defaultGroups: `${emailGroupsBackendUrl}/default-google-groups`,
+  // The full catalog the caller may subscribe to or unsubscribe from.
+  allGroups: `${emailGroupsBackendUrl}/all-google-groups`,
+  // The caller's own current memberships — a mix of default groups, catalog
+  // groups they opted into, and groups an admin added them to that aren't in
+  // the catalog at all ("other" groups on the page).
+  userGroups: `${emailGroupsBackendUrl}/user-google-groups`,
+  // PATCH, body `{groupName, userEmail}`. The subject is not decided by a path
+  // segment or the token alone — it's a field in the payload — so unlike every
+  // other backend in this file these two calls are the same URL regardless of
+  // who they're for; that's fine, because the only caller this page ever acts
+  // for is the signed-in employee themself.
+  subscribe: `${emailGroupsBackendUrl}/google-group/subscribe`,
+  unsubscribe: `${emailGroupsBackendUrl}/google-group/unsubscribe`,
+};
 
 export const subscriptionServiceUrls = {
   // Distance ranges, the four opt-in/opt-out day boundaries, the LaaS price,
@@ -1082,4 +1321,79 @@ export const securityBackendUrl: string = (
 
 export function isSecurityBackendConfigured(): boolean {
   return Boolean(securityBackendUrl);
+}
+
+// ---------------------------------------------------------------------------
+// RevOps backend. RevOps is the One WSO2 perspective for the call-review
+// experience; the service behind it is people-ops-suite's meet-app backend,
+// reused unchanged. The naming difference is deliberate and worth knowing: the
+// config key and everything in this app say "revops" because that is what a
+// user opens, while the contract, the roles and the error messages all belong
+// to meet-app. See docs/ported-apps/revops-meetings.md.
+export const revOpsBackendUrl: string = window.config?.ONE_WSO2_REVOPS_BACKEND_URL ?? "";
+
+export function isRevOpsBackendConfigured(): boolean {
+  return Boolean(revOpsBackendUrl);
+}
+
+export const revOpsServiceUrls = {
+  // Employee profile + privileges. The privileges array is what useRevOpsGate
+  // reads to tell a meet-app ADMIN from an ordinary TEAM member.
+  userInfo: `${revOpsBackendUrl}/user-info`,
+  // The regions the region filter offers. A bare string list, not objects.
+  regions: `${revOpsBackendUrl}/regions`,
+  // The meeting list. Every filter is a query parameter and paging is
+  // server-side, so the caller passes limit/offset rather than slicing a
+  // full list client-side — see buildMeetingsUrl below.
+  meetings: `${revOpsBackendUrl}/meetings`,
+  // Drive files attached to one meeting's calendar event: the recording, and
+  // whatever else was attached. Returns links, never file content.
+  attachments: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/attachments`,
+  // Cancels a meeting. The backend refuses unless the caller is the host or a
+  // meet-app admin, so the UI's own check is a courtesy, not the control.
+  meeting: (meetingId: number): string => `${revOpsBackendUrl}/meetings/${meetingId}`,
+  // One meeting, for the detail page. The list endpoint cannot serve a direct link: it is
+  // paged and filtered, so the meeting asked for may be on no page the caller would fetch.
+  meetingById: (meetingId: number): string => `${revOpsBackendUrl}/meetings/${meetingId}`,
+  // The conversation as timed, speaker-attributed lines — what a synchronised transcript
+  // is built from. 404 when the meeting predates the transcript resource name being stored,
+  // in which case there is only the Drive document.
+  transcript: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/transcript`,
+  // Gemini's notes, as plain text. Meet writes these only as a Google Doc.
+  smartNotes: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/smart-notes`,
+  // A signed, time-limited URL for streaming this meeting's recording. The URL it returns
+  // points at drive-service, NOT here — streaming is deliberately not this backend's job.
+  // 404 means either playback isn't configured or no recording is attached yet; the two
+  // are distinguished by the message, and neither is an error worth a banner.
+  playback: (meetingId: number): string =>
+    `${revOpsBackendUrl}/meetings/${meetingId}/playback`,
+};
+
+/**
+ * Build the meetings URL with only the filters that are actually set.
+ *
+ * The backend rejects `searchString` combined with `host` or `title` with a
+ * 400, so this app only ever sends `searchString` — the one search box maps to
+ * it, and the narrower two are deliberately not exposed.
+ *
+ * Omitted rather than sent empty: a blank `region` or `searchString` would
+ * filter on the empty string rather than mean "no filter".
+ */
+export function buildMeetingsUrl(params: {
+  searchString?: string | null;
+  region?: string | null;
+  endTime?: string | null;
+  limit: number;
+  offset: number;
+}): string {
+  const qs = new URLSearchParams();
+  if (params.searchString?.trim()) qs.set("searchString", params.searchString.trim());
+  if (params.region?.trim()) qs.set("region", params.region.trim());
+  if (params.endTime?.trim()) qs.set("endTime", params.endTime.trim());
+  qs.set("limit", String(params.limit));
+  qs.set("offset", String(params.offset));
+  return `${revOpsServiceUrls.meetings}?${qs.toString()}`;
 }

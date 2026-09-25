@@ -16,7 +16,6 @@
 
 import { useState } from "react";
 import { Alert, Avatar, Box, Card, Stack, Typography } from "@wso2/oxygen-ui";
-import { UserRoundCogIcon } from "@wso2/oxygen-ui-icons-react";
 import {
   SERVICES,
   type ServiceKey,
@@ -59,7 +58,6 @@ export default function ManageSubscriptionsPage() {
 
   return (
     <SubscriptionsShell
-      eyebrow={{ icon: UserRoundCogIcon, label: "Subscriptions" }}
       title="Manage subscriptions"
       subtitle="Subscribe or unsubscribe an employee on their behalf. These changes take effect immediately — the monthly opt-in and opt-out windows don't apply to admins."
       gate={gate}

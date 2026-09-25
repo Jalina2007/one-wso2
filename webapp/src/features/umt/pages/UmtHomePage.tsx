@@ -35,7 +35,6 @@ import {
   type UmtDashboardColor,
 } from "../components/UmtWidgets";
 import UmtCreateUpdateDialog from "../components/UmtCreateUpdateDialog";
-import MaintenanceDialog from "../components/MaintenanceDialog";
 import UmtShell from "../components/UmtShell";
 // Key colors by status rather than array position so reordering chart data does
 // not silently change the meaning of a slice.
@@ -74,7 +73,6 @@ function UmtDashboardBody() {
   // cached role decision needed for the admin-only release-chunk button.
   const gate = useUmtGate();
   const [createUpdateOpen, setCreateUpdateOpen] = useState(false);
-  const [maintenanceModalOpen, setMaintenanceModalOpen] = useState(false);
 
   const lifecycleData = dashboardStats.data ? lifecycleChartData(dashboardStats.data) : [];
   const releaseChunkData = dashboardStats.data ? releaseChunkChartData(dashboardStats.data) : [];
@@ -211,23 +209,23 @@ function UmtDashboardBody() {
           <>
             <Button
               variant="outlined"
-              onClick={() => setMaintenanceModalOpen(true)}
+              onClick={() => navigate("/umt/release-chunks?status=pending")}
             >
               View pending
             </Button>
             <Button
               variant="outlined"
-              onClick={() => setMaintenanceModalOpen(true)}
+              onClick={() => navigate("/umt/release-chunks?status=released")}
             >
               View released
             </Button>
             {/* The source route admitted every UMT role by mistake;
-              both this entry and the future route are admin-only. */}
+              both this entry and the route it opens are admin-only. */}
             {gate.isAdmin && (
               <Button
                 variant="contained"
                 startIcon={<Plus size={16} />}
-                onClick={() => setMaintenanceModalOpen(true)}
+                onClick={() => navigate("/umt/release-chunks/new")}
               >
                 Create
               </Button>
@@ -258,10 +256,6 @@ function UmtDashboardBody() {
       <UmtCreateUpdateDialog
         open={createUpdateOpen}
         onClose={() => setCreateUpdateOpen(false)}
-      />
-      <MaintenanceDialog
-        open={maintenanceModalOpen}
-        onClose={() => setMaintenanceModalOpen(false)}
       />
     </Stack>
   );

@@ -18,11 +18,9 @@ import { Box, Typography } from "@wso2/oxygen-ui";
 import { UsersIcon } from "@wso2/oxygen-ui-icons-react";
 
 // Mirrors par-app's own NoDataView.tsx — an icon beside bold, primary-
-// colored text in a padded panel — used wherever source did
-// (ProvideFeedbackTab.tsx, RequestFeedbackTab.tsx) instead of a generic
-// Alert. Padding/type scaled down from source's literal p:5/h5/34px: source
-// sits inside an almost-full-viewport container, this tab doesn't, so the
-// same values read as oversized here.
+// colored text — used wherever source did (ProvideFeedbackTab.tsx,
+// RequestFeedbackTab.tsx) instead of a generic Alert. No background panel
+// per UX review — plain icon + text on the page background.
 export default function ParEmptyState({ text }: { text: string }) {
   return (
     <Box
@@ -31,9 +29,7 @@ export default function ParEmptyState({ text }: { text: string }) {
         justifyContent: "center",
         alignItems: "center",
         textAlign: "center",
-        bgcolor: "background.default",
-        p: 3,
-        borderRadius: 2,
+        py: 3,
       }}
     >
       <Box sx={{ color: "primary.main", mr: 1.5, display: "flex" }}>

@@ -19,8 +19,8 @@ import {
   Alert,
   Box,
   Button,
+  Card,
   Chip,
-  Fab,
   Skeleton,
   Table,
   TableBody,
@@ -30,19 +30,20 @@ import {
   Tab,
   Tabs,
   Tooltip,
+  Typography,
 } from "@wso2/oxygen-ui";
 import { PlusIcon } from "@wso2/oxygen-ui-icons-react";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useMeProfile } from "@features/my/api/useMeProfile";
-import { formatDate } from "@features/my/api/derive";
+import { formatShortDate } from "../util/parDate";
 import { useActiveParCycle } from "../api/useParData";
 import { useReviewRequests } from "../api/usePar360";
 import Par360ReviewDialog from "../components/Par360ReviewDialog";
-import Par360OfferDialog from "../components/Par360OfferDialog";
+import { Par360OfferPicker, Par360OfferConfirmDialog } from "../components/Par360OfferDialog";
 import { Par360StatusChip } from "../components/ParChips";
 import ParEmptyState from "../components/ParEmptyState";
 import { isDeadlinePassed } from "../util/parDeadline";
-import type { Par360ReviewRequest } from "../api/types";
+import type { Par360ReviewRequest, ParParticipant } from "../api/types";
 
 // People Ops → Performance → Provide 360° Feedback: par-app's own tab name
 // (OngoingCycleView.tsx's ParCycleViewTabs.PROVIDETHREESIXTYREVIEWS) —
@@ -62,7 +63,12 @@ export default function ParProvideFeedbackTab() {
   const requests = useReviewRequests(cycle?.parCycleId, workEmail);
   const [filter, setFilter] = useState<Filter>("requested");
   const [reviewTarget, setReviewTarget] = useState<{ email: string; offered: boolean } | undefined>(undefined);
-  const [offerOpen, setOfferOpen] = useState(false);
+  const [offering, setOffering] = useState(false);
+  const [offerTarget, setOfferTarget] = useState<ParParticipant | undefined>(undefined);
+  // Bumped whenever the confirmation dialog closes without an offer being
+  // recorded, so Par360OfferPicker remounts with a clean Autocomplete
+  // instead of keeping the just-picked name showing in its search box.
+  const [pickerResetKey, setPickerResetKey] = useState(0);
 
   if (profile.isLoading || activeCycles.isLoading) {
     return <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 1.5, maxWidth: 880 }} />;
@@ -97,8 +103,8 @@ export default function ParProvideFeedbackTab() {
       {/* ProvideFeedbackTab.tsx:217-227 — exact wording. */}
       <Alert severity={deadlinePassed ? "error" : "info"} sx={{ mb: 1.5 }}>
         {deadlinePassed
-          ? `The 360° feedback submission deadline has now passed ${formatDate(cycle.parThreeSixtyRatingDeadline)}.`
-          : `Please share feedback before the deadline: ${formatDate(cycle.parThreeSixtyRatingDeadline)}.`}
+          ? `The 360° feedback submission deadline has now passed ${formatShortDate(cycle.parThreeSixtyRatingDeadline)}.`
+          : `Please share feedback before the deadline: ${formatShortDate(cycle.parThreeSixtyRatingDeadline)}.`}
       </Alert>
       <Tabs value={filter} onChange={(_e, v) => setFilter(v)} sx={{ mb: 1.5, minHeight: 36 }}>
         <Tab
@@ -123,6 +129,43 @@ export default function ParProvideFeedbackTab() {
         />
       </Tabs>
 
+      {/* ProvideFeedbackTab.tsx:490-523 used a fixed FAB opening a modal —
+          not this app's convention (ParEmployeeFeedbackTab.tsx's own Start
+          button instead swaps in an inline Card in place). Shown only on
+          the Voluntary tab, disabled (not hidden) past the deadline. */}
+      {filter === "voluntary" &&
+        (offering ? (
+          <Card variant="outlined" sx={{ p: 2, mb: 2 }}>
+            <Typography sx={{ fontWeight: 700, mb: 1.5 }}>Provide Feedback</Typography>
+            <Par360OfferPicker
+              key={pickerResetKey}
+              open={offering}
+              parCycleId={cycle.parCycleId}
+              selfEmail={workEmail}
+              excludeEmails={allRequests.map((r) => r.employeeEmail)}
+              onSelect={(participant) => setOfferTarget(participant)}
+            />
+            <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 2 }}>
+              <Button onClick={() => setOffering(false)}>Cancel</Button>
+            </Box>
+          </Card>
+        ) : (
+          <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+            <Tooltip title={deadlinePassed ? "Deadline passed" : ""} arrow>
+              <span>
+                <Button
+                  variant="contained"
+                  startIcon={<PlusIcon size={16} />}
+                  disabled={deadlinePassed}
+                  onClick={() => setOffering(true)}
+                >
+                  Provide Feedback
+                </Button>
+              </span>
+            </Tooltip>
+          </Box>
+        ))}
+
       {requests.isLoading ? (
         <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
       ) : requests.isError ? (
@@ -131,8 +174,10 @@ export default function ParProvideFeedbackTab() {
         </ErrorNotice>
       ) : filtered.length === 0 ? (
         // ProvideFeedbackTab.tsx's own noDataMessage + NoDataView — not a
-        // generic Alert.
-        <ParEmptyState text={`No ${filter === "voluntary" ? "voluntary" : "requested"} feedback available`} />
+        // generic Alert. Neutral, forward-looking copy rather than "no one
+        // has requested feedback from you" — that reads as a comment on the
+        // employee, not just an empty list.
+        <ParEmptyState text={filter === "voluntary" ? "No voluntary feedback yet" : "No feedback requests yet"} />
       ) : (
         <Table size="small">
           <TableHead>
@@ -188,29 +233,20 @@ export default function ParProvideFeedbackTab() {
         />
       )}
 
-      <Par360OfferDialog
-        open={offerOpen}
-        onClose={() => setOfferOpen(false)}
+      <Par360OfferConfirmDialog
+        open={Boolean(offerTarget)}
+        employee={offerTarget}
         parCycleId={cycle.parCycleId}
         selfEmail={workEmail}
-        excludeEmails={allRequests.map((r) => r.employeeEmail)}
-        onOffered={(email) => setReviewTarget({ email, offered: true })}
+        onClose={() => {
+          setOfferTarget(undefined);
+          setPickerResetKey((k) => k + 1);
+        }}
+        onOffered={(email) => {
+          setOffering(false);
+          setReviewTarget({ email, offered: true });
+        }}
       />
-
-      {/* ProvideFeedbackTab.tsx:490-523 — a fixed FAB, not an inline button;
-          shown only on the Voluntary tab, disabled (not hidden) past the
-          deadline. */}
-      {filter === "voluntary" && (
-        <Box sx={{ position: "fixed", bottom: 100, right: 100, zIndex: 1000 }}>
-          <Tooltip title={deadlinePassed ? "Deadline passed" : "Provide Feedback"} arrow>
-            <span>
-              <Fab color="primary" disabled={deadlinePassed} onClick={() => setOfferOpen(true)}>
-                <PlusIcon />
-              </Fab>
-            </span>
-          </Tooltip>
-        </Box>
-      )}
     </Box>
   );
 }

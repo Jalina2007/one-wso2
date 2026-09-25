@@ -75,11 +75,28 @@ export function MeMark({ size }: MarkProps) {
   const t = appMarkTones("me")!;
   return (
     <Svg size={size}>
+      {/* Pale silhouette, then the roof and door in lead — the same build every
+          other mark here uses: a large shape in `field`, with `lead` carrying
+          the identifying form.
+
+          The house was previously one solid `lead` block with a `detail` door,
+          which made it the darkest mark in the launcher by a wide margin —
+          mean L* 54.7 against 57.1–76.3 for the other five. This lands at 67.9,
+          beside People at 66.4.
+
+          The roof reuses the silhouette's own arc, closed straight across at
+          the wall line. Drawing separate roof and wall paths renders
+          identically but duplicates that bottom edge, leaving two things to
+          keep in sync when the outline is ever adjusted. */}
       <path
         d="M6 20a4 4 0 0 1 1.418-3.056l14-12a4 4 0 0 1 5.164 0l14 12A4 4 0 0 1 42 20v18a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z"
+        fill={t.field}
+      />
+      <path
+        d="M6 20a4 4 0 0 1 1.418-3.056l14-12a4 4 0 0 1 5.164 0l14 12A4 4 0 0 1 42 20z"
         fill={t.lead}
       />
-      <path d="M30 42v-16a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v16z" fill={t.detail} />
+      <path d="M30 42v-16a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v16z" fill={t.lead} />
     </Svg>
   );
 }
@@ -157,6 +174,35 @@ export function MarketingMark({ size }: MarkProps) {
           fill={t.field}
         />
       </g>
+    </Svg>
+  );
+}
+
+/**
+ * RevOps — a rising bar chart with an arrow above its tallest column.
+ *
+ * Chosen over a handshake (too much fine detail to survive 48px) and a target
+ * (CSM is already a ring form, and two ring marks in one launcher is exactly the
+ * collision the hues exist to avoid). Bars give it a silhouette nothing else here
+ * has: flat-topped verticals against a house, two figures, a wallet, a megaphone
+ * and a buoy.
+ *
+ * The only mark that uses all three tones as three separate shapes — the two
+ * shorter bars recede as `field`, the tallest carries `lead`, and the arrowhead
+ * is `detail`. Growth reads from the step up in height, so the tallest bar is the
+ * one that should be saturated.
+ *
+ * Bars sit on a common baseline at y=41 and are 8 wide on a 12 pitch, so the
+ * rhythm is even; the arrowhead clears the tallest bar's cap by 2.
+ */
+export function RevOpsMark({ size }: MarkProps) {
+  const t = appMarkTones("revops")!;
+  return (
+    <Svg size={size}>
+      <rect x="7" y="27" width="8" height="14" rx="2" fill={t.field} />
+      <rect x="19" y="21" width="8" height="20" rx="2" fill={t.field} />
+      <rect x="31" y="13" width="8" height="28" rx="2" fill={t.lead} />
+      <path d="M35 3l6 8H29z" fill={t.detail} />
     </Svg>
   );
 }

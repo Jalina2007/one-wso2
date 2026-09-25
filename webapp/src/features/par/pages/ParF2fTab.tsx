@@ -24,6 +24,7 @@ import { formatDate } from "@features/my/api/derive";
 import { useActiveParCycle, useParRating } from "../api/useParData";
 import { useSaveParRating } from "../api/useParMutations";
 import { isDeadlinePassed } from "../util/parDeadline";
+import { formatShortDate } from "../util/parDate";
 import ParScheduleF2fDialog from "../components/ParScheduleF2fDialog";
 import ParDateField from "../components/ParDateField";
 
@@ -116,19 +117,19 @@ export default function ParF2fTab() {
         )}
         {deadlinePassed && !completed && (
           <Alert severity="error">
-            The deadline for updating the F2F has passed on {formatDate(cycle.parF2FDeadline)}.
+            The deadline for updating the F2F has passed on {formatShortDate(cycle.parF2FDeadline)}.
           </Alert>
         )}
         {!deadlinePassed && !completed && (
           <Alert severity="info">
-            Please complete your F2F meeting before the deadline: {formatDate(cycle.parF2FDeadline)}.
+            Please complete your F2F meeting before the deadline: {formatShortDate(cycle.parF2FDeadline)}.
           </Alert>
         )}
         {!leadShared && !deadlinePassed && (
           <Alert severity="info">Lead's feedback must be completed to update F2F status</Alert>
         )}
         {completed && parRating.parF2fDate && (
-          <Alert severity="success">F2F completed on {formatDate(parRating.parF2fDate)}</Alert>
+          <Alert severity="success">F2F completed on {formatShortDate(parRating.parF2fDate)}</Alert>
         )}
 
         {showForm && (

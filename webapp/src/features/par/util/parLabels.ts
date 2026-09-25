@@ -27,21 +27,31 @@
 export type ChipColor = "default" | "primary" | "secondary" | "success" | "error" | "info" | "warning";
 
 export function employeeChipLabel(text: string): { label: string; color: ChipColor } {
-  switch (text) {
-    case "TOP5P":
+  // ParAdminGlobalConfigTab.tsx's rating fields are a freeSolo Autocomplete —
+  // admins type the rating tiers themselves, so "Below Expectations" could
+  // just as easily be entered as "below expectations" or with stray
+  // whitespace. Matching case/whitespace-insensitively means a real tier
+  // still gets its color even when it doesn't match this list byte-for-byte.
+  // `label` keeps the admin's own casing but not the stray whitespace —
+  // trimmed once here so every case (and the untouched default) agrees.
+  const trimmed = text.trim();
+  switch (trimmed.toLowerCase()) {
+    case "top5p":
       return { label: "Top 5%", color: "warning" };
-    case "TOP20P":
+    case "top20p":
       return { label: "Top 20%", color: "warning" };
-    case "Successful":
-      return { label: text, color: "success" };
-    case "Needs Improvements":
+    case "successful":
+      return { label: trimmed, color: "success" };
+    case "needs improvements":
       return { label: "Need Improvements", color: "error" };
-    case "NOT_ASSIGNED":
+    case "below expectations":
+      return { label: trimmed, color: "error" };
+    case "not_assigned":
       return { label: "Not Assigned", color: "default" };
-    case "Exceptional":
-      return { label: text, color: "primary" };
+    case "exceptional":
+      return { label: trimmed, color: "primary" };
     default:
-      return { label: text, color: "default" };
+      return { label: trimmed, color: "default" };
   }
 }
 

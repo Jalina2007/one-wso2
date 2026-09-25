@@ -28,7 +28,7 @@ import { sanitizeParHtml } from "../util/parComment";
  * back as it did while being written. */
 export function ParCommentView({ html }: { html: string }) {
   if (!html) {
-    return <Box sx={{ fontSize: 14, color: "text.disabled" }}>No comment was recorded.</Box>;
+    return <Typography sx={{ fontSize: 14, color: "text.disabled" }}>No comment was recorded.</Typography>;
   }
   return (
     <Box

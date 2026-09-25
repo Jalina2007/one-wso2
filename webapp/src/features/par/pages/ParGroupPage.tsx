@@ -16,12 +16,11 @@
 
 import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router";
-import { Skeleton, Stack, Typography } from "@wso2/oxygen-ui";
-import { GaugeIcon } from "@wso2/oxygen-ui-icons-react";
+import { Chip, Skeleton } from "@wso2/oxygen-ui";
 import RoutedTabs, { type RoutedTabDef } from "@components/routed-tabs/RoutedTabs";
 import { useMeProfile } from "@features/my/api/useMeProfile";
 import ParShell from "../components/ParShell";
-import { useActiveParCycle, useParHasLead } from "../api/useParData";
+import { useActiveParCycle, useParHasActiveCycle, useParHasLead } from "../api/useParData";
 
 // Tab labels and order match par-app's own OngoingCycleView.tsx tab bar
 // (Employee Feedback / Request 360° / Provide 360° / F2F). History is
@@ -44,32 +43,36 @@ const LEADLESS_TABS: RoutedTabDef[] = [
   { segment: "history", label: "PAR History" },
 ];
 
+// No OPEN cycle: every other tab only makes sense mid-cycle, so History is
+// the only one left, regardless of lead presence.
+const HISTORY_ONLY_TABS: RoutedTabDef[] = [{ segment: "history", label: "PAR History" }];
+
 // One page frame for everything an employee does with their own PAR — the
 // shell, the tab bar, and an <Outlet /> for whichever tab the URL names.
 export default function ParGroupPage() {
-  // OngoingCycleView.tsx's own header: an icon before the cycle's name,
-  // falling back to "Employee Portal" when there's no active cycle.
   const profile = useMeProfile();
   const workEmail = profile.data?.userInfo.workEmail;
   const activeCycles = useActiveParCycle(workEmail);
+  // Unset while there's no active cycle to name.
   const cycleName = activeCycles.data?.[0]?.parCycleName;
   const { hasLead, isLoading } = useParHasLead(workEmail, profile.isLoading);
+  const { isActive, isLoading: isActiveLoading } = useParHasActiveCycle(workEmail, profile.isLoading);
+
+  const tabs = !isActive ? HISTORY_ONLY_TABS : hasLead ? FULL_TABS : LEADLESS_TABS;
 
   return (
-    <ParShell>
-      <Stack direction="row" spacing={1.25} alignItems="center" sx={{ mb: 1.5 }}>
-        <GaugeIcon size={32} />
-        <Typography variant="h4">{cycleName || "Employee Portal"}</Typography>
-      </Stack>
-      {isLoading ? (
+    <ParShell
+      title="Performance Appraisal Review"
+      subtitle="Complete your own feedback, request and give 360° feedback and see your record from past cycles."
+    >
+      {/* The active cycle's own name/period, not the page's title — this
+          page is "Performance Appraisal Review" regardless of which cycle is running. */}
+      {cycleName && <Chip label={cycleName} size="small" color="primary" variant="outlined" sx={{ mb: 2, fontWeight: 600 }} />}
+      {isLoading || isActiveLoading ? (
         <Skeleton variant="rectangular" height={36} sx={{ borderRadius: 1, mb: 2, maxWidth: 640 }} />
       ) : (
         <>
-          <RoutedTabs
-            basePath="/people-ops/performance"
-            tabs={hasLead ? FULL_TABS : LEADLESS_TABS}
-            ariaLabel="Performance sections"
-          />
+          <RoutedTabs basePath="/me/performance" tabs={tabs} ariaLabel="Performance sections" />
           <Outlet />
         </>
       )}
@@ -78,14 +81,18 @@ export default function ParGroupPage() {
 }
 
 /** The index route of the group: sends a leadless employee straight to
- * Provide 360° Feedback (their only tab) and everyone else to Employee
- * Feedback. Waits for the lead-or-not question rather than guessing, same
- * reasoning as LeaveGroupIndex. */
+ * Provide 360° Feedback (their only tab), an employee with no active cycle
+ * to History (their only tab), and everyone else to Employee Feedback.
+ * Waits for both questions rather than guessing, same reasoning as
+ * LeaveGroupIndex. */
 export function ParGroupIndex() {
   const profile = useMeProfile();
-  const { hasLead, isLoading } = useParHasLead(profile.data?.userInfo.workEmail, profile.isLoading);
-  if (isLoading) return null; // ParGroupPage already holds the Outlet behind its own gate
-  return <Navigate to={`/people-ops/performance/${hasLead ? "employee-feedback" : "provide-360"}`} replace />;
+  const workEmail = profile.data?.userInfo.workEmail;
+  const { hasLead, isLoading } = useParHasLead(workEmail, profile.isLoading);
+  const { isActive, isLoading: isActiveLoading } = useParHasActiveCycle(workEmail, profile.isLoading);
+  if (isLoading || isActiveLoading) return null; // ParGroupPage already holds the Outlet behind its own gate
+  if (!isActive) return <Navigate to="/me/performance/history" replace />;
+  return <Navigate to={`/me/performance/${hasLead ? "employee-feedback" : "provide-360"}`} replace />;
 }
 
 /** Guards a route only a leadless employee should never reach by typing its
@@ -95,6 +102,19 @@ export function ParRequiresLeadRoute({ children }: { children: ReactNode }) {
   const profile = useMeProfile();
   const { hasLead, isLoading } = useParHasLead(profile.data?.userInfo.workEmail, profile.isLoading);
   if (isLoading) return null;
-  if (!hasLead) return <Navigate to="/people-ops/performance/provide-360" replace />;
+  if (!hasLead) return <Navigate to="/me/performance/provide-360" replace />;
+  return <>{children}</>;
+}
+
+/** Guards every tab but History from being reached by URL once there's no
+ * OPEN cycle — Employee Feedback, Request/Provide 360°, and F2F all act on
+ * an in-progress cycle, so none of them has anything to show without one.
+ * Hiding the tab is not access control; the route is what actually enforces
+ * it, same reasoning as ParRequiresLeadRoute. */
+export function ParRequiresActiveCycleRoute({ children }: { children: ReactNode }) {
+  const profile = useMeProfile();
+  const { isActive, isLoading } = useParHasActiveCycle(profile.data?.userInfo.workEmail, profile.isLoading);
+  if (isLoading) return null;
+  if (!isActive) return <Navigate to="/me/performance/history" replace />;
   return <>{children}</>;
 }

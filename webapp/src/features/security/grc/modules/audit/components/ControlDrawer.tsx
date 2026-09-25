@@ -55,6 +55,7 @@ import {
   XCircle,
 } from "@wso2/oxygen-ui-icons-react";
 import { useEffect, useRef, useState, type JSX } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import ControlStatusChip from "@features/security/grc/modules/audit/components/ControlStatusChip";
 import UserAvatar from "@features/security/grc/modules/audit/components/UserAvatar";
 import { formatAuditDate } from "@features/security/grc/modules/audit/utils/format";
@@ -64,6 +65,8 @@ import ControlHistoryTimeline from "@features/security/grc/modules/audit/compone
 import CommentsSection from "@features/security/grc/modules/audit/components/CommentsSection";
 import AIValidationCard from "@features/security/grc/modules/audit/components/AIValidationCard";
 import PopulationFileList from "@features/security/grc/modules/audit/components/PopulationFileList";
+import RoundStatusChip from "@features/security/grc/modules/audit/components/RoundStatusChip";
+import { populationRounds, type PopulationRoundEntry } from "@features/security/grc/modules/audit/utils/populationRounds";
 import { useGetPopulation } from "@features/security/grc/modules/audit/api/useGetPopulation";
 import { useDeletePopulationAttestation } from "@features/security/grc/modules/audit/api/useDeletePopulationAttestation";
 import { usePopulationReview } from "@features/security/grc/modules/audit/api/usePopulationReview";
@@ -72,6 +75,7 @@ import { useSubmitSample } from "@features/security/grc/modules/audit/api/useSub
 import { useRequestSampleTime } from "@features/security/grc/modules/audit/api/useRequestSampleTime";
 import { useValidateEvidence } from "@features/security/grc/modules/audit/api/useValidateEvidence";
 import { useReviewEvidence } from "@features/security/grc/modules/audit/api/useReviewEvidence";
+import { evidenceQueryKey, type EvidenceSubmission } from "@features/security/grc/modules/audit/api/useGetEvidence";
 import { useCurrentUserId } from "@features/security/grc/modules/audit/hooks/useCurrentUserId";
 import { useOverrideControlStatus } from "@features/security/grc/modules/audit/api/useOverrideControlStatus";
 import { isAssignedAuditor } from "@features/security/grc/modules/audit/utils/auditor";
@@ -499,21 +503,29 @@ function AttestationNote({
   attestation,
   filesEmpty,
   canDelete,
+  status,
 }: {
   auditId: number;
   controlId: number;
   attestation: string;
   filesEmpty: boolean;
   canDelete: boolean;
+  // The round's status chip — only for a fileless round, whose note is the
+  // only place its verdict can show (a round with files has it on the file
+  // headers).
+  status?: string;
 }): JSX.Element {
   const deleteAttestation = useDeletePopulationAttestation();
   return (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, px: 1.25, py: 0.85, borderRadius: 1, border: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}>
       <FileText size={15} style={{ flexShrink: 0, marginTop: 2 }} />
       <Box sx={{ flex: 1 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, display: "block" }}>
-          {filesEmpty ? "Completed without files." : "Note"}
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+            {filesEmpty ? "Completed without files." : "Note"}
+          </Typography>
+          {status && <RoundStatusChip status={status} />}
+        </Box>
         <Typography variant="body2" sx={{ lineHeight: 1.6 }}>{attestation}</Typography>
         {deleteAttestation.isError && (
           <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.5 }}>
@@ -536,10 +548,59 @@ function AttestationNote({
   );
 }
 
-// SubmittedPopulationFiles renders the round's already-recorded POPULATION-kind
-// files (with a remove button) inline — no card of its own — so it lives
-// inside the same Submit/Resubmit Population card as the upload box, the same
-// way SubmittedEvidenceList sits inside DesignEvidenceSection's Evidence
+// PopulationRoundsList renders every population round that holds files or a
+// note, newest first, each with its own status chip — a rejected round stays
+// visible next to the resubmission that replaced it, the way SubmittedEvidenceList
+// lists evidence rounds. Only the current round can be edited: an earlier one
+// is history, so its remove buttons are never shown.
+function PopulationRoundsList({
+  auditId,
+  controlId,
+  rounds,
+  canDelete,
+  emptyText,
+}: {
+  auditId: number;
+  controlId: number;
+  rounds: PopulationRoundEntry[];
+  canDelete: boolean;
+  emptyText: string;
+}): JSX.Element {
+  if (rounds.length === 0) {
+    return <Typography variant="body2" color="text.secondary">{emptyText}</Typography>;
+  }
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {[...rounds].reverse().map(({ round, files, isCurrent }) => (
+        <Box key={round.id} sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {round.attestation && (
+            <AttestationNote
+              auditId={auditId}
+              controlId={controlId}
+              attestation={round.attestation}
+              filesEmpty={files.length === 0}
+              canDelete={canDelete && isCurrent}
+              status={files.length === 0 ? round.status : undefined}
+            />
+          )}
+          <PopulationFileList
+            files={files}
+            emptyText=""
+            auditId={auditId}
+            controlId={controlId}
+            canDelete={canDelete && isCurrent}
+            roundStatus={round.status}
+          />
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+// SubmittedPopulationFiles renders the population rounds already on record
+// (with a remove button on the current one) inline — no card of its own — so it
+// lives inside the same Submit/Resubmit Population card as the upload box, the
+// same way SubmittedEvidenceList sits inside DesignEvidenceSection's Evidence
 // Submission card. Always renders something (even "no files yet") instead of
 // disappearing, so the resubmit card doesn't jump around depending on whether
 // a round has files on record.
@@ -562,8 +623,7 @@ function SubmittedPopulationFiles({
   canDelete: boolean;
 }): JSX.Element {
   const population = useGetPopulation(auditId, controlId, true);
-  const files = population.data?.populationFiles ?? [];
-  const attestation = population.data?.round.attestation ?? null;
+  const rounds = populationRounds(population.data);
 
   if (population.isLoading) {
     return <Skeleton variant="rounded" height={44} />;
@@ -580,7 +640,7 @@ function SubmittedPopulationFiles({
     );
   }
 
-  const showResubmissionNote = rejectionReason !== undefined && (files.length > 0 || Boolean(rejectionReason));
+  const showResubmissionNote = rejectionReason !== undefined && (rounds.length > 0 || Boolean(rejectionReason));
   const resubmissionNote = showResubmissionNote && (
     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.75 }}>
       <RotateCcw size={13} color="#b45309" style={{ flexShrink: 0, marginTop: 2 }} />
@@ -589,38 +649,17 @@ function SubmittedPopulationFiles({
       </Typography>
     </Box>
   );
-  // A round submitted with a note instead of (or alongside) files — same
-  // "Completed without files" treatment as SubmittedEvidenceList's fileless
-  // rounds, just for the one persistent population round instead of a list.
-  const attestationNote = attestation && (
-    <AttestationNote
-      auditId={auditId}
-      controlId={controlId}
-      attestation={attestation}
-      filesEmpty={files.length === 0}
-      canDelete={canDelete}
-    />
-  );
-
-  if (files.length === 0) {
-    return (
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {resubmissionNote}
-        {attestationNote}
-        {!attestation && (
-          <Typography variant="body2" color="text.secondary">
-            No population files on record yet.
-          </Typography>
-        )}
-      </Box>
-    );
-  }
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       {resubmissionNote}
-      {attestationNote}
-      <PopulationFileList files={files} emptyText="" auditId={auditId} controlId={controlId} canDelete={canDelete} />
+      <PopulationRoundsList
+        auditId={auditId}
+        controlId={controlId}
+        rounds={rounds}
+        canDelete={canDelete}
+        emptyText="No population files on record yet."
+      />
     </Box>
   );
 }
@@ -976,8 +1015,7 @@ function PopulationSubmissionCard({
   onStatusChange: (s: ControlStatus) => void;
 }): JSX.Element {
   const population = useGetPopulation(auditId, controlId, true);
-  const attestation = population.data?.round.attestation ?? null;
-  const files = population.data?.populationFiles ?? [];
+  const rounds = populationRounds(population.data);
   return (
     <SectionCard icon={<FileUp size={16} />} iconBg="transparent" title="Population Submission">
       {population.isLoading ? (
@@ -991,29 +1029,13 @@ function PopulationSubmissionCard({
           {(population.error as Error)?.message ?? "Failed to load the submitted population."}
         </Alert>
       ) : (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {/* A round submitted with a note instead of (or alongside) files —
-              same "Completed without files" treatment as
-              SubmittedEvidenceList's fileless rounds. */}
-          {attestation && (
-            <AttestationNote
-              auditId={auditId}
-              controlId={controlId}
-              attestation={attestation}
-              filesEmpty={files.length === 0}
-              canDelete={canDelete}
-            />
-          )}
-          {(files.length > 0 || !attestation) && (
-            <PopulationFileList
-              files={files}
-              emptyText="No population files submitted yet."
-              auditId={auditId}
-              controlId={controlId}
-              canDelete={canDelete}
-            />
-          )}
-        </Box>
+        <PopulationRoundsList
+          auditId={auditId}
+          controlId={controlId}
+          rounds={rounds}
+          canDelete={canDelete}
+          emptyText="No population files submitted yet."
+        />
       )}
       {editable && (
         <Box sx={{ mt: 2, pt: 2, borderTop: "1px solid", borderColor: "divider" }}>
@@ -1514,17 +1536,29 @@ export default function ControlDrawer({ control, open, onClose }: ControlDrawerP
   const validateEvidence = useValidateEvidence();
   const reviewEvidence = useReviewEvidence();
   const overrideStatus = useOverrideControlStatus();
+  const queryClient = useQueryClient();
 
   const [tab, setTab] = useState(0);
   const [localStatus, setLocalStatus] = useState<{ id: number; status: ControlStatus } | null>(null);
+  // A round stays editable during internal review, so files can arrive after
+  // the reviewer opened this drawer with no push to refresh it — Approve/
+  // Reject refetch first and block on a mismatch (see handleEvidenceDecision).
+  const [evidenceChangedWarning, setEvidenceChangedWarning] = useState(false);
+  const [isCheckingEvidence, setIsCheckingEvidence] = useState(false);
+  const [evidenceRefreshError, setEvidenceRefreshError] = useState<string | null>(null);
+  // Id of the control currently open, so an async decision started on one
+  // control can tell the drawer has since moved to another.
+  const openControlIdRef = useRef<number | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<ControlStatus | null>(null);
 
   // Reset to the Overview tab whenever a different control is opened, so the
   // drawer doesn't retain the previous control's active tab. Syncing tab state to
   // the opened control is a legitimate effect here.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    openControlIdRef.current = control?.id ?? null;
     setTab(0);
+    setEvidenceChangedWarning(false);
+    setEvidenceRefreshError(null);
   }, [control?.id]);
 
   // Clear any pending override dialog target and mutation state whenever the
@@ -1532,7 +1566,6 @@ export default function ControlDrawer({ control, open, onClose }: ControlDrawerP
   // leftover error/pending state from the previous control never carries
   // over into the next one.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOverrideTarget(null);
     overrideStatus.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1551,6 +1584,46 @@ export default function ControlDrawer({ control, open, onClose }: ControlDrawerP
   // value a moment later.
   function applyServerStatus(c: AuditControl, newStatus: ControlStatus) {
     setLocalStatus({ id: c.id, status: newStatus });
+  }
+
+  // Refetches evidence before deciding; blocks instead of deciding blind if
+  // the file set changed since the reviewer's copy.
+  async function handleEvidenceDecision(c: AuditControl, decision: "APPROVE" | "REJECT") {
+    const key = evidenceQueryKey(c.auditId, c.id);
+    const latestFileIds = (subs: EvidenceSubmission[] | undefined) =>
+      (subs?.[0]?.files ?? []).map((f) => f.id).sort((a, b) => a - b).join(",");
+    const before = latestFileIds(queryClient.getQueryData<EvidenceSubmission[]>(key));
+    setIsCheckingEvidence(true);
+    try {
+      // Re-runs the queryFn already registered by SubmittedEvidenceList's
+      // mounted useGetEvidence for this control, rather than duplicating it.
+      // throwOnError: React Query swallows refetch failures by default, which
+      // would leave the stale cache in place and let the comparison below
+      // read as "unchanged" — decide on that silently-stale data instead of
+      // blocking.
+      await queryClient.refetchQueries({ queryKey: key, exact: true }, { throwOnError: true });
+    } catch {
+      if (openControlIdRef.current === c.id) {
+        setEvidenceRefreshError("Could not refresh evidence — try again before deciding.");
+      }
+      return;
+    } finally {
+      setIsCheckingEvidence(false);
+    }
+    // The drawer moved to another control while the refetch was in flight:
+    // this decision is for a control the reviewer is no longer looking at.
+    if (openControlIdRef.current !== c.id) return;
+    setEvidenceRefreshError(null);
+    const fresh = queryClient.getQueryData<EvidenceSubmission[]>(key);
+    if (latestFileIds(fresh) !== before) {
+      setEvidenceChangedWarning(true);
+      return;
+    }
+    setEvidenceChangedWarning(false);
+    reviewEvidence.mutate(
+      { auditId: c.auditId, controlId: c.id, decision },
+      { onSuccess: (data) => applyServerStatus(c, data.status as ControlStatus) },
+    );
   }
 
   function handleConfirmOverride() {
@@ -1858,29 +1931,41 @@ export default function ControlDrawer({ control, open, onClose }: ControlDrawerP
                 <Button
                   variant="contained"
                   disableElevation
-                  disabled={reviewEvidence.isPending}
-                  startIcon={reviewEvidence.isPending ? <CircularProgress size={15} color="inherit" /> : <CheckCircle2 size={15} />}
-                  onClick={() => reviewEvidence.mutate(
-                    { auditId: control.auditId, controlId: control.id, decision: "APPROVE" },
-                    { onSuccess: (data) => applyServerStatus(control, data.status as ControlStatus) },
-                  )}
+                  disabled={reviewEvidence.isPending || isCheckingEvidence}
+                  startIcon={reviewEvidence.isPending || isCheckingEvidence ? <CircularProgress size={15} color="inherit" /> : <CheckCircle2 size={15} />}
+                  onClick={() => void handleEvidenceDecision(control, "APPROVE")}
                   sx={{ textTransform: "none", fontWeight: 600, bgcolor: "#b45309", color: "#fff", "&:hover": { bgcolor: "#92400e" } }}
                 >
                   Approve
                 </Button>
                 <Button
                   variant="outlined"
-                  disabled={reviewEvidence.isPending}
+                  disabled={reviewEvidence.isPending || isCheckingEvidence}
                   startIcon={<XCircle size={15} />}
-                  onClick={() => reviewEvidence.mutate(
-                    { auditId: control.auditId, controlId: control.id, decision: "REJECT" },
-                    { onSuccess: (data) => applyServerStatus(control, data.status as ControlStatus) },
-                  )}
+                  onClick={() => void handleEvidenceDecision(control, "REJECT")}
                   sx={{ textTransform: "none", fontWeight: 600, color: "#dc2626", borderColor: "#dc2626", "&:hover": { borderColor: "#b91c1c", bgcolor: "rgba(220,38,38,0.04)" } }}
                 >
                   Reject
                 </Button>
               </Box>
+              {evidenceChangedWarning && (
+                <Alert
+                  severity="warning"
+                  sx={{ mt: 1, fontSize: "0.8rem" }}
+                  onClose={() => setEvidenceChangedWarning(false)}
+                >
+                  New file was added since this review opened - check the files above before deciding again.
+                </Alert>
+              )}
+              {evidenceRefreshError && (
+                <Alert
+                  severity="error"
+                  sx={{ mt: 1, fontSize: "0.8rem" }}
+                  onClose={() => setEvidenceRefreshError(null)}
+                >
+                  {evidenceRefreshError}
+                </Alert>
+              )}
               {reviewEvidence.isError && (
                 <Alert severity="error" sx={{ mt: 1, fontSize: "0.8rem" }}>{(reviewEvidence.error as Error).message}</Alert>
               )}

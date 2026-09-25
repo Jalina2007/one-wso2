@@ -24,6 +24,61 @@ interface StatusCfg {
   sx?: Record<string, unknown>;
 }
 
+// fieldLabel turns a column name into the words the form uses — shared by
+// RiskHistoryTimeline's per-field "Changed X" lines and RiskDetailDrawer's
+// pending-amendment banner, which renders the same diff style at the top of
+// the drawer.
+export const FIELD_LABELS: Record<string, string> = {
+  risk_title: "title",
+  risk_description: "description",
+  impact_description: "impact description",
+  implementation_date: "implementation date",
+  reassessment_date: "reassessment date",
+  treatment_strategy: "treatment strategy",
+  email_subject: "email subject",
+  git_issue_url: "Git issue URL",
+  action_steps: "action steps",
+  progress: "progress",
+  remarks: "remarks",
+  assigner_id: "risk assigned to",
+  owner_id: "risk owner",
+  management_approver_id: "management approver",
+  assignment_team_id: "assignment team",
+  action_owner_id: "action owner",
+};
+
+// Fields whose history values are internal user/team ids. An id means nothing
+// to a reader, so these changes render by name only ("Changed risk owner").
+const ID_VALUED_FIELDS = new Set([
+  "assigner_id",
+  "owner_id",
+  "management_approver_id",
+  "assignment_team_id",
+  "action_owner_id",
+]);
+
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field.replace(/_/g, " ");
+}
+
+// Values arrive as raw JSON strings (that is how they are stored), so unwrap a
+// quoted scalar for display and fall back to the raw text if it isn't JSON.
+export function readValue(raw: string | null): string {
+  if (!raw) return "";
+  try {
+    const v: unknown = JSON.parse(raw);
+    return typeof v === "string" ? v : JSON.stringify(v);
+  } catch {
+    return raw;
+  }
+}
+
+// changedValue is readValue for one side of a field diff, blank for the fields
+// whose values are ids (see ID_VALUED_FIELDS) so the diff renders by name only.
+export function changedValue(field: string, raw: string | null): string {
+  return ID_VALUED_FIELDS.has(field) ? "" : readValue(raw);
+}
+
 export const STATUS_CONFIG: Record<string, StatusCfg> = {
   PENDING_RISK_OWNER_APPROVAL:    { label: "Pending Owner Approval",      color: "warning" },
   PENDING_MANAGEMENT_APPROVAL:    { label: "Pending Management Approval",  color: "warning" },
@@ -188,4 +243,19 @@ export const OVERDUE_STATUSES = [
   "IN_REMEDIATION",
   "PENDING_AMENDMENT",
   "PENDING_OWNER_COMPLETION_APPROVAL",
+];
+
+// Every status a non-closed, non-cancelled risk can be in — the union of
+// every tab above. Used by the dashboard-drill-down "all stages" view, which
+// deliberately ignores the tab partition: a dashboard chart's "open" bar
+// counts risks across every one of these tabs at once (any workflow_status
+// other than CLOSED/CANCELLED — see the entity's risk_dashboard_repo.go), and
+// Risk Register has no single tab that shows that same population.
+export const ALL_OPEN_STATUSES = [
+  ...PENDING_OWNER_STATUSES,
+  ...PENDING_MANAGEMENT_STATUSES,
+  ...PENDING_COMPLIANCE_STATUSES,
+  ...PENDING_REVISION_STATUSES,
+  ...APPROVED_OPEN_STATUSES,
+  "ESCALATED",
 ];

@@ -31,7 +31,7 @@ import {
 import { ArrowLeftIcon, ChevronRightIcon } from "@wso2/oxygen-ui-icons-react";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useMeProfile } from "@features/my/api/useMeProfile";
-import { formatDate } from "@features/my/api/derive";
+import { formatShortDate } from "../util/parDate";
 import { useClosedParCycles, useParRating } from "../api/useParData";
 import ParRatingSummary from "../components/ParRatingSummary";
 import type { ParCycle } from "../api/types";
@@ -129,8 +129,8 @@ function HistoryTable({ rows, onOpen }: { rows: ParCycle[]; onOpen: (cycle: ParC
               }}
             >
               <TableCell>{cycle.parCycleName}</TableCell>
-              <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{formatDate(cycle.parCycleStartDate)}</TableCell>
-              <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{formatDate(cycle.parCycleEndDate)}</TableCell>
+              <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{formatShortDate(cycle.parCycleStartDate)}</TableCell>
+              <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{formatShortDate(cycle.parCycleEndDate)}</TableCell>
               <TableCell align="right">
                 <ChevronRightIcon size={16} />
               </TableCell>

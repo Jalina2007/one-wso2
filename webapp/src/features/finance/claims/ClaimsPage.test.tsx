@@ -16,14 +16,29 @@
  * under the License.
  */
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// Stubbed rather than provided: the real hook reaches /user-info through
+// @asgardeo/browser, whose `buffer` directory import does not resolve under
+// vitest's ESM loader — the same failure features/tour/tourTargets.test.tsx
+// hits. A factory mock keeps that module from ever being evaluated.
+//
+// Mutable, because `isResolving` is half of what this screen has to get right:
+// the location arrives a beat after the first render, and what the page does in
+// that beat is the bug the last two tests in this file guard.
+const location = vi.hoisted(() => ({
+  value: { isSriLanka: true, isResolving: false },
+}));
+vi.mock("@hooks/useSriLankaEmployee", () => ({
+  useSriLankaEmployee: () => location.value,
+}));
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import ClaimsPage, { ClaimsIndex } from "./ClaimsPage";
 
 // Four menu entries became one screen with a tab each. What is new here is the
-// Add claim button: there is no single form that could take both types, so the
+// New claim button: there is no single form that could take both types, so the
 // type is chosen before the form opens.
 
 function Where({ what }: { what: string }) {
@@ -52,6 +67,10 @@ function show(initial = "/me/claims") {
     </MemoryRouter>,
   );
 }
+
+beforeEach(() => {
+  location.value = { isSriLanka: true, isResolving: false };
+});
 
 describe("landing on Claims", () => {
   // Deliberately not "the last tab you used": two people describing this screen
@@ -89,6 +108,22 @@ describe("landing on Claims", () => {
     await userEvent.click(screen.getByRole("tab", { name: "OPD claims" }));
     await waitFor(() => expect(screen.getByTestId("url")).toHaveTextContent("/me/claims/opd"));
   });
+
+  // THE bug. Unresolved reads as "not Sri Lanka", so this used to navigate
+  // straight to Expense on a cold load — a bookmark, a refresh, a link into
+  // Claims — and then unmount, leaving the real answer nothing to correct.
+  it("waits for the work location before choosing a tab", () => {
+    location.value = { isSriLanka: false, isResolving: true };
+    show();
+    expect(screen.getByTestId("url")).toHaveTextContent("/me/claims");
+    expect(screen.queryByTestId("tab")).not.toBeInTheDocument();
+  });
+
+  it("opens on Expense for everyone else, once the location is known", async () => {
+    location.value = { isSriLanka: false, isResolving: false };
+    show();
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/claims/expense");
+  });
 });
 
 // One button, not a split one whose primary action follows the open tab: that
@@ -96,13 +131,13 @@ describe("landing on Claims", () => {
 // you as you move between tabs.
 describe("adding a claim", () => {
   const open = async () => {
-    await screen.findByRole("button", { name: "Add claim" });
-    await userEvent.click(screen.getByRole("button", { name: "Add claim" }));
+    await screen.findByRole("button", { name: "New claim" });
+    await userEvent.click(screen.getByRole("button", { name: "New claim" }));
   };
 
   it("reads the same on both tabs", async () => {
     show("/me/claims/opd");
-    expect(await screen.findByRole("button", { name: "Add claim" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "New claim" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Add OPD claim/ })).not.toBeInTheDocument();
   });
 

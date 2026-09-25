@@ -103,3 +103,35 @@ export function activeItemId({
   }
   return best?.id ?? "";
 }
+
+/**
+ * Every rail row someone can actually open, in the order the rail shows them.
+ *
+ * Leaves only. A group is not a destination — it has no path of its own, it
+ * just opens — so the first thing a perspective can forward you to is the first
+ * LEAF, which may sit inside the first group rather than being it. Rail order,
+ * so "the first one" means on screen what it means here.
+ *
+ * `path` only, never `externalUrl`, and that is a rule rather than an
+ * oversight: ISAC is the FIRST row of the Marketing Ops rail, and opening a
+ * perspective must not fling you into another tab. An outbound row is
+ * something you choose, so it is offered in the rail and skipped here.
+ *
+ * `resolveVisible` is asked about a group as well as its children: a group
+ * hidden as a whole takes its children with it, which is what the rail does.
+ */
+export function visibleLeavesOf(
+  sections: readonly PerspectiveSection[],
+  resolveVisible: (s: PerspectiveSection) => boolean,
+): PerspectiveSection[] {
+  const leaves: PerspectiveSection[] = [];
+  for (const s of sections) {
+    if (!resolveVisible(s)) continue;
+    if (s.children?.length) {
+      leaves.push(...s.children.filter((c) => resolveVisible(c) && c.path));
+    } else if (s.path) {
+      leaves.push(s);
+    }
+  }
+  return leaves;
+}

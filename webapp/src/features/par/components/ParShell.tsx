@@ -15,32 +15,36 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Alert, Box, Chip, Typography } from "@wso2/oxygen-ui";
-import { ClipboardCheckIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Typography } from "@wso2/oxygen-ui";
 import { isParBackendConfigured } from "../api/useParData";
 
-const TITLE = "Performance Appraisal Review";
-const SUBTITLE =
-  "Complete your own feedback, request and give 360° feedback, and see your record from past cycles.";
-
-export default function ParShell({ children }: { children: ReactNode }) {
+// Shared page frame for the Employee and Lead Portals: a title + optional
+// subtitle, and one place that renders the "backend not configured" state
+// so both behave the same when ONE_WSO2_PAR_BACKEND_URL isn't set. Same
+// shape as LeaveShell/FinanceShell — title/subtitle are the CALLER's own
+// heading, not a shared app-name banner: each portal already names itself,
+// so a generic "Performance Appraisal Review" label above that would say
+// the same thing twice.
+export default function ParShell({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
   const configured = isParBackendConfigured();
   return (
     <Box>
-      <Chip
-        icon={<ClipboardCheckIcon size={14} />}
-        label="PAR App"
-        color="primary"
-        size="small"
-        variant="outlined"
-        sx={{ mb: 0.5 }}
-      />
       <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
-        {TITLE}
+        {title}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25, maxWidth: "70ch" }}>
-        {SUBTITLE}
-      </Typography>
+      {subtitle && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25 }}>
+          {subtitle}
+        </Typography>
+      )}
 
       {configured ? (
         children

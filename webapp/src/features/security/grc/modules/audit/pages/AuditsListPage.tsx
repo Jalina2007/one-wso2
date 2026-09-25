@@ -48,6 +48,7 @@ import { useUpdateAuditStatus } from "@features/security/grc/modules/audit/api/u
 import type { Audit, AuditFramework, AuditStatus } from "@features/security/grc/modules/audit/types/audit";
 import { useAuditPrivileges } from "@features/security/grc/modules/audit/hooks/useAuditPrivileges";
 import { AuditPrivilege } from "@features/security/grc/modules/audit/privileges";
+import { auditPaths } from "@features/security/grc/modules/audit/paths";
 
 type StatusFilter = "ACTIVE" | "COMPLETED" | "ARCHIVED" | "ALL";
 const STATUS_FILTERS: StatusFilter[] = ["ACTIVE", "COMPLETED", "ARCHIVED", "ALL"];
@@ -382,9 +383,7 @@ export default function AuditsListPage(): JSX.Element {
               sx={{ textTransform: "none" }}
               onClick={() =>
                 void navigate(
-                  selectedFrameworkId !== null
-                    ? `/audit/audits/create?framework=${selectedFrameworkId}`
-                    : "/audit/audits/create",
+                  auditPaths.create(selectedFrameworkId),
                 )
               }
             >
@@ -427,7 +426,7 @@ export default function AuditsListPage(): JSX.Element {
                 <AuditCard
                   key={audit.id}
                   audit={audit}
-                  onClick={() => void navigate(`/security/audit/audits/${audit.id}`)}
+                  onClick={() => void navigate(auditPaths.detail(audit.id))}
                   onDelete={() => setAuditToDelete(audit)}
                   canDelete={canCreateAudit}
                   onArchiveToggle={() => handleArchiveToggle(audit)}
@@ -467,7 +466,7 @@ export default function AuditsListPage(): JSX.Element {
                   variant="contained"
                   startIcon={<Plus size={16} />}
                   sx={{ textTransform: "none" }}
-                  onClick={() => void navigate("/security/audit/audits/create")}
+                  onClick={() => void navigate(auditPaths.create())}
                 >
                   New Audit
                 </Button>
@@ -561,7 +560,7 @@ export default function AuditsListPage(): JSX.Element {
                 <AuditCard
                   key={audit.id}
                   audit={audit}
-                  onClick={() => void navigate(`/security/audit/audits/${audit.id}`)}
+                  onClick={() => void navigate(auditPaths.detail(audit.id))}
                   onDelete={() => setAuditToDelete(audit)}
                   canDelete={canCreateAudit}
                   onArchiveToggle={() => handleArchiveToggle(audit)}

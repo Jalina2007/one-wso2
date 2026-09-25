@@ -16,12 +16,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Both PAR and UMT are behind preview flags, so the registry depends on
-// `window.config` and has to be imported fresh per state rather than once at
-// the top of the file.
+// UMT is behind a preview flag, so the registry depends on `window.config`
+// and has to be imported fresh per state rather than once at the top of the
+// file.
 type Perspectives = typeof import("./perspectives");
 
-async function load(preview: { par?: boolean; umt?: boolean } = {}): Promise<Perspectives> {
+async function load(preview: { umt?: boolean; infra?: boolean } = {}): Promise<Perspectives> {
   vi.resetModules();
   window.config = {
     ...(window.config ?? {}),
@@ -38,27 +38,47 @@ afterEach(() => {
 
 const keys = (perspectives: readonly { key: string }[]) => perspectives.map((p) => p.key);
 
+// PAR shipped out of preview once the Lead Portal, Admin Portal, Report
+// Chain and F2F all followed the Employee Portal over — see
+// docs/ported-apps/par-app.md. Its rail entry is unconditional now, so
+// there's nothing left to gate-test here.
 describe("PAR's People Ops rail entry", () => {
-  it("is there once staging switches the flag on", async () => {
-    const { PEOPLE_OPS_SECTIONS } = await load({ par: true });
-    expect(PEOPLE_OPS_SECTIONS.map((s) => s.id)).toContain("people-par");
-  });
-
-  it("is gone when the flag is off", async () => {
-    const { PEOPLE_OPS_SECTIONS } = await load({ par: false });
-    expect(PEOPLE_OPS_SECTIONS.map((s) => s.id)).not.toContain("people-par");
-  });
-
-  // Production sets no preview config at all — absent has to mean off, or the
-  // feature ships itself the day it merges.
-  it("is gone when nothing is configured", async () => {
+  it("is always present", async () => {
     const { PEOPLE_OPS_SECTIONS } = await load();
-    expect(PEOPLE_OPS_SECTIONS.map((s) => s.id)).not.toContain("people-par");
+    expect(PEOPLE_OPS_SECTIONS.map((s) => s.id)).toContain("people-par");
   });
 
   it("leaves the sections that are not gated alone", async () => {
     const { PEOPLE_OPS_SECTIONS } = await load();
     expect(PEOPLE_OPS_SECTIONS.map((s) => s.id)).toContain("people-org-chart");
+  });
+});
+
+// RevOps shipped out of preview: its entry is unconditional now, so it must be
+// there with no flags set at all -- which is exactly what production's config
+// looks like.
+describe("the RevOps perspective", () => {
+  it("is present, built and routable with no preview flags set", async () => {
+    const {
+      PERSPECTIVES,
+      FUNCTIONAL_PERSPECTIVES,
+      reachablePerspectives,
+      findPerspectiveByKey,
+      findPerspectiveByPath,
+    } = await load();
+    expect(keys(PERSPECTIVES)).toContain("revops");
+    expect(keys(FUNCTIONAL_PERSPECTIVES)).toContain("revops");
+    expect(keys(reachablePerspectives())).toContain("revops");
+    expect(findPerspectiveByKey("revops")?.path).toBe("/revops");
+    expect(findPerspectiveByPath("/revops")?.key).toBe("revops");
+  });
+
+  it("brings its rail, not just the tile", async () => {
+    // The rail is what a deep link lands beside.
+    const { findPerspectiveByKey } = await load();
+    expect(findPerspectiveByKey("revops")?.sections?.map((section) => section.id)).toContain(
+      "revops-meetings",
+    );
   });
 });
 
@@ -95,5 +115,66 @@ describe("the UMT perspective", () => {
         expect.arrayContaining(["people", "finance", "legal", "csm", "marketing", "me"]),
       );
     }
+  });
+
+  // usePerspectiveVisibility falls through to sectionAllowed(s.requires, caps)
+  // for any id not in a gate's own set — and umt-products deliberately sets no
+  // `requires`, so that fallback answers "visible to everyone". Dropping this
+  // id from the set would open the admin-only rail entry to every UMT user
+  // with a green suite and no compile error; this fails loudly instead. See
+  // useFinanceGate.test.tsx's "no longer carries the retired approval ids" for
+  // the same shape of guard.
+  it("keeps Product Management in the UMT admin gate set", async () => {
+    const { UMT_ADMIN_ITEM_IDS } = await load({ umt: true });
+    expect(UMT_ADMIN_ITEM_IDS.has("umt-products")).toBe(true);
+  });
+});
+
+describe("perspectives whose landing forwards to the first rail item", () => {
+  // The flag is only meaningful on a perspective that HAS a landing route and
+  // HAS rows to forward to. Set on one without sections it would mean everyone
+  // sees "Nothing here for you yet", permanently, with no way to tell that
+  // from a privilege problem.
+  it("only ever sits on a perspective with a route and sections", async () => {
+    const { PERSPECTIVES } = await load({ umt: true });
+    const forwarding = PERSPECTIVES.filter((p) => p.forwardsToFirstItem);
+    expect(forwarding.length).toBeGreaterThan(0);
+    for (const p of forwarding) {
+      expect(p.path, `${p.key} forwards but has no route`).toBeTruthy();
+      expect(p.sections?.length, `${p.key} forwards but has no sections`).toBeTruthy();
+    }
+  });
+
+  // Me's landing is the person's own profile — a page someone stops and reads,
+  // so it keeps its Overview row. This fails if a later pass sweeps it up with
+  // the rest.
+  it("leaves Me alone", async () => {
+    const { PERSPECTIVES } = await load({ umt: true });
+    expect(PERSPECTIVES.find((p) => p.key === "me")?.forwardsToFirstItem).toBeUndefined();
+  });
+
+  // Infra Portal is behind a preview flag, so the registry depends on
+  // `window.config` and has to be imported fresh per state rather than once at
+  // the top of the file.
+  describe("the Infra Portal perspective", () => {
+    it("is absent from the registry when the preview flag is off", async () => {
+      const { PERSPECTIVES, reachablePerspectives } = await load({ infra: false });
+      expect(keys(PERSPECTIVES)).not.toContain("infra");
+      expect(keys(reachablePerspectives())).not.toContain("infra");
+    });
+  
+    it("is absent on an absent flag, not only on an explicit false", async () => {
+      const { PERSPECTIVES } = await load();
+      expect(keys(PERSPECTIVES)).not.toContain("infra");
+    });
+  
+    it("is present, built and routable, when the preview flag is on", async () => {
+      const { PERSPECTIVES, reachablePerspectives, findPerspectiveByPath } = await load({
+        infra: true,
+      });
+      expect(keys(PERSPECTIVES)).toContain("infra");
+      expect(keys(reachablePerspectives())).toContain("infra");
+      expect(findPerspectiveByPath("/infra")?.key).toBe("infra");
+    });
   });
 });

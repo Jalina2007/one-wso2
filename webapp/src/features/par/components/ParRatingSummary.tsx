@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { useMemo } from "react";
 import { Box, Button, Card, Chip, Stack, Typography } from "@wso2/oxygen-ui";
 import { FileDownIcon } from "@wso2/oxygen-ui-icons-react";
 import type { ParCycle, ParRating } from "../api/types";
@@ -21,6 +22,8 @@ import { decodeParComment } from "../util/parComment";
 import { ParCommentView, ParQuestionText } from "./ParContent";
 import { employeeChipLabel } from "../util/parLabels";
 import { downloadParPdf } from "../util/parPdf";
+import { useLeaveEmployees } from "@features/leave/api/useLeaveData";
+import { employeeDisplayName } from "@features/leave/util/employeeName";
 
 // The read-only view of one cycle's record from the employee's side: their
 // own submitted comment, and — once the lead has shared — the lead's
@@ -42,8 +45,47 @@ export default function ParRatingSummary({
   const leadShared = Boolean(rating.parLeadComment || rating.parRating);
   const leadComment = decodeParComment(rating.parLeadComment);
 
+  // "Shared by" is an email address on the wire — resolve it to the lead's
+  // name the same way ParLead360ReviewsTab.tsx does, rather than showing the
+  // raw address.
+  const employees = useLeaveEmployees();
+  const nameByEmail = useMemo(
+    () => new Map(employees.data?.map((e) => [e.workEmail, employeeDisplayName(e)]) ?? []),
+    [employees.data],
+  );
+  // NOT_ASSIGNED's generic "Not Assigned" label reads fine next to "PAR
+  // rating:", but standing alone on the special-rating chip it doesn't say
+  // what isn't assigned — spell that out instead of the bare label.
+  const specialRatingLabel =
+    rating.parSpecialRating === "NOT_ASSIGNED"
+      ? "No Top 5%/20% Rating"
+      : employeeChipLabel(rating.parSpecialRating ?? "").label;
+
   return (
     <Stack spacing={1.75}>
+      {leadShared && (
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <Typography sx={{ fontWeight: 600, mb: 1 }}>Lead's feedback</Typography>
+          <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap" }}>
+            {rating.parRating && (
+              <Chip
+                size="small"
+                variant="outlined"
+                color={employeeChipLabel(rating.parRating).color}
+                label={`PAR rating: ${employeeChipLabel(rating.parRating).label}`}
+              />
+            )}
+            {rating.parSpecialRating && (
+              <Chip size="small" variant="outlined" color={employeeChipLabel(rating.parSpecialRating).color} label={specialRatingLabel} />
+            )}
+            {rating.parRatingSharedBy && (
+              <Chip size="small" variant="outlined" label={`Shared by ${nameByEmail.get(rating.parRatingSharedBy) ?? rating.parRatingSharedBy}`} />
+            )}
+          </Stack>
+          <ParCommentView html={leadComment} />
+        </Card>
+      )}
+
       <Card variant="outlined" sx={{ p: 2 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1 }}>
           <ParQuestionText
@@ -62,24 +104,6 @@ export default function ParRatingSummary({
         </Box>
         <ParCommentView html={selfComment} />
       </Card>
-
-      {leadShared && (
-        <Card variant="outlined" sx={{ p: 2 }}>
-          <Typography sx={{ fontWeight: 600, mb: 1 }}>Lead's feedback</Typography>
-          <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: "wrap" }}>
-            {rating.parRating && (
-              <Chip size="small" color={employeeChipLabel(rating.parRating).color} label={`PAR rating: ${employeeChipLabel(rating.parRating).label}`} />
-            )}
-            {rating.parSpecialRating && (
-              <Chip size="small" variant="outlined" color={employeeChipLabel(rating.parSpecialRating).color} label={employeeChipLabel(rating.parSpecialRating).label} />
-            )}
-            {rating.parRatingSharedBy && (
-              <Chip size="small" variant="outlined" label={`Shared by ${rating.parRatingSharedBy}`} />
-            )}
-          </Stack>
-          <ParCommentView html={leadComment} />
-        </Card>
-      )}
     </Stack>
   );
 }

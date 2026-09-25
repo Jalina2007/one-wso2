@@ -42,11 +42,21 @@ export interface ClaimTypeDef {
   menuDescription: string;
   /** Where the form lives. Its own route: both forms are long and hold a draft. */
   newClaimPath: string;
+  /**
+   * Only offered to employees whose work location is Sri Lanka.
+   *
+   * OPD is a Colombo medical-allowance scheme; there is nothing for anyone else
+   * to claim against. On the type itself rather than at the three places that
+   * read this list (the tab bar, the Add-claim menu, and the default tab), so
+   * adding a fourth cannot miss it.
+   */
+  sriLankaOnly?: boolean;
 }
 
 export const CLAIM_TYPES: readonly ClaimTypeDef[] = [
   {
     segment: "opd",
+    sriLankaOnly: true,
     label: "OPD claims",
     menuLabel: "OPD claim",
     menuDescription: "Medical bills, against this year's allowance.",
@@ -73,4 +83,18 @@ export function claimTabPath(segment: ClaimTypeDef["segment"]): string {
  * Deliberately not "the tab you used last": two people describing this screen
  * to each other should be looking at the same thing.
  */
-export const DEFAULT_CLAIM_TAB = CLAIM_TYPES[0];
+/**
+ * The tab to land on, given who is looking.
+ *
+ * Not a constant any more: the first type is OPD, which is hidden outside Sri
+ * Lanka — a fixed default would have sent those employees to a tab that is not
+ * there.
+ */
+export function defaultClaimTab(isSriLanka: boolean): ClaimTypeDef {
+  return visibleClaimTypes(isSriLanka)[0];
+}
+
+/** The claim types on offer to this employee. */
+export function visibleClaimTypes(isSriLanka: boolean): readonly ClaimTypeDef[] {
+  return CLAIM_TYPES.filter((t) => isSriLanka || !t.sriLankaOnly);
+}

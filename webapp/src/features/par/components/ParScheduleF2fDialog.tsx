@@ -20,12 +20,12 @@ import {
   Box,
   Button,
   CircularProgress,
+  ComplexSelect,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
-  MenuItem,
   Stack,
   TextField,
   Typography,
@@ -138,20 +138,19 @@ export default function ParScheduleF2fDialog({
           )}
 
           {slots.length > 0 && (
-            <TextField
-              select
+            <ComplexSelect
               label="Select a time slot"
-              size="small"
+              labelAnchor="border"
               fullWidth
               value={selectedSlot}
-              onChange={(e) => setSelectedSlot(e.target.value)}
+              onChange={(e) => setSelectedSlot(e.target.value as string)}
             >
               {slots.map((slot) => (
-                <MenuItem key={slot.start} value={`${slot.start}|${slot.end}`}>
+                <ComplexSelect.MenuItem key={slot.start} value={`${slot.start}|${slot.end}`}>
                   {slot.label}
-                </MenuItem>
+                </ComplexSelect.MenuItem>
               ))}
-            </TextField>
+            </ComplexSelect>
           )}
 
           {selectedSlot && (

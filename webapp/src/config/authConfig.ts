@@ -48,14 +48,35 @@ declare global {
       // and LaaS opt-in/opt-out). Optional — when absent the Subscriptions
       // screens show a not-connected state.
       ONE_WSO2_SUBSCRIPTION_BACKEND_URL?: string;
+      // Base URL for the digiops-infra email-group-manager backend (Google
+      // Groups mailing-list subscriptions). Optional — when absent the Email
+      // Groups screen shows a not-connected state.
+      ONE_WSO2_EMAIL_GROUPS_BACKEND_URL?: string;
+      // Base URL for the RevOps (auto-recorded meetings) backend — people-ops-
+      // suite's meet-app service, reused unchanged. Optional — when absent the
+      // RevOps app shows a not-connected state and makes no requests.
+      ONE_WSO2_REVOPS_BACKEND_URL?: string;
       // Base URL for the digiops-hr promotion-app backend. Optional — when
-      // absent, ConnectedServices' "Last promoted date" row falls back to a
+      // absent, ConnectedServices' "Last promotion" row falls back to a
       // "not configured" state and doesn't fire a request.
       ONE_WSO2_PROMOTION_BACKEND_URL?: string;
       // Base URL for the digiops-hr par-app backend. Optional — when
       // absent, the Performance & growth review row falls back to a
       // "not configured" state.
       ONE_WSO2_PAR_BACKEND_URL?: string;
+      // OAuth client ID for the Lead Portal's "attach from Google Drive"
+      // evidence picker (scope: drive.readonly). Optional — when absent,
+      // the picker button still renders but the token request fails, same
+      // as par-app's own GOOGLE_OAUTH_CLIENT_ID behavior.
+      ONE_WSO2_PAR_GOOGLE_OAUTH_CLIENT_ID?: string;
+      // Browser API key for the same picker. Optional — see apiConfig.ts's
+      // googlePickerApiKey for why it's unset by default.
+      ONE_WSO2_PAR_GOOGLE_PICKER_API_KEY?: string;
+      // The PAR rating names that trigger the Top 5%/20% checkbox and the
+      // evidence-attachment requirement. Optional — see apiConfig.ts's
+      // top5p20pEnabledRating/evidenceEnabledRating for why.
+      ONE_WSO2_PAR_TOP5P20P_ENABLED_RATING?: string;
+      ONE_WSO2_PAR_EVIDENCE_ENABLED_RATING?: string;
       // Base URL for the digiops-hr banking-app backend. Optional — when
       // absent, the Bank accounts card in Connected apps shows a
       // "not configured" state.
@@ -104,6 +125,11 @@ declare global {
       // item is omitted rather than rendered as a dead link.
       ONE_WSO2_MARKETINGOPS_ISAC_URL?: string;
       ONE_WSO2_CSM_URL?: string;
+      // Base URL for the infra-portal Ballerina backend. Optional — when
+      // absent, Infra Portal shows a "not connected" state and makes no
+      // requests. Privileges on this service (987 / 762 / 123) are not
+      // people-app's.
+      ONE_WSO2_INFRA_BACKEND_URL?: string;
       // Base URL of the Pardot UI, used to deep-link to an email template
       // after Email Workbench pushes it. Not an API — a link target.
       // Optional; defaults to https://pi.pardot.com, which is correct for

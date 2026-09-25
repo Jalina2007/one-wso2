@@ -16,18 +16,22 @@
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { ParRating } from "../api/types";
-import { sanitizeParHtml } from "./parComment";
+import type { Par360Review, ParRating } from "../api/types";
+import { decodeParComment, sanitizeParHtml } from "./parComment";
 import { pdfRatingText } from "./parLabels";
 
-// Ports par-app's EmployeePar.tsx downloadPDF/formatCommentForPDF: a
-// two-column table under a header naming the employee, their PAR rating,
-// special rating and who shared it. No employee-name lookup is available
-// here, so email addresses stand in, same as ParRatingSummary's "Shared by".
-export function downloadParPdf(rating: ParRating, selfComment: string, leadComment: string): void {
+type PdfRow = (string | { content: string; colSpan?: number; styles: Record<string, unknown> })[];
+
+// Ports par-app's EmployeePar.tsx downloadPDF (and, when `reviews` is
+// passed, LeadReviewPanel.tsx's extended version): a two-column table under
+// a header naming the employee, their rating, special rating, and who
+// shared it, optionally followed by a "360° Reviews" section — one row per
+// reviewer, unfiltered by review status (the on-screen 360 list filters to
+// SHARED-only; the PDF export never did).
+export function downloadParPdf(rating: ParRating, selfComment: string, leadComment: string, reviews?: Par360Review[]): void {
   const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
 
-  const rows: (string | { content: string; styles: Record<string, unknown> })[][] = [];
+  const rows: PdfRow[] = [];
   if (selfComment) {
     rows.push([
       "Employee Comment",
@@ -42,6 +46,20 @@ export function downloadParPdf(rating: ParRating, selfComment: string, leadComme
       { content: htmlToPdfText(leadComment), styles: { textColor: [50, 50, 50], cellPadding: 6 } },
     ]);
   }
+
+  if (reviews && reviews.length > 0) {
+    rows.push([{ content: "360° Reviews", colSpan: 3, styles: { fontStyle: "bold", fillColor: [200, 200, 200], halign: "center" } }]);
+  }
+  (reviews ?? []).forEach((review) => {
+    rows.push([
+      review.reviewerEmail ?? "-",
+      review.reviewRating ?? "-",
+      {
+        content: review.reviewComment ? htmlToPdfText(decodeParComment(review.reviewComment)) : "-",
+        styles: { textColor: [50, 50, 50], cellPadding: 6 },
+      },
+    ]);
+  });
 
   autoTable(doc, {
     head: [

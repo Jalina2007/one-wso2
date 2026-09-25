@@ -18,8 +18,7 @@
 
 import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router";
-import { Alert, Box, Chip, Skeleton, Typography } from "@wso2/oxygen-ui";
-import { CheckCheckIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Skeleton, Typography } from "@wso2/oxygen-ui";
 import RoutedTabs from "@components/routed-tabs/RoutedTabs";
 import { useFinanceGate } from "../api/useFinanceGate";
 import {
@@ -28,6 +27,20 @@ import {
   firstAllowedClaimTab,
   type ClaimApprovalGateId,
 } from "./claimApprovalTabs";
+
+// FinanceShell's own fillColumn, verbatim.
+const fillColumn = { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" } as const;
+
+// `useFillHeight` (the OPD and Expense review screens, and this tab's own
+// Needs You review) measures against the nearest scrolling ANCESTOR. Without
+// one of its own, that search climbs past this page entirely and lands on
+// whatever AppLayout happens to scroll — which grows with the page instead of
+// staying inside it, an external scrollbar on the whole screen instead of an
+// internal one on the panel. `overflowY: "auto"` here is what gives it one to
+// find, the same way the Me-side claims tabs scroll their own list instead of
+// the page. Every tab needs this, not only the one that happens to hold a
+// DataGrid.
+const scrollBoundary = { ...fillColumn, overflowY: "auto" } as const;
 
 // One frame for every claim-approval view: the header, the tab bar, and an
 // <Outlet /> for whichever tab the URL names.
@@ -40,19 +53,15 @@ export default function ClaimApprovalPage() {
   const visible = CLAIM_APPROVAL_TABS.filter((t) => gate.canSee(t.gateId));
 
   return (
-    <Box>
-      <Chip
-        icon={<CheckCheckIcon size={14} />}
-        label="Finance"
-        color="primary"
-        size="small"
-        variant="outlined"
-        sx={{ mb: 0.5 }}
-      />
-      <Typography variant="h5" sx={{ mb: 0.5 }}>
-        Claim approval
+    <Box sx={fillColumn}>
+      {/* No chip. This is a bare section under the Finance perspective, not a
+          screen inside an app, so there is no app name to put above the title —
+          the chip said "Finance", which is the perspective the rail already
+          shows. "Claim approval" identifies itself. */}
+      <Typography variant="h5" sx={{ mb: 0.5, flexShrink: 0 }}>
+        Claim Approval
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25, maxWidth: "70ch" }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25, maxWidth: "70ch", flexShrink: 0 }}>
         Claims waiting on your decision, and the ones already decided. Submitting a claim and looking
         up your own stay under Me.
       </Typography>
@@ -62,14 +71,18 @@ export default function ClaimApprovalPage() {
       ) : visible.length === 0 ? (
         <Alert severity="info">You don&apos;t approve claims, so there is nothing here.</Alert>
       ) : (
-        <>
-          <RoutedTabs
-            basePath={CLAIM_APPROVAL_PATH}
-            tabs={visible}
-            ariaLabel="Claim approval sections"
-          />
-          <Outlet />
-        </>
+        <Box sx={fillColumn}>
+          <Box sx={{ flexShrink: 0 }}>
+            <RoutedTabs
+              basePath={CLAIM_APPROVAL_PATH}
+              tabs={visible}
+              ariaLabel="Claim approval sections"
+            />
+          </Box>
+          <Box sx={scrollBoundary}>
+            <Outlet />
+          </Box>
+        </Box>
       )}
     </Box>
   );

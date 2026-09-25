@@ -19,22 +19,21 @@ import {
   Alert,
   Box,
   Button,
+  ComplexSelect,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
-  MenuItem,
   Skeleton,
   Stack,
-  TextField,
   Typography,
 } from "@wso2/oxygen-ui";
 import { describeError } from "@api/errors";
-import { formatDate } from "@features/my/api/derive";
 import { useMyReview, useSubmitReview } from "../api/usePar360";
 import { decodeParComment, encodeParComment, isEmptyHtml } from "../util/parComment";
 import { isDeadlinePassed as checkDeadlinePassed } from "../util/parDeadline";
+import { formatShortDate } from "../util/parDate";
 import ParRichTextField from "./ParRichTextField";
 import { ParCommentView, ParQuestionText } from "./ParContent";
 
@@ -171,45 +170,43 @@ export default function Par360ReviewDialog({
           <Alert severity="error">{describeError(existing.error)}</Alert>
         ) : (
           <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Typography variant="h6">{employeeEmail}</Typography>
+            <Typography sx={{ fontWeight: 600 }}>{employeeEmail}</Typography>
             {/* ReviewProvideModal.tsx:400-424 — the dialog's own status
                 alert, separate from (and in addition to) the tab's. */}
             {deadlinePassed ? (
               <Alert severity="error">
-                The deadline for sharing the 360° feedback has passed on {formatDate(reviewDeadline)}.
+                The deadline for sharing the 360° feedback has passed on {formatShortDate(reviewDeadline)}.
               </Alert>
             ) : reviewStatus === "PENDING" ? (
               <Alert severity="info">
-                Please share your 360° feedback before the deadline: {formatDate(reviewDeadline)}.
+                Please share your 360° feedback before the deadline: {formatShortDate(reviewDeadline)}.
               </Alert>
             ) : reviewStatus === "DRAFT" ? (
               <Alert severity="warning">
                 Your 360° feedback is saved as a draft. Please share on or before the deadline:{" "}
-                {formatDate(reviewDeadline)}.
+                {formatShortDate(reviewDeadline)}.
               </Alert>
             ) : null}
 
             {!declining && (
               <>
                 {/* ReviewProvideModal.tsx:442, parUiText.ThreeSixtyReviewPanelDescription */}
-                <Typography variant="h6">{PANEL_DESCRIPTION}</Typography>
+                <Typography variant="body2" color="text.secondary">{PANEL_DESCRIPTION}</Typography>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-                  <Typography sx={{ flexShrink: 0 }}>Rating:</Typography>
-                  <TextField
-                    select
-                    label="Select Rating"
-                    size="small"
+                  <Typography id="par360-review-rating-label" sx={{ flexShrink: 0 }}>Rating:</Typography>
+                  <ComplexSelect
                     fullWidth
                     value={rating}
-                    onChange={(e) => setRating(e.target.value)}
-                    slotProps={{ input: { readOnly: deadlinePassed } }}
+                    onChange={(e) => setRating(e.target.value as string)}
+                    readOnly={deadlinePassed}
+                    aria-labelledby="par360-review-rating-label"
                   >
                     {reviewRatings.map((r) => (
-                      <MenuItem key={r} value={r}>
+                      <ComplexSelect.MenuItem key={r} value={r}>
                         {r}
-                      </MenuItem>
+                      </ComplexSelect.MenuItem>
                     ))}
-                  </TextField>
+                  </ComplexSelect>
                 </Box>
               </>
             )}

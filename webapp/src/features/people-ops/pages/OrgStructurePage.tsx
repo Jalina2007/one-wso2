@@ -51,7 +51,7 @@ export default function OrgStructurePage() {
   return (
     <PeopleOpsShell
       eyebrow={MASTER_DATA_EYEBROW}
-      title="Org structure"
+      title="Org Structure"
       subtitle="The business units, teams, sub teams and units employees are assigned to. Changes here affect every filter and assignment list across the app."
     >
       <Box

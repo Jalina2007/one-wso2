@@ -29,6 +29,23 @@ window.config = {
   // publishes (there is no separate config key for them).
   // ONE_WSO2_SUBSCRIPTION_BACKEND_URL: "<your-subscription-app-backend-url>",
 
+  // digiops-infra email-group-manager backend base URL. Optional — when
+  // absent the Email Groups screen shows a not-connected state and makes no
+  // requests. See docs/ported-apps/email-group-manager.md for the contract.
+  // ONE_WSO2_EMAIL_GROUPS_BACKEND_URL: "<your-email-group-manager-backend-url>",
+  // RevOps (auto-recorded meetings) backend — people-ops-suite's meet-app
+  // service, reused unchanged. Powers the RevOps app's meeting history.
+  // Optional, and note what "optional" means here: leaving it unset does NOT hide
+  // RevOps. The perspective is registered regardless, so the launcher tile and rail
+  // stay, and /revops renders its own "not connected" notice — that is how an
+  // operator finds out the key is missing, rather than the app looking like the
+  // feature was never built. Visibility is controlled by the preview flag below,
+  // not by this URL.
+  // drive-service base URL is NOT needed here: the streaming URL is minted by
+  // meet-app-backend and arrives already pointing at drive-service. Nothing in this app
+  // constructs it.
+  // ONE_WSO2_REVOPS_BACKEND_URL: "https://apis-stg.wso2.com/<component>/meet-app-backend/v1.0",
+
   // people-ops-suite people-app backend base URL. Same value as people-app's
   // REACT_APP_BACKEND_BASE_URL — usually a Choreo API gateway URL. Powers
   // the live My profile page (employee + personal info fetch).
@@ -112,6 +129,12 @@ window.config = {
   // that goes nowhere.
   // ONE_WSO2_CSM_URL: "<your-csm-url>",
 
+  // infra-portal backend — the Infra Portal perspective. Optional — when
+  // absent, Infra Portal shows a "not connected" state. Privileges come from
+  // this service's own /user-info (987 employee / 762 approver / 123 admin),
+  // not from people-app.
+  // ONE_WSO2_INFRA_BACKEND_URL: "<your-infra-portal-backend-url>",
+
   // Pardot UI base URL — for deep-linking to an email template after Email
   // Workbench pushes it. A link target, not an API. Optional; defaults to
   // https://pi.pardot.com, which is correct for every WSO2 environment today.
@@ -140,5 +163,5 @@ window.config = {
   // Each entry is deleted when its feature ships — a list that only grows
   // stops describing anything.
   //
-  // ONE_WSO2_PREVIEW_FEATURES: { expenseSubmitter: false, umt: false },
+  // ONE_WSO2_PREVIEW_FEATURES: { umt: false, infra: false },
 };

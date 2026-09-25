@@ -81,21 +81,21 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
       // — it's an immersive workspace reached by opening a template or a draft.
       {
         id: "mops-email-create",
-        label: "Create an email",
+        label: "Create an Email",
         desc: "Start from an approved template, edit its content, and push the finished email to Pardot.",
         requires: ["admin"],
         path: "/marketing-ops/email-workbench/create",
       },
       {
         id: "mops-email-history",
-        label: "My emails",
+        label: "My Emails",
         desc: "Your own drafts and completed emails, with their Pardot sync state.",
         requires: ["admin"],
         path: "/marketing-ops/email-workbench/history",
       },
       {
         id: "mops-email-manage",
-        label: "Manage templates",
+        label: "Manage Templates",
         desc: "Onboard, edit or remove the approved templates marketers build from.",
         requires: ["admin"],
         path: "/marketing-ops/email-workbench/manage",
@@ -107,7 +107,7 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
       // `emailworkbench` — the same one the other three items need.
       {
         id: "mops-email-blocks",
-        label: "Block catalog",
+        label: "Block Catalog",
         desc: "The components the email editor offers. Editing a block changes what future emails insert.",
         requires: ["admin"],
         path: "/marketing-ops/email-workbench/blocks",
@@ -292,14 +292,14 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
       //               Marketing Ops meanwhile.
       {
         id: "mops-admin-utm",
-        label: "UTM Generator lists",
+        label: "UTM Generator Lists",
         desc: "Source, Medium, Region and Business Unit values offered by the UTM Link Generator.",
         requires: ["admin"],
         path: "/marketing-ops/admin/utm",
       },
       {
         id: "mops-admin-asset-name",
-        label: "Asset Name lists",
+        label: "Asset Name Lists",
         desc: "Per-generator dropdown values for the Asset Name Generator.",
         requires: ["admin"],
         path: "/marketing-ops/admin/asset-name",
@@ -308,7 +308,7 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
       // inside the operation because they configure it rather than use it.
       {
         id: "mops-admin-pardot",
-        label: "Pardot send defaults",
+        label: "Pardot Send Defaults",
         desc: "Campaign, tracker domain, email types and sender applied to every email pushed to Pardot.",
         requires: ["admin"],
         path: "/marketing-ops/admin/pardot",
@@ -318,7 +318,7 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
       // at all and what each is allowed to contain, so it ships with the operation.
       {
         id: "mops-admin-events",
-        label: "Events statuses & columns",
+        label: "Events Statuses & Columns",
         desc: "Member statuses and the per-status columns an attendee workbook must carry to be imported.",
         requires: ["admin"],
         path: "/marketing-ops/admin/events",

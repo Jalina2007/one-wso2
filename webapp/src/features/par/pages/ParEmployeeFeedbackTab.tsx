@@ -33,7 +33,7 @@ import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { describeError } from "@api/errors";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { useMeProfile } from "@features/my/api/useMeProfile";
-import { formatDate } from "@features/my/api/derive";
+import { formatShortDate } from "../util/parDate";
 import { useActiveParCycle, useParEmployeeInfo, useParRating } from "../api/useParData";
 import { useSaveParRating } from "../api/useParMutations";
 import { decodeParComment, encodeParComment, isEmptyHtml } from "../util/parComment";
@@ -258,10 +258,10 @@ function SelfReviewForm({
       {!shared && (
         <Alert severity={deadlinePassed ? "error" : status === "DRAFT" ? "warning" : "info"}>
           {deadlinePassed
-            ? `The deadline for submitting your PAR passed on ${formatDate(cycle.parEmployeeDeadline)}.`
+            ? `The deadline for submitting your PAR passed on ${formatShortDate(cycle.parEmployeeDeadline)}.`
             : status === "DRAFT"
-              ? `Draft saved. Share it on or before ${formatDate(cycle.parEmployeeDeadline)}.`
-              : `Share your PAR before the deadline: ${formatDate(cycle.parEmployeeDeadline)}.`}
+              ? `Draft saved. Share it on or before ${formatShortDate(cycle.parEmployeeDeadline)}.`
+              : `Share your PAR before the deadline: ${formatShortDate(cycle.parEmployeeDeadline)}.`}
         </Alert>
       )}
       {status === "SHARED" && (
@@ -278,16 +278,28 @@ function SelfReviewForm({
       {finalized ? (
         <ParRatingSummary cycle={cycle} rating={rating} />
       ) : !showForm ? (
-        <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+        <Card variant="outlined" sx={{ p: 4, textAlign: "center" }}>
+          <Box sx={{ color: "primary.main", display: "flex", justifyContent: "center", mb: 1.5 }}>
+            <PlayCircleIcon size={36} />
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            Start your self-review
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 480, mx: "auto" }}>
+            Answer this cycle's employee question in your own words, then share it with your lead
+            before the deadline. Your progress is saved as a draft, so you can come back and finish
+            it later.
+          </Typography>
           <Button
             variant="contained"
-            endIcon={<PlayCircleIcon size={18} />}
+            size="large"
+            endIcon={<PlayCircleIcon size={16} />}
             disabled={deadlinePassed}
             onClick={() => setStarted(true)}
           >
             Start
           </Button>
-        </Box>
+        </Card>
       ) : (
         <Card variant="outlined" sx={{ p: 2 }}>
           <ParQuestionText

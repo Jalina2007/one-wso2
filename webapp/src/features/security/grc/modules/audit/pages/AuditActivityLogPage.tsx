@@ -24,6 +24,7 @@ import { useGetControls } from "@features/security/grc/modules/audit/api/useGetC
 import { useGetAuditActivity, activityLogPageSize } from "@features/security/grc/modules/audit/api/useGetAuditActivity";
 import type { TrailEntry, TrailDetails } from "@features/security/grc/modules/audit/api/useGetTrail";
 import { formatTimestamp } from "@features/security/grc/modules/audit/utils/format";
+import { auditPaths } from "@features/security/grc/modules/audit/paths";
 
 const ACTION_LABELS: Record<TrailEntry["action"], string> = {
   CREATED: "Created",
@@ -102,7 +103,7 @@ export default function AuditActivityLogPage(): JSX.Element {
   const entries = data?.items ?? [];
   const total = data?.total ?? 0;
 
-  const handleBack = () => void navigate(`/security/audit/audits/${auditId}`);
+  const handleBack = () => void navigate(auditPaths.detail(auditId));
 
   return (
     <Box sx={{ p: { xs: 2, sm: 3 } }}>

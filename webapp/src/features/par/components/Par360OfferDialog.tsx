@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   Alert,
   Autocomplete,
@@ -40,27 +40,27 @@ import type { ParParticipant } from "../api/types";
 // yourself and anyone who's already asked you), confirm, then the same
 // POST .../reviewers endpoint Request 360° Feedback uses, just with the
 // picker's target and your own email as the sole reviewer.
-export default function Par360OfferDialog({
+//
+// Split into a bare picker (no Dialog chrome — ParProvideFeedbackTab.tsx
+// renders it inline instead of behind a Fab) and the confirmation step,
+// which stays a Dialog: it's a genuine "are you sure, this can't be undone"
+// prompt, not the add-flow the FAB was replaced for.
+export function Par360OfferPicker({
   open,
-  onClose,
   parCycleId,
   selfEmail,
   excludeEmails,
-  onOffered,
+  onSelect,
 }: {
+  /** Gates `useParticipants` the same way the Dialog's own `open` did. */
   open: boolean;
-  onClose: () => void;
   parCycleId: number;
   selfEmail: string | undefined;
   /** Already asked you (or you're already offering to) — excluded from the picker. */
   excludeEmails: string[];
-  /** Called with the employee's email once the offer is recorded. */
-  onOffered: (employeeEmail: string) => void;
+  onSelect: (participant: ParParticipant) => void;
 }) {
   const participants = useParticipants(parCycleId, open);
-  const offer = useOfferToReview(parCycleId, selfEmail);
-  const [selected, setSelected] = useState<ParParticipant | null>(null);
-  const [confirming, setConfirming] = useState(false);
 
   const options = useMemo(
     () =>
@@ -70,92 +70,105 @@ export default function Par360OfferDialog({
     [participants.data, selfEmail, excludeEmails],
   );
 
+  return (
+    <Autocomplete
+      options={options}
+      value={null}
+      blurOnSelect
+      getOptionLabel={(o) => `${o.employeeName} (${o.workEmail})`}
+      loading={participants.isLoading}
+      onChange={(_e, v) => {
+        if (v) onSelect(v);
+      }}
+      // OfferFeedbackView.tsx's own row: an avatar, name over email,
+      // and a "Provide Feedback" icon-button at the end.
+      renderOption={(props, option) => (
+        <Box component="li" {...props} sx={{ display: "flex", alignItems: "center", gap: 2, width: "100%" }}>
+          <Avatar sx={{ height: "2.2rem", width: "2.2rem" }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body1">{option.employeeName}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {option.workEmail}
+            </Typography>
+          </Box>
+          <Tooltip title="Provide Feedback" arrow>
+            <IconButton
+              size="small"
+              sx={{ ml: "auto", color: "primary.main", "&:hover": { bgcolor: "primary.main", color: "white" } }}
+            >
+              <ListPlusIcon size={18} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          size="small"
+          autoFocus
+          label="Add subordinates to offer feedback"
+          placeholder="Search by name or email"
+        />
+      )}
+      noOptionsText={participants.isError ? "Couldn't load colleagues" : "No colleagues found"}
+    />
+  );
+}
+
+// OfferFeedbackView.tsx's ConfirmationDialog — title "Provide Feedback" (not
+// a question), and "would like" rather than a contraction.
+export function Par360OfferConfirmDialog({
+  open,
+  employee,
+  parCycleId,
+  selfEmail,
+  onClose,
+  onOffered,
+}: {
+  open: boolean;
+  employee: ParParticipant | undefined;
+  parCycleId: number;
+  selfEmail: string | undefined;
+  onClose: () => void;
+  /** Called with the employee's email once the offer is recorded. */
+  onOffered: (employeeEmail: string) => void;
+}) {
+  const offer = useOfferToReview(parCycleId, selfEmail);
+
   const handleClose = () => {
-    setSelected(null);
-    setConfirming(false);
+    offer.reset();
     onClose();
   };
 
   const handleConfirm = () => {
-    if (!selected) return;
-    offer.mutate(selected.workEmail, {
+    if (!employee) return;
+    offer.mutate(employee.workEmail, {
       onSuccess: () => {
-        const email = selected.workEmail;
-        handleClose();
+        const email = employee.workEmail;
+        onClose();
         onOffered(email);
       },
     });
   };
 
   return (
-    <>
-      <Dialog open={open && !confirming} onClose={handleClose} maxWidth="xs" fullWidth>
-        <DialogContent>
-          <Autocomplete
-            options={options}
-            getOptionLabel={(o) => `${o.employeeName} (${o.workEmail})`}
-            loading={participants.isLoading}
-            value={selected}
-            onChange={(_e, v) => {
-              setSelected(v);
-              if (v) setConfirming(true);
-            }}
-            // OfferFeedbackView.tsx's own row: an avatar, name over email,
-            // and a "Provide Feedback" icon-button at the end.
-            renderOption={(props, option) => (
-              <Box component="li" {...props} sx={{ display: "flex", alignItems: "center", gap: 2, width: "100%" }}>
-                <Avatar sx={{ height: "2.2rem", width: "2.2rem" }} />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="body1">{option.employeeName}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {option.workEmail}
-                  </Typography>
-                </Box>
-                <Tooltip title="Provide Feedback" arrow>
-                  <IconButton
-                    size="small"
-                    sx={{ ml: "auto", color: "primary.main", "&:hover": { bgcolor: "primary.main", color: "white" } }}
-                  >
-                    <ListPlusIcon size={18} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            )}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                size="small"
-                autoFocus
-                label="Add subordinates to offer feedback"
-                placeholder="Search by name or email"
-                sx={{ mt: 1 }}
-              />
-            )}
-            noOptionsText={participants.isError ? "Couldn't load colleagues" : "No colleagues found"}
-          />
-          {offer.isError && <Alert severity="error" sx={{ mt: 2 }}>{describeError(offer.error)}</Alert>}
-        </DialogContent>
-      </Dialog>
-
-      {/* OfferFeedbackView.tsx's ConfirmationDialog — title "Provide Feedback"
-          (not a question), and "would like" rather than a contraction. */}
-      <Dialog open={open && confirming} onClose={() => setConfirming(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Provide Feedback</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">
-            Are you sure you would like to provide feedback to {selected?.workEmail}? This action
-            cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setConfirming(false)} disabled={offer.isPending}>
-            Cancel
-          </Button>
-          <Button variant="contained" onClick={handleConfirm} disabled={offer.isPending}>
-            {offer.isPending ? "Offering…" : "Yes"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+      <DialogTitle>Provide Feedback</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" color="text.secondary">
+          Are you sure you would like to provide feedback to {employee?.workEmail}? This action
+          cannot be undone.
+        </Typography>
+        {offer.isError && <Alert severity="error" sx={{ mt: 2 }}>{describeError(offer.error)}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={handleClose} disabled={offer.isPending}>
+          Cancel
+        </Button>
+        <Button variant="contained" onClick={handleConfirm} disabled={offer.isPending}>
+          {offer.isPending ? "Offering…" : "Yes"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

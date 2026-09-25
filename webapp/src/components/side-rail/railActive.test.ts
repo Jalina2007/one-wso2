@@ -17,7 +17,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { activeGroupIds, activeItemId, onPathOrBelow } from "./railActive";
+import { activeGroupIds, activeItemId, onPathOrBelow, visibleLeavesOf } from "./railActive";
 import type { PerspectiveSection } from "@constants/perspectives";
 
 // Driven off the real registry, not a fixture: the bug this covers was a rail
@@ -45,16 +45,18 @@ const itemFor = (pathname: string) =>
 // Every screen the Leave app can be on. A row must light on all of them, and
 // the group holding it must be open, or the lit row is folded out of sight.
 const LEAVE_URLS: [string, string][] = [
-  ["/me/leave/general", "leave-general"],
-  ["/me/leave/general/apply", "leave-general"],
-  ["/me/leave/general/history", "leave-general"],
-  ["/me/leave/general/reports", "leave-general"],
-  ["/me/leave/sabbatical", "leave-sabbatical"],
-  ["/me/leave/sabbatical/apply", "leave-sabbatical"],
-  ["/me/leave/sabbatical/history", "leave-sabbatical"],
-  ["/me/leave/sabbatical/approve", "leave-sabbatical"],
-  ["/me/leave/sabbatical/approval-history", "leave-sabbatical"],
-  ["/me/leave/sabbatical/report", "leave-sabbatical"],
+  // Leave is one row now, and every screen under it — tab and kind alike —
+  // has to light that row. The kind is two segments deep, which is exactly
+  // what `onPathOrBelow` matching by segment is for.
+  ["/me/leave", "leave-home"],
+  ["/me/leave/apply/general", "leave-home"],
+  ["/me/leave/apply/sabbatical", "leave-home"],
+  ["/me/leave/history/general", "leave-home"],
+  ["/me/leave/history/sabbatical", "leave-home"],
+  ["/me/leave/approvals", "leave-home"],
+  ["/me/leave/approval-history", "leave-home"],
+  ["/me/leave/reports/general", "leave-home"],
+  ["/me/leave/reports/sabbatical", "leave-home"],
 ];
 
 describe("which row is selected", () => {
@@ -96,23 +98,23 @@ describe("which groups are open", () => {
   });
 
   it("does not open a group for a path that merely shares a prefix string", () => {
-    expect(activeGroupIds(sections, "/me/leave/generalization").size).toBe(0);
+    expect(activeGroupIds(sections, "/me/leavers").size).toBe(0);
   });
 });
 
 describe("matching by segment, not by string", () => {
   it("claims a path and everything beneath it", () => {
-    expect(onPathOrBelow("/me/leave/general", "/me/leave/general")).toBe(true);
-    expect(onPathOrBelow("/me/leave/general", "/me/leave/general/apply")).toBe(true);
-    expect(onPathOrBelow("/me/leave/general", "/me/leave/general/apply/")).toBe(true);
+    expect(onPathOrBelow("/me/leave", "/me/leave")).toBe(true);
+    expect(onPathOrBelow("/me/leave", "/me/leave/apply/general")).toBe(true);
+    expect(onPathOrBelow("/me/leave", "/me/leave/apply/general/")).toBe(true);
   });
 
   it("does not claim a longer word starting with it", () => {
-    expect(onPathOrBelow("/me/leave/general", "/me/leave/generalization")).toBe(false);
+    expect(onPathOrBelow("/me/leave", "/me/leavers")).toBe(false);
   });
 
   it("does not claim a sibling", () => {
-    expect(onPathOrBelow("/me/leave/general", "/me/leave/sabbatical/apply")).toBe(false);
+    expect(onPathOrBelow("/me/leave/apply", "/me/leave/history/general")).toBe(false);
   });
 });
 
@@ -173,5 +175,44 @@ describe("an exact match beats a descendant one", () => {
         overviewId: "ov",
       }),
     ).toBe("reports-active");
+  });
+});
+
+describe("visibleLeavesOf", () => {
+  const sections: PerspectiveSection[] = [
+    { id: "group", label: "Group", children: [
+      { id: "child-hidden", label: "Hidden", path: "/a/hidden" },
+      { id: "child-shown", label: "Shown", path: "/a/shown" },
+    ] },
+    { id: "leaf", label: "Leaf", path: "/b" },
+  ];
+
+  // THE thing a perspective landing depends on: the first entry is where it
+  // sends you, and a group is not somewhere you can be sent.
+  it("returns leaves in rail order, never the groups holding them", () => {
+    expect(visibleLeavesOf(sections, () => true).map((s) => s.id)).toEqual([
+      "child-hidden",
+      "child-shown",
+      "leaf",
+    ]);
+  });
+
+  it("drops a child its gate hides", () => {
+    const visible = (s: PerspectiveSection) => s.id !== "child-hidden";
+    expect(visibleLeavesOf(sections, visible).map((s) => s.id)).toEqual(["child-shown", "leaf"]);
+  });
+
+  // A hidden group takes its children with it — the rail never renders them,
+  // so a landing must never forward to one.
+  it("drops a hidden group's children with it", () => {
+    const visible = (s: PerspectiveSection) => s.id !== "group";
+    expect(visibleLeavesOf(sections, visible).map((s) => s.id)).toEqual(["leaf"]);
+  });
+
+  // A scroll-anchor section carries no path. Forwarding to one would navigate
+  // nowhere.
+  it("skips a leaf with no route", () => {
+    const anchors: PerspectiveSection[] = [{ id: "anchor", label: "Anchor" }];
+    expect(visibleLeavesOf(anchors, () => true)).toEqual([]);
   });
 });

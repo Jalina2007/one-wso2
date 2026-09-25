@@ -25,9 +25,19 @@ const employeeInfo: { isSuccess: boolean; data?: { leadEmail: string | null } } 
   isSuccess: false,
 };
 
+// ParRequiresActiveCycleRoute/useParHasActiveCycle's own query — GET
+// /par-cycles?email=&status=OPEN via useActiveParCycle, keyed "par-cycles-open".
+// Unresolved (isSuccess false) fails OPEN, same shape as employeeInfo above.
+const openCycles: { isSuccess: boolean; data?: unknown[] } = {
+  isSuccess: false,
+};
+
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: ({ queryKey }: { queryKey: unknown[] }) =>
-    queryKey[0] === "par-employee-info" ? employeeInfo : { data: undefined },
+  useQuery: ({ queryKey }: { queryKey: unknown[] }) => {
+    if (queryKey[0] === "par-employee-info") return employeeInfo;
+    if (queryKey[0] === "par-cycles-open") return openCycles;
+    return { data: undefined };
+  },
 }));
 vi.mock("@asgardeo/react", () => ({ useAsgardeo: () => ({ isSignedIn: true }) }));
 vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "token" }));
@@ -39,7 +49,7 @@ vi.mock("../components/ParShell", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-const { default: ParGroupPage, ParGroupIndex, ParRequiresLeadRoute } = await import(
+const { default: ParGroupPage, ParGroupIndex, ParRequiresLeadRoute, ParRequiresActiveCycleRoute } = await import(
   "./ParGroupPage"
 );
 
@@ -56,6 +66,8 @@ function Tab({ name }: { name: string }) {
 beforeEach(() => {
   employeeInfo.isSuccess = false;
   employeeInfo.data = undefined;
+  openCycles.isSuccess = false;
+  openCycles.data = undefined;
   profile.isLoading = false;
 });
 
@@ -64,37 +76,55 @@ function hasLead(leadEmail: string | null) {
   employeeInfo.data = { leadEmail };
 }
 
+function hasNoActiveCycle() {
+  openCycles.isSuccess = true;
+  openCycles.data = [];
+}
+
 /** The group, wired the way App.tsx wires it. */
-function show(initial = "/people-ops/performance") {
+function show(initial = "/me/performance") {
   return render(
     <MemoryRouter initialEntries={[initial]}>
       <UrlProbe />
       <Routes>
-        <Route path="/people-ops/performance" element={<ParGroupPage />}>
+        <Route path="/me/performance" element={<ParGroupPage />}>
           <Route index element={<ParGroupIndex />} />
           <Route
             path="employee-feedback"
             element={
-              <ParRequiresLeadRoute>
-                <Tab name="Employee Feedback" />
-              </ParRequiresLeadRoute>
+              <ParRequiresActiveCycleRoute>
+                <ParRequiresLeadRoute>
+                  <Tab name="Employee Feedback" />
+                </ParRequiresLeadRoute>
+              </ParRequiresActiveCycleRoute>
             }
           />
           <Route
             path="request-360"
             element={
-              <ParRequiresLeadRoute>
-                <Tab name="Request 360" />
-              </ParRequiresLeadRoute>
+              <ParRequiresActiveCycleRoute>
+                <ParRequiresLeadRoute>
+                  <Tab name="Request 360" />
+                </ParRequiresLeadRoute>
+              </ParRequiresActiveCycleRoute>
             }
           />
-          <Route path="provide-360" element={<Tab name="Provide 360" />} />
+          <Route
+            path="provide-360"
+            element={
+              <ParRequiresActiveCycleRoute>
+                <Tab name="Provide 360" />
+              </ParRequiresActiveCycleRoute>
+            }
+          />
           <Route
             path="f2f"
             element={
-              <ParRequiresLeadRoute>
-                <Tab name="F2F" />
-              </ParRequiresLeadRoute>
+              <ParRequiresActiveCycleRoute>
+                <ParRequiresLeadRoute>
+                  <Tab name="F2F" />
+                </ParRequiresLeadRoute>
+              </ParRequiresActiveCycleRoute>
             }
           />
           <Route path="history" element={<Tab name="History" />} />
@@ -119,7 +149,7 @@ describe("an employee who has a lead", () => {
   it("lands on Employee Feedback, so the group URL is never blank", async () => {
     show();
     expect(await screen.findByTestId("url")).toHaveTextContent(
-      "/people-ops/performance/employee-feedback",
+      "/me/performance/employee-feedback",
     );
   });
 });
@@ -138,29 +168,52 @@ describe("an employee with no lead", () => {
 
   it("lands on Provide 360°, not a tab they don't have", async () => {
     show();
-    expect(await screen.findByTestId("url")).toHaveTextContent("/people-ops/performance/provide-360");
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance/provide-360");
   });
 
   // Hiding a tab is not the gate — the URL can be typed or bookmarked.
   it("is redirected away from a tab reached by its URL", async () => {
-    show("/people-ops/performance/employee-feedback");
-    expect(await screen.findByTestId("url")).toHaveTextContent("/people-ops/performance/provide-360");
+    show("/me/performance/employee-feedback");
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance/provide-360");
     expect(screen.getByTestId("tab-body")).toHaveTextContent("Provide 360");
   });
 
   it("is redirected away from Request 360° too", async () => {
-    show("/people-ops/performance/request-360");
-    expect(await screen.findByTestId("url")).toHaveTextContent("/people-ops/performance/provide-360");
+    show("/me/performance/request-360");
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance/provide-360");
   });
 
   it("is redirected away from F2F too", async () => {
-    show("/people-ops/performance/f2f");
-    expect(await screen.findByTestId("url")).toHaveTextContent("/people-ops/performance/provide-360");
+    show("/me/performance/f2f");
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance/provide-360");
   });
 
   it("still reaches the tabs they do have", async () => {
-    show("/people-ops/performance/history");
+    show("/me/performance/history");
     expect(await screen.findByTestId("tab-body")).toHaveTextContent("History");
+  });
+});
+
+describe("an employee with an active lead but no open PAR cycle", () => {
+  beforeEach(() => {
+    hasLead("lead@wso2.com");
+    hasNoActiveCycle();
+  });
+
+  it("sees only the PAR History tab", async () => {
+    show();
+    await screen.findByRole("tab", { name: "PAR History" });
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+  });
+
+  it("lands on PAR History, so the group URL is never blank", async () => {
+    show();
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance/history");
+  });
+
+  it("is redirected to PAR History when deep-linking straight to a cycle-scoped tab", async () => {
+    show("/me/performance/f2f");
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance/history");
   });
 });
 
@@ -175,14 +228,14 @@ describe("before the lookup has answered", () => {
 
   it("serves a deep-linked gated tab rather than redirecting", async () => {
     employeeInfo.isSuccess = false;
-    show("/people-ops/performance/employee-feedback");
+    show("/me/performance/employee-feedback");
     expect(await screen.findByTestId("tab-body")).toHaveTextContent("Employee Feedback");
   });
 
   it("sends nobody anywhere while the signed-in email is still loading", async () => {
     profile.isLoading = true;
     show();
-    expect(await screen.findByTestId("url")).toHaveTextContent("/people-ops/performance");
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance");
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 });

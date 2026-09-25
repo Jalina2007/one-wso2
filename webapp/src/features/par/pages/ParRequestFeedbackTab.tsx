@@ -15,14 +15,14 @@
 // under the License.
 
 import { useState } from "react";
-import { Alert, Box, Fab, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip } from "@wso2/oxygen-ui";
+import { Alert, Box, Button, Card, Skeleton, Table, TableBody, TableCell, TableHead, TableRow, Tooltip, Typography } from "@wso2/oxygen-ui";
 import { PlusIcon } from "@wso2/oxygen-ui-icons-react";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useMeProfile } from "@features/my/api/useMeProfile";
-import { formatDate } from "@features/my/api/derive";
+import { formatShortDate } from "../util/parDate";
 import { useActiveParCycle, useParEmployeeInfo, useParRating } from "../api/useParData";
 import { useReviewers, useRequestReviewers } from "../api/usePar360";
-import Par360RequestDialog from "../components/Par360RequestDialog";
+import { Par360RequestPicker } from "../components/Par360RequestDialog";
 import ParEmptyState from "../components/ParEmptyState";
 import { isDeadlinePassed } from "../util/parDeadline";
 
@@ -49,7 +49,7 @@ export default function ParRequestFeedbackTab() {
   const rating = useParRating(cycle?.parCycleId, workEmail);
   const reviewers = useReviewers(cycle?.parCycleId, workEmail);
   const requestReviewers = useRequestReviewers(cycle?.parCycleId, workEmail);
-  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   if (profile.isLoading || activeCycles.isLoading) {
     return <Skeleton variant="rectangular" height={260} sx={{ borderRadius: 1.5, maxWidth: 880 }} />;
@@ -86,9 +86,43 @@ export default function ParRequestFeedbackTab() {
         {leadShared
           ? "Lead has shared the PAR"
           : deadlinePassed
-            ? `The deadline for requesting 360° feedback has passed on ${formatDate(cycle.parThreeSixtyRatingDeadline)}.`
-            : `Please request feedback before the deadline: ${formatDate(cycle.parThreeSixtyRatingDeadline)}.`}
+            ? `The deadline for requesting 360° feedback has passed on ${formatShortDate(cycle.parThreeSixtyRatingDeadline)}.`
+            : `Please request feedback before the deadline: ${formatShortDate(cycle.parThreeSixtyRatingDeadline)}.`}
       </Alert>
+
+      {/* RequestFeedbackTab.tsx:168-204 used a fixed FAB opening a modal —
+          not this app's convention (ParEmployeeFeedbackTab.tsx's own
+          Start button instead swaps in an inline Card in place). */}
+      {adding ? (
+        <Card variant="outlined" sx={{ p: 2, mb: 2 }}>
+          <Typography sx={{ fontWeight: 700, mb: 1.5 }}>Request 360° Feedback</Typography>
+          <Par360RequestPicker
+            open={adding}
+            selfEmail={workEmail}
+            leadEmail={leadEmail}
+            existingEmails={(reviewers.data ?? []).map((r) => r.reviewerEmail)}
+            onSubmit={(emails) => requestReviewers.mutate(emails, { onSuccess: () => setAdding(false) })}
+            onCancel={() => setAdding(false)}
+            isSubmitting={requestReviewers.isPending}
+            error={requestReviewers.error ?? undefined}
+          />
+        </Card>
+      ) : (
+        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 2 }}>
+          <Tooltip title={blocked ? "Action not available" : ""} arrow>
+            <span>
+              <Button
+                variant="contained"
+                startIcon={<PlusIcon size={16} />}
+                disabled={blocked}
+                onClick={() => setAdding(true)}
+              >
+                Request Feedback
+              </Button>
+            </span>
+          </Tooltip>
+        </Box>
+      )}
 
       {reviewers.isLoading ? (
         <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
@@ -115,30 +149,6 @@ export default function ParRequestFeedbackTab() {
           </TableBody>
         </Table>
       )}
-
-      <Par360RequestDialog
-        open={requestDialogOpen}
-        onClose={() => setRequestDialogOpen(false)}
-        selfEmail={workEmail}
-        leadEmail={leadEmail}
-        existingEmails={(reviewers.data ?? []).map((r) => r.reviewerEmail)}
-        onSubmit={(emails) =>
-          requestReviewers.mutate(emails, { onSuccess: () => setRequestDialogOpen(false) })
-        }
-        isSubmitting={requestReviewers.isPending}
-        error={requestReviewers.error ?? undefined}
-      />
-
-      {/* RequestFeedbackTab.tsx:168-204 — a fixed FAB, not an inline button. */}
-      <Box sx={{ position: "fixed", bottom: 100, right: 100, zIndex: 1000 }}>
-        <Tooltip title={blocked ? "Action not available" : "Request Feedback"} arrow>
-          <span>
-            <Fab color="primary" disabled={blocked} onClick={() => setRequestDialogOpen(true)}>
-              <PlusIcon />
-            </Fab>
-          </span>
-        </Tooltip>
-      </Box>
     </Box>
   );
 }

@@ -217,6 +217,7 @@ export interface RiskDetail {
   owner_id: number;
   impact_description: string | null;
   treatment_strategy: string | null;
+  source_register_id: number;
   assignment_team_id: number;
   progress: string | null;
   implementation_date: string | null;
@@ -232,6 +233,10 @@ export interface RiskDetail {
   compliance_approval_date: string | null;
   created_at: string;
   updated_at: string;
+  // When this migrated risk's assignee correction window closes (ISO 8601), or
+  // null when it isn't a migrated risk or the window has closed. The backend
+  // owns the rule — show Update Assignees exactly when this is set.
+  assignees_editable_until: string | null;
   source_register_name: string;
   assignment_team_name: string;
   owner_name: string;
@@ -276,6 +281,7 @@ export interface ListRisksParams {
   level?: string[];
   search?: string;
   risk_type?: string[];
+  treatment_strategy?: string[];
   owner_id?: number[];
   submitted_from?: string;
   submitted_to?: string;
@@ -342,6 +348,7 @@ export interface RiskStatusSummary {
 }
 
 export interface RegisterTreatmentCount {
+  register_id: number;
   register_name: string;
   treatment_strategy: string;
   count: number;
@@ -756,6 +763,7 @@ export async function fetchRisks(
   if (params.level?.length) q.set("level", params.level.join(","));
   if (params.search) q.set("search", params.search);
   if (params.risk_type?.length) q.set("risk_type", params.risk_type.join(","));
+  if (params.treatment_strategy?.length) q.set("treatment_strategy", params.treatment_strategy.join(","));
   if (params.owner_id?.length) q.set("owner_id", params.owner_id.join(","));
   if (params.submitted_from) q.set("submitted_from", params.submitted_from);
   if (params.submitted_to) q.set("submitted_to", params.submitted_to);
@@ -784,6 +792,30 @@ export async function updateRisk(
 ): Promise<void> {
   const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks/${id}`, {
     method: "PUT",
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<void>(res);
+}
+
+// UpdateAssigneesPayload corrects a migrated risk's people and assignment
+// team. Send only the fields that changed; an omitted field is left as it is.
+export interface UpdateAssigneesPayload {
+  assigner_id?: number;
+  owner_id?: number;
+  management_approver_id?: number;
+  assignment_team_id?: number;
+  action_owner_id?: number;
+}
+
+// updateRiskAssignees works in any workflow status, never triggers
+// re-approval, and returns 409 once the risk's correction window has closed.
+export async function updateRiskAssignees(
+  authFetch: AuthFetch,
+  id: number,
+  payload: UpdateAssigneesPayload,
+): Promise<void> {
+  const res = await authFetch(`${BACKEND_BASE_URL}/api/v1/risks/${id}/assignees`, {
+    method: "PATCH",
     body: JSON.stringify(payload),
   });
   return handleResponse<void>(res);

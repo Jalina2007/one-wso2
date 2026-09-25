@@ -27,11 +27,11 @@
  * the launcher is the one surface with nothing else doing that job.
  *
  * SIZING, and the constraint that will eventually break this: the registry holds
- * eight perspective hues, so the set is at the eight it can carry. Hue
- * discrimination collapses somewhere past that, and each
- * new perspective wants one — at which point the answer is a different encoding
- * (hue per domain family, or back to monochrome), not a longer list.
- * perspectiveHues.test.ts caps the palette at eight so that decision is forced
+ * nine perspective hues. Infra is the ninth, kept as its own teal so the launcher
+ * tile stays distinct from UMT. Hue discrimination collapses somewhere past that,
+ * and each new perspective wants one — at which point the answer is a different
+ * encoding (hue per domain family, or back to monochrome), not a longer list.
+ * perspectiveHues.test.ts caps the palette at nine so that decision is forced
  * rather than drifted into.
  *
  * TREATMENT: the glyph is the hue's dark shade on a wash of the same hue — not a
@@ -107,6 +107,15 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
     light: { bg: "#F1E8FB", fg: "#7C4AB3" },
     dark: { bg: "#241D2C", fg: "#9B5DE0" },
   },
+  // Teal, placed between Finance's green (162°) and People's sky blue (207°).
+  // At 185° it stays 23° from Finance and 22° from People, wider than the
+  // palette's tightest existing pair. The tints measure 5.20:1 in light mode
+  // and 4.59:1 in dark mode, both above the 3.5:1 headroom target.
+  infra: {
+    hue: "#0E9AA7",
+    light: { bg: "#DFF5F7", fg: "#0A6F79" },
+    dark: { bg: "#1A2628", fg: "#0E9AA7" },
+  },
   // Indigo — distinct from both people's sky blue (207°) and csm's violet
   // (268°) by sitting at 225°, between them but far enough from each to read
   // as its own colour rather than a shade of either. Tints computed against
@@ -119,8 +128,8 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
   // and Legal at 225, 18 apart). It reads as audit/caution, which suits the
   // subject, but that is a bonus rather than the reason.
   //
-  // Together with UMT below, this takes the palette to its eight-hue cap. The
-  // next perspective should force a different encoding rather than a ninth hue.
+  // Together with UMT below, this takes the palette to eight hues before Infra.
+  // Infra is the ninth, and the next perspective should force a different encoding.
   security: {
     hue: "#B8860B",
     light: { bg: "#F9EFD7", fg: "#7E5C07" },
@@ -140,6 +149,28 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
     hue: "#5F8F1F",
     light: { bg: "#EFF6E6", fg: "#426A16" },
     dark: { bg: "#20281A", fg: "#8ABF42" },
+  },
+
+  // RevOps. Orchid at 301 degrees, and the ninth hue — see the cap note in
+  // perspectiveHues.test.ts for why a ninth exists at all.
+  //
+  // It is NOT the green it was originally given (#678F3D, 89 degrees). Upstream
+  // added umt at 85.7 degrees while this was in flight, putting the two 3.6
+  // degrees apart: the same green twice, and neither findable by colour. The
+  // wheel's two remaining openings were 124 (between umt and finance) and 301
+  // (between csm and marketing). 124 is wider — 38 degrees of clearance against
+  // 32 — but it is a third green in a palette that already has umt's olive and
+  // finance's teal, so the extra degrees buy nothing a user can act on. 301 is
+  // 32.6 from csm and 31.4 from marketing, both comfortably past the palette's
+  // existing tightest pair (people and legal, 17.7 apart).
+  //
+  // Saturation and lightness deliberately copy csm's (0.68/0.58): this sits in
+  // the same violet-pink quadrant, so matching its weight keeps it reading as a
+  // sibling rather than a louder cousin. Measured 4.49:1 light and 4.29:1 dark.
+  revops: {
+    hue: "#DD4BDA",
+    light: { bg: "#FAE6FA", fg: "#AC3BAA" },
+    dark: { bg: "#352135", fg: "#DD4BDA" },
   },
 };
 

@@ -11,7 +11,7 @@ reachable for this port, though, so the data source changed: this now reads
 endpoint into a full employee-directory listing for exactly this purpose). §7 still describes the UI
 deviations from the original source app; §5 describes the contract actually in use.
 
-**In One WSO2:** `/people-ops/org-chart`, under the People Ops perspective, on the overview page
+**In One WSO2:** `/people-ops/org-chart`, under the People Ops perspective, from the rail
 (`PEOPLE_OPS_SECTIONS` in `@constants/perspectives.ts`). Unlike every other People Ops section
 gated to admins, `/employees/basic-info` is open to any authenticated employee (see §4) — that part
 of the original access model held even though the backend underneath it changed. Originally placed
