@@ -55,6 +55,7 @@ import {
   useUmtTriggerTgBuild,
 } from "../../api/useUmtReleaseChunkActions";
 import {
+  useFetchFreshUmtReleaseChunkBuildStatus,
   useUmtReleaseChunkRowStatuses,
   useUmtReleaseChunks,
   type UmtReleaseChunkRowStatus,
@@ -197,6 +198,7 @@ export default function UmtPendingReleaseChunksGrid() {
   const gate = useUmtGate();
   const rows = chunks.data ?? [];
   const rowStatuses = useUmtReleaseChunkRowStatuses(rows.map((row) => row.id));
+  const fetchFreshBuildStatus = useFetchFreshUmtReleaseChunkBuildStatus();
   const { showSuccess, showError, showWarning } = useNotifications();
 
   const [actionTarget, setActionTarget] = useState<ActionTarget | null>(null);
@@ -222,11 +224,13 @@ export default function UmtPendingReleaseChunksGrid() {
   }, []);
 
   // Release is offered only once every update level has built successfully.
-  // The status comes from what the row already fetched, so the case where it
-  // has none is answered rather than waved through — see umtReleaseReadiness.
+  // The build status is fetched fresh on every click rather than read from the
+  // row, since a level may have been rebuilt since the page loaded. A status
+  // that cannot be fetched is answered rather than waved through — see
+  // umtReleaseReadiness.
   const handleReleaseClick = useCallback(
-    (chunkId: number) => {
-      switch (umtReleaseReadiness(rowStatuses[chunkId]?.buildStatus)) {
+    async (chunkId: number) => {
+      switch (umtReleaseReadiness(await fetchFreshBuildStatus(chunkId))) {
         case "ready":
           requestAction("release", chunkId);
           return;
@@ -241,9 +245,7 @@ export default function UmtPendingReleaseChunksGrid() {
           );
       }
     },
-    // rowStatuses is what decides this, so it has to be a dependency: a stale
-    // capture here would read an old build status as permission to release.
-    [requestAction, rowStatuses, showWarning],
+    [fetchFreshBuildStatus, requestAction, showWarning],
   );
 
   async function handleConfirm() {

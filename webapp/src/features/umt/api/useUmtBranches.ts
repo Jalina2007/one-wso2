@@ -28,6 +28,14 @@ import type {
   UmtUpdateBranch,
 } from "./umtUpdates";
 
+const UMT_BRANCH_POLL_INTERVAL_MS = 5000;
+
+const UMT_BRANCH_SETTLED_STATUSES = new Set(["Completed", "Failed", "Not created"]);
+
+export function isUmtBranchInProgress(branch: UmtUpdateBranch): boolean {
+  return !UMT_BRANCH_SETTLED_STATUSES.has(branch.status ?? "");
+}
+
 export function useUmtBranches(id: string) {
   const { isSignedIn } = useAsgardeo();
   const getAccessToken = useAccessToken();
@@ -39,6 +47,11 @@ export function useUmtBranches(id: string) {
     enabled: /^\d+$/.test(id) && isSignedIn && isUmtBackendConfigured() && Boolean(userSub),
     queryFn: async () =>
       authedGet<UmtUpdateBranch[]>(umtServiceUrls.updateBranches(id), await getAccessToken()),
+    // Branches are created asynchronously by a Jenkins job, so a branch's
+    // status, branch URL and job URL change server-side after the create
+    // request returns. Keep checking until no branch is still in progress.
+    refetchInterval: (query) =>
+      query.state.data?.some(isUmtBranchInProgress) ? UMT_BRANCH_POLL_INTERVAL_MS : false,
     retry: httpRetry,
   });
 
