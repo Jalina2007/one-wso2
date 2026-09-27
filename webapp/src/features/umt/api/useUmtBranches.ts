@@ -27,14 +27,9 @@ import type {
   UmtComponentMaxVersionResponse,
   UmtUpdateBranch,
 } from "./umtUpdates";
+import { isUmtBranchInProgress } from "../lib/umtBranches";
 
 const UMT_BRANCH_POLL_INTERVAL_MS = 5000;
-
-const UMT_BRANCH_SETTLED_STATUSES = new Set(["Completed", "Failed", "Not created"]);
-
-export function isUmtBranchInProgress(branch: UmtUpdateBranch): boolean {
-  return !UMT_BRANCH_SETTLED_STATUSES.has(branch.status ?? "");
-}
 
 export function useUmtBranches(id: string) {
   const { isSignedIn } = useAsgardeo();

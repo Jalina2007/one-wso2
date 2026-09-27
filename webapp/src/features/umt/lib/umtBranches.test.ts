@@ -6,7 +6,7 @@
 // http://www.apache.org/licenses/LICENSE-2.0
 
 import { describe, expect, it } from "vitest";
-import { isUmtBranchInProgress } from "./useUmtBranches";
+import { isUmtBranchInProgress } from "./umtBranches";
 
 describe("isUmtBranchInProgress", () => {
   it("treats Completed, Failed and Not created as settled", () => {
