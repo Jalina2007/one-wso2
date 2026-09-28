@@ -33,6 +33,7 @@ export interface DenseColumn<Row> {
   key: string;
   label: string;
   render: (row: Row, index: number) => ReactNode;
+  width?: number;
 }
 
 export function TableSection({ title, children }: { title: string; children: ReactNode }) {
@@ -81,12 +82,11 @@ export function DenseTable<Row>({
   const gridRows = rows.map((row, index) => ({ id: rowKey(row, index), value: row, index }));
   const gridColumns: DataGrid.GridColDef[] = columns.map((column) => ({
     field: column.key,
-    flex: 1,
+    ...(column.width === undefined
+      ? { flex: 1, minWidth: 160 }
+      : { flex: 0, width: column.width }),
     headerName: hideHeader ? "" : column.label,
-    minWidth: 160,
-    // A single-column table has nothing to resize against, so its header
-    // resize handle only misleads.
-    resizable: columns.length > 1,
+    resizable: false,
     sortable: false,
     renderCell: (params) => (
       <GridCellContent>

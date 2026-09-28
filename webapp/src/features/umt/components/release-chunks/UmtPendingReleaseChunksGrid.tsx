@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -218,8 +218,11 @@ export default function UmtPendingReleaseChunksGrid() {
     dockerMutation.isPending ||
     releaseMutation.isPending;
 
+  const latestActionRequest = useRef(0);
+
   // Stable, so that the column definitions closing over it can be too.
   const requestAction = useCallback((kind: ActionKind, chunkId: number) => {
+    latestActionRequest.current += 1;
     setActionTarget({ kind, chunkId });
   }, []);
 
@@ -230,7 +233,10 @@ export default function UmtPendingReleaseChunksGrid() {
   // umtReleaseReadiness.
   const handleReleaseClick = useCallback(
     async (chunkId: number) => {
-      switch (umtReleaseReadiness(await fetchFreshBuildStatus(chunkId))) {
+      const request = ++latestActionRequest.current;
+      const buildStatus = await fetchFreshBuildStatus(chunkId);
+      if (request !== latestActionRequest.current) return;
+      switch (umtReleaseReadiness(buildStatus)) {
         case "ready":
           requestAction("release", chunkId);
           return;

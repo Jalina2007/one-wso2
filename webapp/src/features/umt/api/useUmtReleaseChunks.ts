@@ -122,12 +122,12 @@ export function useFetchFreshUmtReleaseChunkBuildStatus() {
   return useCallback(
     async (id: number): Promise<UmtReleaseChunkBuildStatus | undefined> => {
       if (!userSub) return undefined;
+      const queryKey = ["umt-release-chunk-build-status", userSub, id];
+      await queryClient.cancelQueries({ queryKey, exact: true });
       try {
-        return await queryClient.fetchQuery({
-          queryKey: ["umt-release-chunk-build-status", userSub, id],
-          queryFn: async () => fetchUmtReleaseChunkBuildStatus(id, await getAccessToken()),
-          staleTime: 0,
-        });
+        const status = await fetchUmtReleaseChunkBuildStatus(id, await getAccessToken());
+        queryClient.setQueryData(queryKey, status);
+        return status;
       } catch {
         return undefined;
       }

@@ -482,12 +482,15 @@ function branchColumn(
   getValue: (row: BranchGridRow) => string | null | undefined = (row) => row[field as keyof BranchGridRow] as string | null | undefined,
   link = false,
 ): DataGrid.GridColDef {
+  // `width` is the column's minimum; any extra room is shared out in
+  // proportion to it, so the grid fills its container rather than leaving
+  // empty space after the last column.
   return {
     field,
     headerName,
+    flex: width,
     minWidth: width,
     sortable: false,
-    width,
     renderCell: (params) => (
       <CenteredCell>{link ? <ExternalValue value={getValue(params.row)} /> : displayValue(getValue(params.row))}</CenteredCell>
     ),

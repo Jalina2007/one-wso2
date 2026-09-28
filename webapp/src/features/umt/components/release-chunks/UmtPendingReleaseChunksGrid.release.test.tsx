@@ -28,6 +28,7 @@ import userEvent from "@testing-library/user-event";
 const state = vi.hoisted(() => ({
   buildStatus: undefined as unknown,
   freshBuildStatus: undefined as unknown,
+  fetchFresh: undefined as undefined | (() => Promise<unknown>),
   showWarning: vi.fn(),
   releaseMutate: vi.fn(async () => undefined),
 }));
@@ -60,7 +61,8 @@ vi.mock("../../api/useUmtReleaseChunks", () => ({
     error: null,
     refetch: () => {},
   }),
-  useFetchFreshUmtReleaseChunkBuildStatus: () => async () => state.freshBuildStatus,
+  useFetchFreshUmtReleaseChunkBuildStatus: () => async () =>
+    state.fetchFresh ? state.fetchFresh() : state.freshBuildStatus,
   useUmtReleaseChunkRowStatuses: () => ({
     42: {
       buildStatusLoading: false,
@@ -109,6 +111,7 @@ describe("UmtPendingReleaseChunksGrid release gate", () => {
   beforeEach(() => {
     state.showWarning.mockClear();
     state.releaseMutate.mockClear();
+    state.fetchFresh = undefined;
   });
 
   it("refuses to release a chunk whose build status could not be fetched", async () => {
@@ -181,5 +184,29 @@ describe("UmtPendingReleaseChunksGrid release gate", () => {
       ),
     );
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("ignores a Release check that finishes after a later click", async () => {
+    // The first click's check is slow and reports a failure; the second
+    // click's check answers first with every level succeeded. Only the
+    // second click may decide.
+    let resolveFirst: (status: unknown) => void = () => {};
+    const responses = [
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }),
+      Promise.resolve({ id: 42, updateIds: [101], updateLevels: [{ buildStatus: "SUCCESS" }] }),
+    ];
+    state.fetchFresh = () => responses.shift() as Promise<unknown>;
+    render(<UmtPendingReleaseChunksGrid />);
+
+    await clickRelease();
+    await clickRelease();
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Proceed and Release");
+
+    resolveFirst({ id: 42, updateIds: [101], updateLevels: [{ buildStatus: "FAILURE" }] });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(state.showWarning).not.toHaveBeenCalled();
   });
 });
