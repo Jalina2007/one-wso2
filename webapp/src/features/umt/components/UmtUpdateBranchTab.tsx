@@ -227,7 +227,7 @@ export default function UmtUpdateBranchTab({
 
   const handleFindUpdateLevel = async () => {
     setUpdateLevelSubmitted(true);
-    if (branchFormError(updateLevelForm)) return;
+    if (updateLevelFormError(updateLevelForm)) return;
     try {
       const response = await findUpdateLevel.mutateAsync(updateLevelForm);
       setIdentifiedVersion(displayValue(response?.version));
@@ -553,7 +553,7 @@ function UpdateLevelDialog({
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {fields.map(({ key, label, placeholder }) => {
-              const requiredError = submitted && (key === "releaseTag" || key === "publicRepoUrl") && !form[key].trim();
+              const requiredError = submitted && !form[key].trim();
               const repoError = key === "publicRepoUrl" && submitted
                 ? publicRepoError(form.publicRepoUrl)
                 : undefined;
@@ -614,6 +614,11 @@ function branchRowId(branch: UmtUpdateBranch, index: number): string {
 
 function branchFormError(values: BranchFormValues): boolean {
   return Boolean(publicRepoError(values.publicRepoUrl) || !values.releaseTag.trim());
+}
+
+// Finding an update level needs the product as well as the repository.
+function updateLevelFormError(values: UpdateLevelFormValues): boolean {
+  return branchFormError(values) || !values.productName.trim() || !values.productVersion.trim();
 }
 
 function publicRepoError(value: string): string | undefined {

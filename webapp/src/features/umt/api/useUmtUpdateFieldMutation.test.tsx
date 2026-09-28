@@ -22,6 +22,7 @@ vi.mock("@api/http", async () => {
 });
 
 const { useUmtUpdateFieldMutation } = await import("./useUmtUpdateFieldMutation");
+const { umtServiceUrls } = await import("@config/apiConfig");
 
 function renderMutation() {
   const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
@@ -48,6 +49,29 @@ afterEach(() => {
 });
 
 describe("useUmtUpdateFieldMutation", () => {
+  it("sends the reason with an ETA change", async () => {
+    const { result } = renderMutation();
+
+    await act(async () => {
+      await result.current.mutateAsync({ field: "worstCaseEstimate", value: "2026-10-01", reason: "Blocked on a fix" });
+    });
+
+    expect(authedPut).toHaveBeenCalledWith(umtServiceUrls.updateWorstCaseEstimate("101"), "token", {
+      worstCaseEstimate: "2026-10-01",
+      reason: "Blocked on a fix",
+    });
+  });
+
+  it("sends only the changed field for other edits", async () => {
+    const { result } = renderMutation();
+
+    await act(async () => {
+      await result.current.mutateAsync({ field: "assignedTo", value: "someone" });
+    });
+
+    expect(authedPut).toHaveBeenCalledWith(umtServiceUrls.update("101"), "token", { assignedTo: "someone" });
+  });
+
   it("invalidates the ETA log after an ETA change", async () => {
     const { result, invalidateQueries } = renderMutation();
 

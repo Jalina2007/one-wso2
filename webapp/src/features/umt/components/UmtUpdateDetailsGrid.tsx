@@ -285,6 +285,7 @@ function EditableWorstCaseDate({
   const [editing, setEditing] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [draft, setDraft] = useState<Date | null>(() => parseDate(value));
+  const [reason, setReason] = useState(UMT_DEFAULT_ETA_REASON);
   const etaLog = useUmtWorstCaseEstimateLog(id, logOpen);
 
   // Same reasoning as EditableUserField above.
@@ -299,6 +300,7 @@ function EditableWorstCaseDate({
 
   const cancel = () => {
     setDraft(parseDate(value));
+    setReason(UMT_DEFAULT_ETA_REASON);
     setEditing(false);
   };
 
@@ -312,9 +314,10 @@ function EditableWorstCaseDate({
   };
 
   const save = async () => {
-    if (!isSelectableDate(draft)) return;
+    if (!isSelectableDate(draft) || !reason.trim()) return;
     try {
-      await onSave({ field: "worstCaseEstimate", value: toDateInputValue(draft) });
+      await onSave({ field: "worstCaseEstimate", value: toDateInputValue(draft), reason: reason.trim() });
+      setReason(UMT_DEFAULT_ETA_REASON);
       setEditing(false);
     } catch {
       // The page-level notification explains the backend error. Keep the
@@ -343,6 +346,7 @@ function EditableWorstCaseDate({
                     size="small"
                     onClick={() => {
                       setDraft(parseDate(value));
+                      setReason(UMT_DEFAULT_ETA_REASON);
                       setEditing(true);
                     }}
                   >
@@ -374,10 +378,21 @@ function EditableWorstCaseDate({
               slotProps={{ textField: { required: true, size: "small" } }}
             />
           </LocalizationProvider>
+          <TextField
+            label="Reason for extending ETA"
+            multiline
+            required
+            rows={3}
+            size="small"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            error={!reason.trim()}
+            helperText={!reason.trim() ? "A reason is required" : undefined}
+          />
           <EditActions
             label={label}
             saving={saving}
-            saveDisabled={!isSelectableDate(draft)}
+            saveDisabled={!isSelectableDate(draft) || !reason.trim()}
             onCancel={cancel}
             onSave={() => void save()}
           />
@@ -480,7 +495,11 @@ function etaLogColumn(
 }
 
 function EtaLogEmptyState() {
-  return <Typography color="text.secondary">No ETA changes recorded.</Typography>;
+  return (
+    <Stack sx={{ alignItems: "center", color: "text.secondary", height: "100%", justifyContent: "center", py: 3 }}>
+      <Typography variant="body2">No ETA changes recorded.</Typography>
+    </Stack>
+  );
 }
 
 const etaLogGridSx = { border: 0, minHeight: 100 } as const;
@@ -603,6 +622,10 @@ function toDateInputValue(date: Date): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+// Pre-filled so the common case needs no typing; it is recorded in the ETA log.
+const UMT_DEFAULT_ETA_REASON =
+  "This update has been delayed due to unforeseen circumstances. Please find the new ETA below. Sorry for the inconvenience caused.";
 
 // UMT releases on Thursdays; Date.getDay() numbers Sunday 0..Saturday 6.
 const UMT_RELEASE_WEEKDAY = 4;
