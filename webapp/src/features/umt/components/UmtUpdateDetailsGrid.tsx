@@ -42,6 +42,7 @@ import type { UmtUpdateSummary, UmtWorstCaseEstimateLogEntry } from "../api/umtU
 import type { UmtUpdateFieldChange } from "../api/useUmtUpdateFieldMutation";
 import { useUmtWorstCaseEstimateLog } from "../api/useUmtWorstCaseEstimateLog";
 import { formatCalendarDate, formatTimestamp } from "../lib/umtDates";
+import { renderLinkValue } from "./umtViewSectionPrimitives";
 
 const { DatePicker, LocalizationProvider } = DatePickers;
 const { DataGrid: DataGridComponent } = DataGrid;
@@ -148,11 +149,11 @@ export default function UmtUpdateDetailsGrid({
           loading={loading}
           value={update?.highlightInstructions}
         />
-        <UpdateField
-          label="QA Artifacts Location"
-          loading={loading}
-          value={update?.qaArtifactsLocation}
-        />
+        <UpdateField label="QA Artifacts Location" loading={loading}>
+          <Typography variant="body1" sx={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+            {renderLinkValue(update?.qaArtifactsLocation)}
+          </Typography>
+        </UpdateField>
       </Grid>
     </Stack>
   );
@@ -367,7 +368,7 @@ function EditableWorstCaseDate({
           )}
         </>
       ) : (
-        <Stack spacing={1}>
+        <Stack spacing={2} useFlexGap>
           <LocalizationProvider dateAdapter={AdapterDateFns}>
             <DatePicker
               label={label}
@@ -426,7 +427,7 @@ function EtaLogDialog({
   onRetry: () => void;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
       <DialogTitle>ETA Log</DialogTitle>
       <DialogContent>
         {loading ? (
@@ -472,6 +473,7 @@ const etaLogColumns: DataGrid.GridColDef[] = [
   etaLogColumn("newDate", "New Date", 140, formatCalendarDate),
   etaLogColumn("timestamp", "Updated Timestamp", 200, formatTimestamp),
   etaLogColumn("changedBy", "Changed By", 180, displayValue),
+  etaLogColumn("reason", "Reason", 260, displayValue, 2),
 ];
 
 function etaLogColumn(
@@ -479,10 +481,11 @@ function etaLogColumn(
   headerName: string,
   minWidth: number,
   format: (value: string | null | undefined) => string,
+  flex = 1,
 ): DataGrid.GridColDef {
   return {
     field,
-    flex: 1,
+    flex,
     headerName,
     minWidth,
     sortable: false,
@@ -502,7 +505,12 @@ function EtaLogEmptyState() {
   );
 }
 
-const etaLogGridSx = { border: 0, minHeight: 100 } as const;
+// Reasons are free text, so cells wrap instead of clipping with an ellipsis.
+const etaLogGridSx = {
+  border: 0,
+  minHeight: 100,
+  "& .MuiDataGrid-cell": { overflowWrap: "anywhere", whiteSpace: "normal" },
+} as const;
 
 function EditActions({
   label,
