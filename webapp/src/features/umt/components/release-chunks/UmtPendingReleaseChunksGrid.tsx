@@ -770,41 +770,17 @@ function ProductBuildRetriggerButton({
   chunkId: number;
   level: UmtReleaseChunkUpdateLevel;
 }) {
-  const { showSuccess, showError } = useNotifications();
   const trigger = useUmtTriggerProductBuild(chunkId);
-  // Still a line, even with nothing to offer: the levels below it have to
-  // stay on the same rows as their names and statuses in the columns beside.
-  if (!umtCanRetriggerBuild(level.buildStatus)) {
-    return <ChunkLine />;
-  }
   return (
-    <ChunkLine>
-      <Tooltip title="Retrigger Job">
-        <IconButton
-          size="small"
-          aria-label="Retrigger Job"
-          disabled={trigger.isPending}
-          onClick={async () => {
-            try {
-              await trigger.mutateAsync({
-                productName: level.productName ?? "",
-                productVersion: level.productVersion ?? "",
-                channel: "full",
-              });
-              showSuccess("Build triggered successfully!");
-            } catch (error) {
-              showError(describeError(error));
-            }
-          }}
-        >
-          {trigger.isPending ? (
-            <CircularProgress size={16} />
-          ) : (
-            <RotateCwIcon size={16} />
-          )}
-        </IconButton>
-      </Tooltip>
-    </ChunkLine>
+    <LevelBuildRetriggerButton
+      label="Retrigger Job"
+      title="Retrigger Build"
+      successMessage="Build triggered successfully!"
+      canRetrigger={umtCanRetriggerBuild(level.buildStatus)}
+      chunkId={chunkId}
+      level={level}
+      trigger={trigger}
+    />
   );
 }
 
@@ -817,30 +793,70 @@ function TgBuildRetriggerButton({
   level: UmtReleaseChunkUpdateLevel;
   status?: string | null;
 }) {
-  const { showSuccess, showError } = useNotifications();
   const trigger = useUmtTriggerTgBuild(chunkId);
-  if (!umtCanRetriggerBuild(status)) {
+  return (
+    <LevelBuildRetriggerButton
+      label="Retrigger TG Job"
+      title="Retrigger TG Build"
+      successMessage="TG build triggered successfully!"
+      canRetrigger={umtCanRetriggerBuild(status)}
+      chunkId={chunkId}
+      level={level}
+      trigger={trigger}
+    />
+  );
+}
+
+// A retrigger for one update level. Like every other build action on this
+// screen it starts a job outside the app, so it asks first.
+function LevelBuildRetriggerButton({
+  label,
+  title,
+  successMessage,
+  canRetrigger,
+  chunkId,
+  level,
+  trigger,
+}: {
+  label: string;
+  title: string;
+  successMessage: string;
+  canRetrigger: boolean;
+  chunkId: number;
+  level: UmtReleaseChunkUpdateLevel;
+  trigger: ReturnType<typeof useUmtTriggerProductBuild>;
+}) {
+  const { showSuccess, showError } = useNotifications();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // Still a line, even with nothing to offer: the levels below it have to
+  // stay on the same rows as their names and statuses in the columns beside.
+  if (!canRetrigger) {
     return <ChunkLine />;
   }
+  const levelName = `${level.productName ?? "N/A"} ${level.productVersion ?? ""}`.trim();
+
+  async function handleConfirm() {
+    try {
+      await trigger.mutateAsync({
+        productName: level.productName ?? "",
+        productVersion: level.productVersion ?? "",
+        channel: "full",
+      });
+      setConfirmOpen(false);
+      showSuccess(successMessage);
+    } catch (error) {
+      showError(describeError(error));
+    }
+  }
+
   return (
     <ChunkLine>
-      <Tooltip title="Retrigger TG Job">
+      <Tooltip title={label}>
         <IconButton
           size="small"
-          aria-label="Retrigger TG Job"
+          aria-label={label}
           disabled={trigger.isPending}
-          onClick={async () => {
-            try {
-              await trigger.mutateAsync({
-                productName: level.productName ?? "",
-                productVersion: level.productVersion ?? "",
-                channel: "full",
-              });
-              showSuccess("TG build triggered successfully!");
-            } catch (error) {
-              showError(describeError(error));
-            }
-          }}
+          onClick={() => setConfirmOpen(true)}
         >
           {trigger.isPending ? (
             <CircularProgress size={16} />
@@ -849,6 +865,15 @@ function TgBuildRetriggerButton({
           )}
         </IconButton>
       </Tooltip>
+      <UmtReleaseChunkConfirmDialog
+        open={confirmOpen}
+        title={title}
+        message={`Are you sure you want to retrigger the build for ${levelName} in release chunk ID: ${chunkId}?`}
+        confirmLabel="Confirm"
+        busy={trigger.isPending}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void handleConfirm()}
+      />
     </ChunkLine>
   );
 }
