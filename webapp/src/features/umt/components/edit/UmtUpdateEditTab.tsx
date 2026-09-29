@@ -140,8 +140,16 @@ export default function UmtUpdateEditTab({
   // has no working transition in this pass, so Proceed stays disabled for
   // all of them uniformly.
   const verifyingReady = !isVerifying || update.lifecycleState === "Released";
+  // A security update can't reach UAT without an advisory, so Next waits for
+  // at least one saved advisory rather than letting the gap surface later.
+  const securityAdvisoryReady = !isSecurityAdvisory || (update.securityAdvisories?.length ?? 0) > 0;
   const stepReady =
-    productAnalysisReady && descriptionInstructionReady && integrationTestsReady && testingReady && verifyingReady;
+    productAnalysisReady &&
+    descriptionInstructionReady &&
+    integrationTestsReady &&
+    securityAdvisoryReady &&
+    testingReady &&
+    verifyingReady;
   // File Approval, Cloud Support's Development step, Product Analysis,
   // Description and Instruction, and Integration Tests are wired
   // (currentStep.proceedWired); every other step's Proceed is a stub. Cloud
