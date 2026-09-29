@@ -167,6 +167,7 @@ export default function UmtUpdateEditTab({
     update.lifecycleState,
     update.isHotfix ?? false,
     gate.isAdmin,
+    update.demoteStages,
   );
   const handleDemote = async (target: string) => {
     try {

@@ -33,6 +33,7 @@ import {
 } from "@wso2/oxygen-ui";
 import { AlertTriangle, CheckCircle, PlusIcon, TrashIcon } from "@wso2/oxygen-ui-icons-react";
 import { describeError } from "@api/errors";
+import { HttpError } from "@api/http";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import type { UmtSecurityAdvisory, UmtUpdateSummary } from "../../../api/umtUpdates";
@@ -82,6 +83,14 @@ export default function UmtSecurityAdvisoryStep({ id, update }: { id: string; up
   const debouncedName = useDebouncedValue(trimmedName, 500);
   const formatValid = umtSecurityAdvisoryFormatValid(debouncedName);
   const validation = useUmtValidateSecurityAdvisory(debouncedName, formatValid);
+  // A failed check (other than not-found) says nothing about the advisory
+  // itself, so it is offered again rather than left looking like a verdict.
+  const canRetryValidation =
+    formatValid &&
+    trimmedName === debouncedName &&
+    validation.isError &&
+    !validation.isFetching &&
+    !(validation.error instanceof HttpError && validation.error.status === 404);
   // Require the live input to still match what was validated — otherwise,
   // during the debounce window after further typing, Add stays enabled on a
   // stale validation and would insert the old debouncedName instead of what
@@ -196,7 +205,13 @@ export default function UmtSecurityAdvisoryStep({ id, update }: { id: string; up
               onChange={(event) => setAdvisoryName(event.target.value)}
               fullWidth
               error={Boolean(debouncedName) && !isAdvisoryValid && !validation.isFetching}
-              helperText={advisoryStatusMessage(debouncedName, formatValid, validation.isFetching, validation.data)}
+              helperText={advisoryStatusMessage(
+                debouncedName,
+                formatValid,
+                validation.isFetching,
+                validation.data,
+                validation.error,
+              )}
               slotProps={{
                 input: {
                   endAdornment: (
@@ -213,6 +228,13 @@ export default function UmtSecurityAdvisoryStep({ id, update }: { id: string; up
                 },
               }}
             />
+            {canRetryValidation && (
+              <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
+                <Button size="small" onClick={() => void validation.refetch()}>
+                  Retry
+                </Button>
+              </Stack>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -257,13 +279,17 @@ function advisoryStatusMessage(
   formatValid: boolean,
   isFetching: boolean,
   data: { valid?: boolean; state?: string | null; message?: string | null } | undefined,
+  error: Error | null,
 ): string {
   if (!debouncedName) return "Expected format: WSO2-YYYY-NNNN";
   if (!formatValid) return "Expected: WSO2-YYYY-NNNN";
   if (isFetching) return "Validating…";
   if (data?.valid === true) return `Valid: State is ${data.state ?? "Not Available"}`;
   if (data) return `Invalid: ${data.message ?? "Advisory not found"}`;
-  return "Expected: WSO2-YYYY-NNNN";
+  // The backend answers an unknown advisory with a 404 rather than a result.
+  if (error instanceof HttpError && error.status === 404) return "Invalid: Advisory not found";
+  // The format is fine, but the check itself failed or could not run.
+  return "Couldn't verify this advisory.";
 }
 
 function CellCenter({ children }: { children: ReactNode }) {
