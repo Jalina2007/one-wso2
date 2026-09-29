@@ -15,14 +15,18 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Alert, Box, Chip, Typography } from "@wso2/oxygen-ui";
-import { TreePalmIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Typography } from "@wso2/oxygen-ui";
 import { isLeaveBackendConfigured } from "@config/apiConfig";
 
-// Shared page frame for the four Leave screens: the "Leave" eyebrow, a
-// title + subtitle, and a single place that renders the "backend not
-// configured" state so every screen behaves the same when
-// ONE_WSO2_LEAVE_BACKEND_URL isn't set.
+// Shared page frame for the four Leave screens: a real title + subtitle, and
+// a single place that renders the "backend not configured" state so every
+// screen behaves the same when ONE_WSO2_LEAVE_BACKEND_URL isn't set.
+//
+// No eyebrow chip above the title. Leave is a single rail entry, not a
+// screen reached through a rail submenu (Finance, People Ops), so there is
+// no app name to disambiguate — same reasoning as EmailGroupsShell /
+// OrgChartShell. `title` is always "Leave" itself now; which tab you're on
+// is what the tab bar below already says.
 export default function LeaveShell({
   title,
   subtitle,
@@ -35,15 +39,7 @@ export default function LeaveShell({
   const configured = isLeaveBackendConfigured();
   return (
     <Box>
-      <Chip
-        icon={<TreePalmIcon size={14} />}
-        label="Leave"
-        color="primary"
-        size="small"
-        variant="outlined"
-        sx={{ mb: 0.5 }}
-      />
-      <Typography variant="h5" sx={{ mb: 0.5 }}>
+      <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
         {title}
       </Typography>
       {subtitle && (

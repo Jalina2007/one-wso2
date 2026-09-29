@@ -20,7 +20,9 @@
 import { csmUrl, isCsmConfigured, isIsacConfigured, isacUrl } from "@config/apiConfig";
 import { isPreviewEnabled } from "@config/previewFeatures";
 import {
+  AwardIcon,
   Box as BoxIcon,
+  BarChart3,
   CheckCheckIcon,
   ClipboardCheckIcon,
   DatabaseIcon,
@@ -57,6 +59,7 @@ import { DUE_DILIGENCE_APPS } from "@constants/dueDiligenceApps";
 import { SECURITY_APPS } from "@constants/securityApps";
 import { ME_APPS } from "@constants/meApps";
 import { ME_PAR_APPS } from "@constants/parApps";
+import { ME_PROMOTION_APPS } from "@constants/promotionApps";
 import { INFRA_APPS } from "@constants/infraApps";
 
 export interface PerspectiveSection {
@@ -185,6 +188,80 @@ export const PEOPLE_OPS_SECTIONS: PerspectiveSection[] = [
       },
     ],
   },
+  // promotion-app's Lead Portal ("Time Based Promotions") — reviewing and
+  // deciding on other people's promotions is People-Ops-team work, the same
+  // split PAR's own Lead/Admin portals above already apply. See
+  // docs/ported-apps/promotion-app.md. Gated via PROMOTION_LEAD_PORTAL_ITEM_ID
+  // below, not `requires` — promotion-app's own Role.LEAD (read back from its
+  // GET /employee-privileges) bears no fixed relationship to people-app's
+  // generic "lead" capability `requires` would otherwise gate on.
+  //
+  // The whole group is additionally held behind a preview flag until
+  // promotion-app is ready for production (same flag as the Me → Promotion
+  // item above and every /people-ops/promotion/* route in App.tsx) — with
+  // the flag off, this group doesn't exist, so there's nothing here for
+  // resolveVisible's own PROMOTION_*_ITEM_ID checks to ever be asked about.
+  ...(isPreviewEnabled("promotion")
+    ? [
+        {
+          id: "people-promotion",
+          label: "Promotion",
+          icon: AwardIcon,
+          children: [
+            {
+              id: "promotion-lead-portal",
+              label: "Lead View",
+              path: "/people-ops/promotion/lead",
+            },
+            // A separate Lead-role screen from Lead View above (source's own
+            // /lead-employee-history route, distinct from /time-based-promotions)
+            // — same Role.LEAD gate, same PROMOTION_LEAD_PORTAL_ITEM_ID-style
+            // treatment, its own id (PROMOTION_TEAM_HISTORY_ITEM_ID below).
+            {
+              id: "promotion-team-history",
+              label: "Team Promotion History",
+              path: "/people-ops/promotion/team-history",
+            },
+            // A different role gate from the two above (Role.FUNCTIONAL_LEAD,
+            // not Role.LEAD) — its own id (PROMOTION_FUNCTIONAL_LEAD_PORTAL_ITEM_ID
+            // below), same presentation-only treatment.
+            {
+              id: "promotion-functional-lead-portal",
+              label: "Functional Lead Portal",
+              path: "/people-ops/promotion/functional-lead",
+            },
+            // A third role gate (Role.PROMOTION_BOARD_MEMBER, not Role.LEAD or
+            // Role.FUNCTIONAL_LEAD) — its own id
+            // (PROMOTION_BOARD_PORTAL_ITEM_ID below), same presentation-only
+            // treatment.
+            {
+              id: "promotion-board-portal",
+              label: "Promotion Board Portal",
+              path: "/people-ops/promotion/board",
+            },
+            // A fourth role gate (Role.HR_ADMIN) — its own id
+            // (PROMOTION_ADMIN_PORTAL_ITEM_ID below), same presentation-only
+            // treatment. Not people-app's generic "admin" capability — see the
+            // same reasoning the other three children's own comments give.
+            {
+              id: "promotion-admin-portal",
+              label: "Admin Portal",
+              path: "/people-ops/promotion/admin",
+            },
+            // The one screen two different role gates both reach directly —
+            // Role.HR_ADMIN OR Role.FUNCTIONAL_LEAD (unlike every child above,
+            // gated on exactly one role each). Its own id
+            // (PROMOTION_CYCLE_HISTORY_ITEM_ID below), same presentation-only
+            // treatment.
+            {
+              id: "promotion-cycle-history",
+              label: "Promotion Cycle History",
+              path: "/people-ops/promotion/cycle-history",
+            },
+          ],
+        },
+      ]
+    : []),
   {
     id: "people-active-employee-report",
     label: "Active Employees",
@@ -279,6 +356,31 @@ export const PAR_LEAD_PORTAL_ITEM_ID = "par-lead-portal";
 /** Same idea, for the Admin Portal — gated via useParIsAdmin. */
 export const PAR_ADMIN_PORTAL_ITEM_ID = "par-admin-portal";
 
+/**
+ * promotion-app's Lead Portal rail id — gated via usePromotionPrivileges
+ * (its own Role.LEAD), same reasoning as PAR_LEAD_PORTAL_ITEM_ID above.
+ */
+export const PROMOTION_LEAD_PORTAL_ITEM_ID = "promotion-lead-portal";
+
+/** Team Promotion History — a separate screen, same Role.LEAD gate. */
+export const PROMOTION_TEAM_HISTORY_ITEM_ID = "promotion-team-history";
+
+/** Functional Lead Portal — gated via usePromotionPrivileges' own
+ * isFunctionalLead, distinct from the Role.LEAD gate the two ids above use. */
+export const PROMOTION_FUNCTIONAL_LEAD_PORTAL_ITEM_ID = "promotion-functional-lead-portal";
+
+/** Promotion Board Portal — gated via usePromotionPrivileges' own
+ * isPromotionBoardMember, distinct from the two gates above. */
+export const PROMOTION_BOARD_PORTAL_ITEM_ID = "promotion-board-portal";
+
+/** Admin Portal — gated via usePromotionPrivileges' own isHrAdmin, distinct
+ * from every gate above. */
+export const PROMOTION_ADMIN_PORTAL_ITEM_ID = "promotion-admin-portal";
+
+/** Promotion Cycle History — gated via isHrAdmin OR isFunctionalLead,
+ * the only two-role gate among the Promotion section's children. */
+export const PROMOTION_CYCLE_HISTORY_ITEM_ID = "promotion-cycle-history";
+
 // Marketing Ops. Built from the registry now so the rail is ready, but the
 // perspective itself stays locked (`access: false` below) until Phase 1
 // (Utilities) lands — see "My Findings Marketing Ops.md" in the repo root.
@@ -333,6 +435,11 @@ const ME_SECTIONS: PerspectiveSection[] = [
   ...appsToSections(ME_FINANCE_APPS),
   // par-app's employee portal — see docs/ported-apps/par-app.md.
   ...appsToSections(ME_PAR_APPS),
+  // promotion-app's employee portal — see docs/ported-apps/promotion-app.md.
+  // Held behind a preview flag until the whole app (this item plus the
+  // "Promotion" group under People Ops) is ready for production — see
+  // isPreviewEnabled's own call in PEOPLE_OPS_SECTIONS below and in App.tsx.
+  ...(isPreviewEnabled("promotion") ? appsToSections(ME_PROMOTION_APPS) : []),
 ];
 
 const UMT_SECTIONS: PerspectiveSection[] = [
@@ -343,6 +450,7 @@ const UMT_SECTIONS: PerspectiveSection[] = [
   // items are (see the comment above SUBSCRIPTION_ITEM_IDS).
   { id: "umt-products", label: "Product Management", icon: BoxIcon, path: "/umt/products" },
   { id: "umt-release-chunks", label: "Release Chunks", icon: LucideLayoutGrid, path: "/umt/release-chunks" },
+  { id: "umt-statistics", label: "Statistics", icon: BarChart3, path: "/umt/statistics" },
 ];
 
 
@@ -372,6 +480,14 @@ const SALES_SECTIONS: PerspectiveSection[] = [
     path: "/sales",
   },
 ];
+
+/**
+ * Sales rail ids, which the rail must route through useSalesRailGate rather than `requires`
+ * -- the same shape as SECURITY_ITEM_IDS. Access is decided by the meet-app backend's own
+ * groups, so the only way to know a caller has none is its 403; until this gate existed the
+ * Meetings row stayed in the rail beside a "Nothing here for you yet" card.
+ */
+export const SALES_ITEM_IDS: ReadonlySet<string> = new Set(SALES_SECTIONS.map((s) => s.id));
 
 export interface PerspectiveDef {
   key: string;

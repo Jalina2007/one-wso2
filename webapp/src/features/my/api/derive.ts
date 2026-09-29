@@ -15,9 +15,9 @@
 // under the License.
 
 import type {
+  AccountType,
   Employee,
   EmployeePersonalInfo,
-  PromotionHistoryEntry,
   UserInfo,
 } from "./types";
 
@@ -26,6 +26,15 @@ import type {
 // one place instead of being sprinkled across components.
 
 export const DASH = "—";
+
+// One shared label per Account Type — the card, the panel, and the
+// edit/add dialog all name the same three types and previously each kept
+// their own byte-identical copy of this map.
+export const ACCOUNT_TYPE_LABEL: Record<AccountType, string> = {
+  SALARY: "Salary",
+  CONSULTANCY: "Consultancy",
+  REIMBURSEMENT: "Reimbursement",
+};
 
 export function display(v: string | number | null | undefined): string {
   if (v === null || v === undefined) return DASH;
@@ -131,42 +140,6 @@ export function ageFromDob(dob: string | null | undefined, now: Date = new Date(
 export function formatDate(v: string | null | undefined): string {
   if (!v) return DASH;
   return v.length > 10 ? v.slice(0, 10) : v;
-}
-
-// Approved promotion requests, newest first. Job band only ever moves up,
-// so `nextJobBand` — not a timestamp — is what orders a promotion history:
-// the highest band an employee reached is by definition their latest
-// promotion. `updatedOn` would be the obvious sort key but it tracks the
-// last edit to the row, so an admin correcting a 2021 record would drag it
-// to the top of the list.
-//
-// `id` breaks ties descending, keeping the order stable if two approved
-// rows ever share a band.
-export function sortPromotionsByBand(
-  list: PromotionHistoryEntry[],
-): PromotionHistoryEntry[] {
-  return [...list].sort((a, b) => {
-    if (b.nextJobBand !== a.nextJobBand) return b.nextJobBand - a.nextJobBand;
-    return b.id - a.id;
-  });
-}
-
-// The single most recent promotion, or null when nothing is approved yet.
-export function latestPromotion(
-  list: PromotionHistoryEntry[] | undefined,
-): PromotionHistoryEntry | null {
-  if (!list || list.length === 0) return null;
-  return sortPromotionsByBand(list)[0];
-}
-
-// One-line summary for the profile card: cycle plus the band jump, e.g.
-// "2023-H2 · JB 5 → 6". Deliberately not a date — /promotion/requests
-// exposes only createdOn/updatedOn, neither of which is the date the
-// promotion took effect, so naming the cycle states what the backend
-// actually knows. See docs note in PromotionHistoryDialog for the
-// promotedDate field that would let this show a real date.
-export function promotionSummary(entry: PromotionHistoryEntry): string {
-  return `${entry.promotionCycle} · JB ${entry.currentJobBand} \u2192 ${entry.nextJobBand}`;
 }
 
 // Not every UI surface needs the whole EmployeePersonalInfo. This picks

@@ -14,18 +14,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-/**
- * Where the OPD Claims app lives under the Finance perspective.
- *
- * Named here rather than written out in the registry and the router
- * separately: those two disagreeing is a 404 nobody notices until someone
- * clicks the menu item.
- *
- * Distinct from the OPD tab under Me → Claims, which is a different screen on
- * a different route and is left alone.
- */
-export const OPD_FINANCE_PATH = "/finance/opd";
+import type { RoutedTabDef } from "@components/routed-tabs/RoutedTabs";
 
-export const opdFinancePaths = {
-  dashboard: `${OPD_FINANCE_PATH}/dashboard`,
-} as const;
+// Each tab is a real route (not folded into BankingPage itself), so a
+// further tab — e.g. an admin-facing one — is a new entry here plus its own
+// route in App.tsx, without reshaping this page: the same
+// additive-not-reshape treatment Claim Approval's tabs already get.
+export const BANKING_PATH = "/me/banking";
+
+export const BANKING_TABS: readonly RoutedTabDef[] = [
+  { segment: "my-accounts", label: "My Accounts" },
+  { segment: "summary", label: "Summary" },
+] as const;

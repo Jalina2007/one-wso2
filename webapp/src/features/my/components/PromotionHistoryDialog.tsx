@@ -29,9 +29,10 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { humanizeHttpError } from "@api/http";
-import type { PromotionHistoryEntry, PromotionType } from "../api/types";
-import { formatDate, sortPromotionsByBand } from "../api/derive";
-import { usePromotionHistory } from "../api/usePromotionHistory";
+import type { PromotionHistoryEntry, PromotionType } from "@features/promotion/api/types";
+import { sortPromotionsByBand } from "@features/promotion/util/promotionHistory";
+import { usePromotionHistory } from "@features/promotion/api/usePromotionHistory";
+import { formatDate } from "../api/derive";
 
 // "View promotion history" popup. Fetches on open only (query gated by
 // `open` prop). Renders each approved promotion request as a timeline

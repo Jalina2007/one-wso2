@@ -55,7 +55,7 @@ function renderHome(g: Partial<InfraGate> = {}) {
   gate.value = { ...AUTHORIZED, ...g };
   return render(
     <MemoryRouter>
-      <InfraHomePage />
+    <InfraHomePage />
     </MemoryRouter>,
   );
 }
@@ -68,9 +68,11 @@ describe("InfraHomePage", () => {
   it("lists every registry item as not here yet, with scroll ids for the rail", () => {
     renderHome();
 
-    expect(screen.getByRole("heading", { name: "Infra Portal" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^Open /i })).not.toBeInTheDocument();
-    expect(screen.getAllByText("Not here yet").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Open new repository" })).toHaveAttribute(
+      "href",
+      "/infra/github/repository-requests",
+    );
+    expect(screen.getAllByText("Not here yet")).toHaveLength(6);
 
     for (const [id, label] of Object.entries(ITEM_LABELS)) {
       const el = document.getElementById(id);
@@ -81,16 +83,16 @@ describe("InfraHomePage", () => {
 
   it("hides items the gate refuses, including their scroll ids", () => {
     renderHome({
-      canSee: (id) => id === "infra-github-review-requests",
-    });
+    canSee: (id) => id === "infra-github-review-requests",
+  });
 
-    expect(document.getElementById("infra-github-review-requests")).not.toBeNull();
-    expect(screen.getByText("Review Requests")).toBeInTheDocument();
-    expect(screen.getByText("Not here yet")).toBeInTheDocument();
+  expect(document.getElementById("infra-github-review-requests")).not.toBeNull();
+  expect(screen.getByText("Review Requests")).toBeInTheDocument();
+  expect(screen.getByText("Not here yet")).toBeInTheDocument();
 
-    expect(screen.queryByText("New Repository")).not.toBeInTheDocument();
-    expect(screen.queryByText("GitHub Settings")).not.toBeInTheDocument();
-    expect(document.getElementById("infra-github-new-repository")).toBeNull();
-    expect(document.getElementById("infra-github-settings")).toBeNull();
+  expect(screen.queryByText("New Repository")).not.toBeInTheDocument();
+  expect(screen.queryByText("GitHub Settings")).not.toBeInTheDocument();
+  expect(document.getElementById("infra-github-new-repository")).toBeNull();
+  expect(document.getElementById("infra-github-settings")).toBeNull();
   });
 });

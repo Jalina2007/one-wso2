@@ -98,7 +98,6 @@ describe("the Claim approval entry", () => {
 describe("what stayed behind", () => {
   it("leaves the per-user views open", () => {
     expect(gate().canSee("claims")).toBe(true);
-    expect(gate().canSee("cc-history")).toBe(true);
   });
 
   // The approval ids are gone from the registry — Lead/Finance Approvals were
@@ -148,21 +147,55 @@ describe("the cc-approve item", () => {
   });
 });
 
-// The Overview group shipped out of preview. Its two dashboard tiles are
-// still gated differently: Credit Card Expenses has no backend role of its
-// own — it is everyone's own numbers — so it is always open. OPD Claims
-// keeps its own backend role.
-describe("the Finance Overview dashboards", () => {
-  it("always allows the credit card dashboard", () => {
-    expect(gate().canSee("cc-dashboard")).toBe(true);
+// The Overview group shipped out of preview, and is one rail entry now
+// rather than two — a single `finance-overview` id fronting both dashboards,
+// tab-switched inside FinanceOverviewPage. Hidden entirely when neither tab
+// would have anything to show: no card of the reader's own (or a CC
+// lead/finance role, reading for a team or the company) and no OPD
+// finance-approver role.
+describe("the Finance Overview entry", () => {
+  it("is hidden with no card and no OPD role", () => {
+    expect(gate().canSee("finance-overview")).toBe(false);
   });
 
-  it("refuses the OPD dashboard without the role", () => {
-    expect(gate().canSee("opd-dashboard")).toBe(false);
+  it("opens for a card owner", () => {
+    roles.cc = ["cc_owner"];
+    expect(gate().canSee("finance-overview")).toBe(true);
   });
 
-  it("allows the OPD dashboard when the role is held", () => {
+  it("opens for a CC lead or finance role, even with no card of their own", () => {
+    roles.cc = ["lead"];
+    expect(gate().canSee("finance-overview")).toBe(true);
+  });
+
+  it("opens for the OPD finance-approver role alone", () => {
     roles.opd = [555];
-    expect(gate().canSee("opd-dashboard")).toBe(true);
+    expect(gate().canSee("finance-overview")).toBe(true);
+  });
+});
+
+// Pending Submissions, Pending Approvals and History are each the reader's
+// OWN transactions — nothing there without a card, so all three are hidden
+// alike, and a lead/finance role (reading a team's or the company's) earns
+// them the same way it earns Overview's Credit Card tab.
+describe("Credit Card Expenses' submitter-facing items", () => {
+  it("hides all three with no card and no CC role", () => {
+    expect(gate().canSee("cc-new")).toBe(false);
+    expect(gate().canSee("cc-pending")).toBe(false);
+    expect(gate().canSee("cc-history")).toBe(false);
+  });
+
+  it("opens all three for a card owner", () => {
+    roles.cc = ["cc_owner"];
+    expect(gate().canSee("cc-new")).toBe(true);
+    expect(gate().canSee("cc-pending")).toBe(true);
+    expect(gate().canSee("cc-history")).toBe(true);
+  });
+
+  it("opens all three for a CC lead, even with no card of their own", () => {
+    roles.cc = ["lead"];
+    expect(gate().canSee("cc-new")).toBe(true);
+    expect(gate().canSee("cc-pending")).toBe(true);
+    expect(gate().canSee("cc-history")).toBe(true);
   });
 });

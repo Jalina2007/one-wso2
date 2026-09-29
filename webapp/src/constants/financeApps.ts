@@ -34,7 +34,7 @@ import {
   StethoscopeIcon,
 } from "@wso2/oxygen-ui-icons-react";
 import { CC_PATH } from "@features/finance/cc/ccPaths";
-import { opdFinancePaths } from "@features/finance/opd/opdFinancePaths";
+import { FINANCE_OVERVIEW_PATH } from "@features/finance/overview/financeOverviewPaths";
 import type { MenuApp } from "@constants/appMenu";
 
 /**
@@ -78,8 +78,11 @@ export const ME_FINANCE_APPS: readonly MenuApp[] = [
  * dashboard sits behind a group you open to file or reconcile something, which
  * is not what you came for when you wanted the numbers.
  *
- * Two entries today — Credit Card Expenses and OPD Claims. The expense
- * dashboard belongs here too when somebody moves it.
+ * One rail entry, not a group of two. It used to expand into "Credit Card
+ * Expenses" / "OPD Claims" as separate rows — a second click just to see
+ * which dashboard you wanted. `FinanceOverviewPage` now holds both behind a
+ * tab switcher of its own, so the rail only ever needs to get you to the one
+ * page; neither dashboard screen changed underneath it.
  */
 export const FINANCE_OVERVIEW_APPS: readonly MenuApp[] = [
   {
@@ -87,33 +90,20 @@ export const FINANCE_OVERVIEW_APPS: readonly MenuApp[] = [
     name: "Overview",
     icon: LayoutDashboardIcon,
     purpose: "How the company's card spend and claim allowances are being used.",
-    // Two items today and it will not stay that way; collapsing to a leaf
-    // now would teach the wrong shape and make the entry vanish as a
-    // concept the day a third one lands.
-    alwaysGroup: true,
+    // A single item collapses to a plain leaf on its own (SideRail.tsx's
+    // `visible.length === 1 && !section.alwaysGroup`) — exactly the shape
+    // wanted here, so `alwaysGroup` is left unset.
     items: [
       {
-        // The id is unchanged, so `useFinanceGate`, the rail's active-item
-        // matching and anyone's saved favourite all keep working. Only where
-        // it is listed has moved; the route is the same screen it always was.
-        id: "cc-dashboard",
-        label: "Credit Card Expenses",
-        desc: "Unsubmitted spend, how long it has been sitting, and what has been claimed.",
+        id: "finance-overview",
+        label: "Overview",
+        desc: "Unsubmitted card spend and OPD claim usage, one tab each.",
         // Not a coarse capability: forces useFinanceGate to answer for the
-        // id — see its `cc-dashboard` case.
+        // id — see its `finance-overview` case, which hides the whole entry
+        // for a reader with no card of their own and no OPD role — neither
+        // tab would have anything to show them.
         requires: ["employee"],
-        path: `${CC_PATH}/dashboard`,
-      },
-      {
-        id: "opd-dashboard",
-        label: "OPD Claims",
-        desc: "Claims processed and pending, and how much of each employee's OPD limit is used.",
-        // Not a coarse capability: the OPD backend decides this, and the
-        // source puts the screen behind its finance view. `requires` only
-        // forces useFinanceGate to answer for the id — see its
-        // `opd-dashboard` case.
-        requires: ["admin"],
-        path: opdFinancePaths.dashboard,
+        path: FINANCE_OVERVIEW_PATH,
       },
     ],
   },
@@ -135,10 +125,16 @@ export const FINANCE_PERSPECTIVE_APPS: readonly MenuApp[] = [
     icon: CreditCardIcon,
     purpose: "Reconcile and submit corporate credit-card transactions for approval.",
     items: [
-      { id: "cc-new", label: "Pending Submissions", desc: "Unsubmitted card transactions to categorise and submit.", path: `${CC_PATH}/new` },
-      { id: "cc-pending", label: "Pending Approvals", desc: "Submissions awaiting approval.", path: `${CC_PATH}/pending` },
+      // Each of these three is the SUBMITTER's own view — their own unsubmitted
+      // transactions, their own pending-approval status, their own history —
+      // so none of it exists to read without a card. `requires` here is
+      // documentation plus a fail-closed backstop; the actual check is
+      // `ccHasOwnCard` in useFinanceGate's explicit case for each id, not this
+      // coarse capability.
+      { id: "cc-new", label: "Pending Submissions", desc: "Unsubmitted card transactions to categorise and submit.", requires: ["employee"], path: `${CC_PATH}/new` },
+      { id: "cc-pending", label: "Pending Approvals", desc: "Submissions awaiting approval.", requires: ["employee"], path: `${CC_PATH}/pending` },
       { id: "cc-approve", label: "Approve Submissions", desc: "Review and approve your team's submitted card transactions.", requires: ["lead", "admin"], path: `${CC_PATH}/approve` },
-      { id: "cc-history", label: "History", desc: "Your submitted past card transactions.", path: `${CC_PATH}/history` },
+      { id: "cc-history", label: "History", desc: "Your submitted past card transactions.", requires: ["employee"], path: `${CC_PATH}/history` },
       { id: "cc-settings", label: "Settings", desc: "Upload and reconcile bank statements (finance).", requires: ["admin"], path: `${CC_PATH}/settings` },
     ],
   },

@@ -149,6 +149,13 @@ export interface BankAccount {
   bankLocation: string | null;
   branchCode: string | null;
   branchName: string | null;
+  // Non-null on the wire (db:EmployeeBankAccount), but every Bank Account
+  // rendered here comes through the same optional-chaining path as the
+  // nullable fields, so nullable is the safer type to declare.
+  beneficiaryAddress: string | null;
+  bankAddress: string | null;
+  // Only meaningful for CONSULTANCY; null for SALARY/REIMBURSEMENT.
+  paymentMethod: string | null;
   effectiveFrom: string;
   createdOn: string | null;
 }
@@ -158,55 +165,78 @@ export interface BankAccountsResponse {
   count: number;
 }
 
-// Promotion-app /employee-info response. Mirrors digiops-hr/apps/promotion
-// backend/types.bal EmployeeInfo (outer) + EmployeeInfoWithLead (inner).
-// All string? fields default to "" server-side, so treat "" the same as
-// null when rendering.
-export interface PromotionEmployeeInfoWithLead {
-  workEmail: string;
-  startDate: string;
-  jobBand: number | null;
-  joinedJobRole: string | null;
-  joinedBusinessUnit: string | null;
-  joinedDepartment: string | null;
-  joinedTeam: string | null;
-  joinedLocation: string | null;
-  lastPromotedDate: string | null;
-  employeeThumbnail: string | null;
-  reportingLead: string;
-  reportingLeadThumbnail: string;
+// GET /employee-info on the banking backend — only what the Banking page
+// reads from it: the employee's HR location (drives the Reimbursement gate
+// and the Bank Location options).
+export interface BankingEmployeeInfo {
+  location: string;
 }
 
-export interface PromotionEmployeeInfoResponse {
-  employeeInfo: PromotionEmployeeInfoWithLead;
+// GET /employee-privileges on the banking backend — what the caller may do,
+// decided server-side by the same roles the backend enforces.
+export interface BankingPrivileges {
+  isEmployee: boolean;
+  isPeopleOperationsAdmin: boolean;
+  isFinanceAdmin: boolean;
 }
 
-// Approved promotion request from GET /promotion/requests. Subset of the
-// backend's FullPromotionRequest — only the fields we render in the
-// history dialog. Recommendations, notification flags, and drafts are
-// intentionally omitted.
-export type PromotionType = "NORMAL" | "SPECIAL" | "TIME_BASED";
+// One `customLocationMap` entry: for an employee whose work location is
+// `location`, the Consultancy Bank Location dropdown offers `customMap`.
+export interface CustomLocationMapEntry {
+  location: string;
+  customMap: string[];
+}
 
-export interface PromotionHistoryEntry {
-  id: number;
+// GET /app-config on the banking backend: the day-of-month cutoffs,
+// work-location allow-list, restricted-role list, the full country list the
+// edit/add dialog's Account Holder's Country step picks from, and the
+// customLocationMap that narrows Consultancy's Bank Location options.
+export interface BankingAppConfig {
+  salaryThreshold: number;
+  consultancyThreshold: number;
+  reimbursementsAllowedCountries: string[];
+  consultancyRestrictedRoles: string[];
+  allCountries: string[];
+  customLocationMap: CustomLocationMapEntry[];
+}
+
+// GET /banks on the banking backend — the lookup list backing the bank
+// autocomplete in the edit/add flow.
+export interface Bank {
+  bankCode: string;
+  bankLocation: string;
+  bankName: string;
+  swiftCode: string;
+}
+
+export interface BanksResponse {
+  banks: Bank[];
+  count: number;
+}
+
+// POST /employee/accounts body. Every Account Type sends the same shape —
+// branchName/branchCode are simply empty for CONSULTANCY rather than a
+// different payload shape, matching the source app's own form.
+export interface CreateBankAccountRequestPayload {
   employeeEmail: string;
-  currentJobBand: number;
-  currentJobRole: string;
-  nextJobBand: number;
-  promotionCycle: string;
-  promotionStatement: string | null;
-  businessUnit: string;
-  department: string;
-  team: string;
-  subTeam: string | null;
-  promotionType: PromotionType;
-  status: string;
-  createdOn: string;
-  updatedOn: string;
+  accountType: AccountType;
+  accountName: string;
+  accountNumber: string;
+  beneficiaryAddress: string;
+  bankName: string;
+  bankSwiftCode: string;
+  bankCode: string;
+  bankLocation: string;
+  bankAddress: string;
+  branchName: string;
+  branchCode: string;
+  effectiveFrom: string;
+  /** Required by the backend's request record (note the plural); Consultancy also builds the vendor address from it. */
+  accountHoldersCountry: string;
 }
 
-export interface PromotionHistoryResponse {
-  promotionRequests: PromotionHistoryEntry[];
+export interface CreateBankAccountRequestResponse {
+  applicationID: number;
 }
 
 // Body for PATCH /employees/{employeeId}/personal-info. Mirrors

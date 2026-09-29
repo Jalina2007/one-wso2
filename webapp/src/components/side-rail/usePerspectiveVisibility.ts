@@ -18,14 +18,21 @@ import { useMemo } from "react";
 import {
   PAR_ADMIN_PORTAL_ITEM_ID,
   PAR_LEAD_PORTAL_ITEM_ID,
+  PROMOTION_ADMIN_PORTAL_ITEM_ID,
+  PROMOTION_BOARD_PORTAL_ITEM_ID,
+  PROMOTION_CYCLE_HISTORY_ITEM_ID,
+  PROMOTION_FUNCTIONAL_LEAD_PORTAL_ITEM_ID,
+  PROMOTION_LEAD_PORTAL_ITEM_ID,
+  PROMOTION_TEAM_HISTORY_ITEM_ID,
   SRI_LANKA_ONLY_ITEM_IDS,
   SUBSCRIPTION_ITEM_IDS,
+  SALES_ITEM_IDS,
   UMT_ADMIN_ITEM_IDS,
   type PerspectiveSection,
 } from "@constants/perspectives";
 import { capabilitiesFromPrivileges, type Capability } from "@constants/appMenu";
 import { FINANCE_ITEM_IDS } from "@constants/financeApps";
-import { LEAVE_ITEM_IDS } from "@constants/meApps";
+import { BANKING_ITEM_IDS, LEAVE_ITEM_IDS } from "@constants/meApps";
 import { PAR_EMPLOYEE_ITEM_ID } from "@constants/parApps";
 import { DUE_DILIGENCE_ITEM_IDS } from "@constants/dueDiligenceApps";
 import { SECURITY_ITEM_IDS } from "@constants/securityApps";
@@ -36,12 +43,15 @@ import { useUserInfo } from "@api/useUserInfo";
 import { useMeProfile } from "@features/my/api/useMeProfile";
 import { useFinanceGate } from "@features/finance/api/useFinanceGate";
 import { useLeaveGate } from "@features/leave/api/useLeaveGate";
+import { useBankingAccess } from "@features/my/api/useBankingAccess";
 import { useMarketingOpsGate } from "@features/marketing-ops/api/useMarketingOpsGate";
 import { useDueDiligenceGate } from "@features/due-diligence/api/useDueDiligenceGate";
 import { useSecurityGate } from "@features/security/api/useSecurityGate";
+import { useSalesRailGate } from "@features/sales/api/useSalesGate";
 import { useSubscriptionGate } from "@features/subscriptions/api/useSubscriptionGate";
 import { useParCanSeeLeadPortal, useParEmployeeItemVisible } from "@features/par/api/useParData";
 import { useParIsAdmin } from "@features/par/api/useParIsAdmin";
+import { usePromotionPrivileges } from "@features/promotion/api/usePromotionRoles";
 import { useUmtGate } from "@features/umt/api/useUmtGate";
 import { isSriLankaWorkLocation } from "@utils/locationGate";
 import { visibleLeavesOf } from "./railActive";
@@ -123,6 +133,10 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // use it, and hid it from a leave lead who can.
   const leaveGate = useLeaveGate(active.key === "me");
 
+  // Banking is open to callers the banking backend says are employees. Its
+  // entry lives under Me, so only ask while Me is active.
+  const bankingAccess = useBankingAccess(active.key === "me");
+
   // Marketing Ops is the same shape of problem and needs the same treatment:
   // its rail gates on the MARKETING OPS backend's own Asgardeo groups
   // (app-marketingops-*), which bear no relation to the people-app privilege
@@ -142,6 +156,8 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // the gate is enabled for either.
   const dueDiligenceGate = useDueDiligenceGate(active.key === "finance" || active.key === "legal");
   const securityGate = useSecurityGate(active.key === "security");
+  // Sales: rows hidden when meet-app refuses the caller outright (403) -- see useSalesRailGate.
+  const salesGate = useSalesRailGate(active.key === "sales");
 
   // Subscriptions (PickMe Commute / LaaS) is the same shape of problem once
   // more, with one extra wrinkle worth naming: its backend publishes the
@@ -180,6 +196,12 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     meProfile.data?.employee?.employmentType,
     meProfile.isLoading,
   );
+
+  // promotion-app's Lead Portal — same shape of problem as PAR's above: its
+  // Role.LEAD comes from promotion-app's own backend and bears no fixed
+  // relationship to people-app's generic "lead" privilege `caps` is built
+  // from. Only fetched while People Ops is active.
+  const promotionLeadPortalGate = usePromotionPrivileges(userInfo.data?.workEmail, isPeopleOps);
 
   // UMT is the same shape of problem again: Product Management is
   // UMT_ADMIN-only, decided by UMT's own /update/user-info roles, which bear
@@ -224,12 +246,29 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     if (SRI_LANKA_ONLY_ITEM_IDS.has(s.id) && !isSriLankaEmployee) return false;
     if (DUE_DILIGENCE_ITEM_IDS.has(s.id)) return dueDiligenceGate.canSee(s.id);
     if (SECURITY_ITEM_IDS.has(s.id)) return securityGate.canSee(s.id);
+    if (SALES_ITEM_IDS.has(s.id)) return salesGate.canSee(s.id);
     if (FINANCE_ITEM_IDS.has(s.id)) return financeGate.canSee(s.id);
     if (LEAVE_ITEM_IDS.has(s.id)) return leaveGate.canSee(s.id);
+    if (BANKING_ITEM_IDS.has(s.id)) return bankingAccess.canSee;
     if (SUBSCRIPTION_ITEM_IDS.has(s.id)) return subscriptionCanSee(s.id);
     if (s.id === PAR_LEAD_PORTAL_ITEM_ID) return parLeadPortalGate.canSee;
     if (s.id === PAR_ADMIN_PORTAL_ITEM_ID) return parAdminPortalGate.isAdmin;
     if (s.id === PAR_EMPLOYEE_ITEM_ID) return parEmployeeItemGate.canSee;
+    if (s.id === PROMOTION_LEAD_PORTAL_ITEM_ID || s.id === PROMOTION_TEAM_HISTORY_ITEM_ID) {
+      return promotionLeadPortalGate.isLead;
+    }
+    if (s.id === PROMOTION_FUNCTIONAL_LEAD_PORTAL_ITEM_ID) {
+      return promotionLeadPortalGate.isFunctionalLead;
+    }
+    if (s.id === PROMOTION_BOARD_PORTAL_ITEM_ID) {
+      return promotionLeadPortalGate.isPromotionBoardMember;
+    }
+    if (s.id === PROMOTION_ADMIN_PORTAL_ITEM_ID) {
+      return promotionLeadPortalGate.isHrAdmin;
+    }
+    if (s.id === PROMOTION_CYCLE_HISTORY_ITEM_ID) {
+      return promotionLeadPortalGate.isHrAdmin || promotionLeadPortalGate.isFunctionalLead;
+    }
     if (UMT_ADMIN_ITEM_IDS.has(s.id)) return umtGate.isAdmin && !umtGate.isResolving;
     if (isMarketingOps) return marketingOpsGate.canSee(s.id);
     if (INFRA_ITEM_IDS.has(s.id)) return infraGate.canSee(s.id);
@@ -250,9 +289,11 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     userInfo.isLoading ||
     financeGate.isResolving ||
     leaveGate.isResolving ||
+    bankingAccess.isResolving ||
     marketingOpsGate.isResolving ||
     dueDiligenceGate.isResolving ||
     securityGate.isResolving ||
+    salesGate.isResolving ||
     subscriptionGate.isResolving ||
     infraGate.isResolving ||
     parLeadPortalGate.isLoading ||
@@ -265,12 +306,14 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     marketingOpsGate.isError ||
     dueDiligenceGate.isError ||
     infraGate.isError ||
+    salesGate.isError ||
     subscriptionGate.isError;
   const error = userInfo.isError
     ? userInfo.error
     : marketingOpsGate.errorMessage ??
       dueDiligenceGate.errorMessage ??
       infraGate.errorMessage ??
+      salesGate.errorMessage ??
       subscriptionGate.errorMessage;
   const retry = (): void => {
     if (userInfo.isError) void userInfo.refetch();
@@ -278,6 +321,7 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
     if (dueDiligenceGate.isError) dueDiligenceGate.retry();
     if (subscriptionGate.isError) subscriptionGate.retry();
     if (infraGate.isError) infraGate.retry();
+    if (salesGate.isError) salesGate.retry();
   };
 
   return { resolveVisible, isResolving, visibleLeaves, isError, error, retry };

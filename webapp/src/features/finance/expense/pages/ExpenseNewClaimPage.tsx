@@ -107,8 +107,8 @@ function NewClaimBody() {
   const [onBehalfOfEmail, setOnBehalfOfEmail] = useState<string | null>(null);
   const savedDraftOnBehalfOf = appData.data?.draft?.onBehalfOfEmail ?? null;
 
-  const email = appData.data?.userInfo.workEmail ?? "";
-  const leadEmail = appData.data?.userInfo.managerEmail ?? null;
+  const email = appData.data?.userInfo?.workEmail ?? "";
+  const leadEmail = appData.data?.userInfo?.managerEmail ?? null;
 
   // Resolve an address to a display name, falling back to the address itself
   // rather than printing an empty parenthetical.
@@ -217,6 +217,18 @@ function NewClaimBody() {
   }
   if (appData.isError) {
     return <Alert severity="error">Couldn&apos;t load your expense profile. {describeError(appData.error)}</Alert>;
+  }
+  // `email` falling back to "" is not a value to build on: fed straight into
+  // a receipt upload (`upload.mutateAsync({ email, file })` below), an empty
+  // address would build a malformed URL instead of failing loudly. A
+  // required TypeScript field on `userInfo` is not a runtime guarantee — see
+  // the same guard on DecidedTab, NeedsYouTab and ExpenseHistoryPage.
+  if (!email) {
+    return (
+      <Alert severity="error">
+        Your account is missing a work email, so a new claim can&apos;t be filed.
+      </Alert>
+    );
   }
 
   const handleRestoreDraft = () => {

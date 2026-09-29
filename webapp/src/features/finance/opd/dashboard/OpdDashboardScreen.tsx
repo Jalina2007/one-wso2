@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import type { ReactNode } from "react";
 import { Alert, Box, Skeleton, Stack } from "@wso2/oxygen-ui";
 import { isOpdBackendConfigured } from "@config/apiConfig";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
@@ -27,7 +28,7 @@ import { OpdDashboardPanel, OpdStatCard, OpdSubmittersTable } from "./OpdDashboa
 import { OpdUtilizationTable } from "./OpdUtilizationTable";
 import { claimLimitOf } from "./opdDashboardTypes";
 
-export default function OpdDashboardScreen() {
+export default function OpdDashboardScreen({ headerActions }: { headerActions?: ReactNode } = {}) {
   return (
     <FinanceShell
       eyebrow={FINANCE_EYEBROW.opd}
@@ -35,6 +36,7 @@ export default function OpdDashboardScreen() {
       subtitle="How much of the OPD allowance the company has used this year, and who has claimed."
       configured={isOpdBackendConfigured()}
       configKey="ONE_WSO2_OPD_BACKEND_URL"
+      actions={headerActions}
     >
       <DashboardBody />
     </FinanceShell>

@@ -29,7 +29,6 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import {
-  ContainerIcon,
   InboxIcon,
   LockOpenIcon,
   MailIcon,
@@ -70,6 +69,7 @@ import {
 } from "../../lib/umtReleaseChunks";
 import UmtReleaseChunkBuildInfoDialog from "./UmtReleaseChunkBuildInfoDialog";
 import UmtReleaseChunkConfirmDialog from "./UmtReleaseChunkConfirmDialog";
+import UmtDockerRetriggerIcon from "./UmtDockerRetriggerIcon";
 import {
   BuildStatusChip,
   ChunkCell,
@@ -270,11 +270,21 @@ export default function UmtPendingReleaseChunksGrid() {
           await cstMutation.mutateAsync();
           showSuccess("CST build retriggered successfully.");
           break;
-        case "docker-retrigger":
-          await dockerMutation.mutateAsync();
-          showSuccess("Docker builds retriggered successfully.");
-          setBuildInfoChunkId(null);
+        case "docker-retrigger": {
+          const { statusRefreshed } = await dockerMutation.mutateAsync();
+          // The builds were retriggered either way. Build Information stays
+          // open only when the chunk's new status couldn't be read, since the
+          // row behind it would otherwise still show the failure.
+          if (statusRefreshed) {
+            showSuccess("Docker builds retriggered successfully.");
+            setBuildInfoChunkId(null);
+          } else {
+            showWarning(
+              "Docker builds were retriggered, but the release chunk status could not be refreshed.",
+            );
+          }
           break;
+        }
         case "release":
           await releaseMutation.mutateAsync();
           showSuccess("Chunks released successfully.");
@@ -651,16 +661,9 @@ function RowActionsCell({
                 aria-label="Retrigger Docker build"
                 onClick={() => onRequestAction("docker-retrigger", chunkId)}
               >
-                <ContainerIcon size={16} />
+                <UmtDockerRetriggerIcon size={16} />
               </IconButton>
             </Tooltip>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => onShowBuildInfo(chunkId)}
-            >
-              See build info
-            </Button>
           </ChunkLine>
           {action.failedReason && (
             <ChunkLine>
@@ -669,6 +672,16 @@ function RowActionsCell({
               </Typography>
             </ChunkLine>
           )}
+          <ChunkLine>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => onShowBuildInfo(chunkId)}
+              sx={{ mb: 1 }}
+            >
+              See build info
+            </Button>
+          </ChunkLine>
         </ChunkCell>
       );
     case "in-progress":

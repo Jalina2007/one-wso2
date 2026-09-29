@@ -50,10 +50,10 @@ export default function LeavePage() {
   const { tab, kind } = parseLeavePath(pathname);
 
   return (
-    // No title of its own: LeaveShell's eyebrow already says "Leave", and the
-    // tab bar below names the screen. A title here repeated the word twice
-    // above a tab called Apply.
-    <LeaveShell title={tab?.label ?? "Leave"} subtitle={kind?.subtitle}>
+    // Title is the app name itself, not the tab — "Apply" alone wouldn't say
+    // where you are once the rail is collapsed. The tab bar below names the
+    // screen; see LeaveShell for why there's no separate eyebrow chip.
+    <LeaveShell title="Leave" subtitle={kind?.subtitle}>
       {gate.isResolving ? (
         <Skeleton variant="rectangular" height={420} sx={{ borderRadius: 1.5 }} />
       ) : tabs.length === 0 ? (

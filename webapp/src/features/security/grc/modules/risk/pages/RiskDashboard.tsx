@@ -45,17 +45,28 @@ import type { DrillDownFilter } from "./dashboard/constants";
 export default function RiskDashboard(): JSX.Element {
   const authFetch = useAuthApiClient();
   const navigate = useNavigate();
-  const [teams, setTeams] = useState<RiskTeam[]>([]);
+  // null until the register list loads (or if it fails): the category views
+  // need the complete list, so they stay hidden rather than undercount.
+  const [teams, setTeams] = useState<RiskTeam[] | null>(null);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
   const [registerId, setRegisterId] = useState(0); // 0 = All Registers
   const [dashboard, setDashboard] = useState<DashboardSummary | null>(null);
   const [scores, setScores] = useState<RiskScore[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const loadTeams = useCallback(async (): Promise<void> => {
+    setTeamsError(null);
+    try {
+      setTeams(await fetchSourceRegisterTeams(authFetch, true));
+    } catch (err) {
+      setTeamsError(err instanceof Error ? err.message : "Failed to load the register list.");
+    }
+  }, [authFetch]);
+
   useEffect(() => {
-    fetchSourceRegisterTeams(authFetch, true).then(setTeams).catch(console.error);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadTeams();
+  }, [loadTeams]);
 
   const load = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -108,8 +119,22 @@ export default function RiskDashboard(): JSX.Element {
             Overview of organizational risk posture
           </Typography>
         </Box>
-        <RegisterFilter teams={teams} value={registerId} onChange={setRegisterId} />
+        <RegisterFilter teams={teams ?? []} value={registerId} onChange={setRegisterId} />
       </Stack>
+
+      {teamsError && (
+        <Alert
+          severity="warning"
+          action={
+            <Button color="inherit" size="small" onClick={() => void loadTeams()}>
+              Retry
+            </Button>
+          }
+        >
+          Couldn't load the register list, so the register filter and the repeated/common category views are
+          unavailable. {teamsError}
+        </Alert>
+      )}
 
       {loading && (
         <Box sx={{ display: "flex", justifyContent: "center", py: 10 }}>
@@ -134,6 +159,7 @@ export default function RiskDashboard(): JSX.Element {
         <DashboardView
           dashboard={dashboard}
           scores={scores}
+          teams={teams}
           isAllRegisters={registerId === 0}
           registerId={registerId}
           onDrillDown={handleDrillDown}

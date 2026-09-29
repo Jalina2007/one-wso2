@@ -69,7 +69,7 @@ export default function NeedsYouTab() {
   const canLead = Boolean(expenseAppData.data?.enableLeadView);
   const canExpenseFinance = Boolean(expenseAppData.data?.enableFinanceView);
   const canOpd = opdHasRole(opdUserInfo.data, OPD_ROLE.FINANCE_APPROVER);
-  const myEmail = expenseAppData.data?.userInfo.workEmail ?? undefined;
+  const myEmail = expenseAppData.data?.userInfo?.workEmail ?? undefined;
 
   // Same toggle the Expense claims tab offers, for the same reason: someone
   // holding both flags decides one stage at a time, not a merged list. Opens
@@ -217,6 +217,14 @@ export default function NeedsYouTab() {
   // tell an approver nothing is waiting when nothing had loaded.
     expenseAppData.isError ? describeError(expenseAppData.error) : null,
     opdUserInfo.isError ? describeError(opdUserInfo.error) : null,
+    // `canLead` alone is not enough to run the lead queue — it also needs
+    // `myEmail` to scope to this person's own reports. A required TypeScript
+    // field is not a runtime guarantee: `userInfo` can come back without a
+    // `workEmail`, silently disabling the query rather than failing it, which
+    // reads as "nothing waiting" for someone who genuinely holds the role.
+    canLead && !myEmail
+      ? "Your account is missing a work email, so your lead queue can't be scoped to your reports."
+      : null,
     leadQueue.isError ? describeError(leadQueue.error) : null,
     financeQueue.isError ? describeError(financeQueue.error) : null,
     opdQueue.isError ? describeError(opdQueue.error) : null,

@@ -97,12 +97,32 @@ describe("People Ops rail sections", () => {
     // actually reaches its gate and redirects a non-lead/non-admin away is
     // asserted in ParLeadTabRouting.test.tsx/ParAdminTabRouting.test.tsx,
     // not here.
+    //
+    // promotion-lead-portal and promotion-team-history are the same shape
+    // of exception as the two PAR ones: promotion-app has its own
+    // Role.LEAD, read back from its own GET /employee-privileges, unrelated
+    // to people-app's "admin" capability. Gated via PromotionRequiresLeadRoute
+    // + PROMOTION_LEAD_PORTAL_ITEM_ID/PROMOTION_TEAM_HISTORY_ITEM_ID (see
+    // perspectives.ts's own comment above the Promotion section) rather
+    // than `requires`. promotion-functional-lead-portal,
+    // promotion-board-portal, and promotion-admin-portal are the same shape
+    // again, on Role.FUNCTIONAL_LEAD, Role.PROMOTION_BOARD_MEMBER, and
+    // Role.HR_ADMIN respectively. promotion-cycle-history is the odd one
+    // out: gated on isHrAdmin OR isFunctionalLead, the only two-role gate
+    // among this section's children (see perspectives.ts's own comment
+    // above it).
     const NOT_ADMIN_GATED = new Set([
       "people-org-chart",
       "people-subscriptions-mine",
       "people-subscriptions-manage",
       "par-lead-portal",
       "par-admin-portal",
+      "promotion-lead-portal",
+      "promotion-team-history",
+      "promotion-functional-lead-portal",
+      "promotion-board-portal",
+      "promotion-admin-portal",
+      "promotion-cycle-history",
     ]);
     const live = PEOPLE_OPS_SECTIONS.flatMap((s) => [s, ...(s.children ?? [])]).filter(
       (s) => s.path,

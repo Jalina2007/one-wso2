@@ -402,6 +402,32 @@ export interface RepeatedComplianceRisk {
   occurrences: RepeatedRiskOccurrence[];
 }
 
+// Open / Acc / Rem / Closed split shared by the two category tables. accept
+// and remediate are subsets of open; TRANSFER, AVOID and untreated open risks
+// count in open alone, so open >= accept + remediate.
+export interface CategoryCounts {
+  open: number;
+  accept: number;
+  remediate: number;
+  closed: number;
+}
+
+// A Risk Category held by two or more risks, open or closed, in one register.
+export interface RepeatedCategory extends CategoryCounts {
+  register_id: number;
+  register_name: string;
+  category_id: number;
+  category_name: string;
+}
+
+// A Risk Category with at least one open risk in each of two or more
+// registers; counts cover only the registers in register_ids.
+export interface CommonOpenCategory extends CategoryCounts {
+  category_id: number;
+  category_name: string;
+  register_ids: number[];
+}
+
 export interface HighRiskItem {
   id: number;
   risk_code: string;
@@ -421,6 +447,9 @@ export interface DashboardSummary {
   cert_distribution: RegisterCertShare[];
   registers: RegisterAnalytics[];
   repeated_compliance_risks: RepeatedComplianceRisk[];
+  // Optional: absent when served by a backend older than these fields.
+  repeated_categories?: RepeatedCategory[];
+  common_open_categories?: CommonOpenCategory[];
   high_risks: HighRiskItem[];
 }
 
