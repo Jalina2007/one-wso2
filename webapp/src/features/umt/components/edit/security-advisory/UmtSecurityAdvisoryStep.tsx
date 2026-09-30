@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Button,
   CircularProgress,
@@ -50,7 +50,16 @@ const { DataGrid: DataGridComponent } = DataGrid;
 // released advisory the user never saw a prompt for.
 const RELEASED_ADVISORY_STATES = new Set(["PRE_PUBLISHED", "PUBLISHED"]);
 
-export default function UmtSecurityAdvisoryStep({ id, update }: { id: string; update: UmtUpdateSummary }) {
+export default function UmtSecurityAdvisoryStep({
+  id,
+  update,
+  onDirtyChange,
+}: {
+  id: string;
+  update: UmtUpdateSummary;
+  // Reports unsaved changes, so the wizard can hold Next until they're saved.
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { showSuccess, showError } = useNotifications();
   const saveMutation = useUmtSaveSecurityAdvisories(id);
 
@@ -75,6 +84,11 @@ export default function UmtSecurityAdvisoryStep({ id, update }: { id: string; up
     setLastInitialRows(initialRows);
     setRows(initialRows);
   }
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   // ---- Add modal state ----
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
