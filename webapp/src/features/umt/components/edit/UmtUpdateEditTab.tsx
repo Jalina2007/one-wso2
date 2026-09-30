@@ -272,13 +272,15 @@ export default function UmtUpdateEditTab({
                     ? "Every product needs a description and instruction before proceeding."
                     : !integrationTestsReady
                       ? "Every product needs a Test PR or an ignore reason before proceeding (or a Helm Chart Tag for a containerized update)."
-                      : !testingReady
-                        ? update.lifecycleState !== "Staging"
-                          ? "Waiting for the testing environment to reach Staging before proceeding."
-                          : "Every product needs a submitted test result before proceeding."
-                        : !verifyingReady
-                          ? "This state has no further action available yet."
-                          : undefined
+                      : !securityAdvisoryReady
+                        ? "Save at least one security advisory before proceeding."
+                        : !testingReady
+                          ? update.lifecycleState !== "Staging"
+                            ? "Waiting for the testing environment to reach Staging before proceeding."
+                            : "Every product needs a submitted test result before proceeding."
+                          : !verifyingReady
+                            ? "This state has no further action available yet."
+                            : undefined
           }
           onProceed={() => void handleProceed()}
           onBack={canGoBack ? handleBack : undefined}
