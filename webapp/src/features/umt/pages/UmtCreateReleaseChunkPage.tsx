@@ -49,8 +49,7 @@ import { UMT_CHUNK_GRID_SX } from "../components/release-chunks/umtReleaseChunkG
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
-// Small pages by default: this is a list to read through and tick, not scan.
-const PAGE_SIZE_OPTIONS = [5, 10, 20];
+const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 // The grid reports selection as an include/exclude set (GridRowSelectionModel),
 // not a plain id array — resolving it against the rows on screen keeps

@@ -108,10 +108,8 @@ export function useUmtStartPullRequestAnalysis(id: string) {
       await authedPost(umtServiceUrls.updatePullRequestAnalysis(id), accessToken, payload);
     },
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["umt-update-pr-analysis-status"] }),
-        queryClient.invalidateQueries({ queryKey: ["umt-update-pull-request-analysis"] }),
-      ]);
+      void queryClient.invalidateQueries({ queryKey: ["umt-update-pull-request-analysis"] });
+      await queryClient.invalidateQueries({ queryKey: ["umt-update-pr-analysis-status"] });
     },
   });
 }
