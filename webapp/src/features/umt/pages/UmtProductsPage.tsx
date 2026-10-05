@@ -191,7 +191,7 @@ function UmtProductsBody() {
             disableRowSelectionOnClick
             getRowHeight={() => "auto"}
             getRowId={(row: UmtBaseProduct) => productRowId(row)}
-            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            initialState={{ pagination: { paginationModel: { pageSize: 20 } } }}
             loading={baseProducts.isPending}
             pageSizeOptions={[10, 20, 30, 50]}
             rows={rows}
