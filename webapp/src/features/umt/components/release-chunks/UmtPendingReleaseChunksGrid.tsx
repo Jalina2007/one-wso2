@@ -48,7 +48,7 @@ import {
   useUmtReleaseChunk,
   useUmtRetriggerDockerBuild,
   useUmtSendReleaseChunkEmail,
-  useUmtTriggerCstBuild,
+  useUmtRetriggerCstBuild,
   useUmtTriggerProductBuild,
   useUmtTriggerReleaseChunkBuilds,
   useUmtTriggerTgBuild,
@@ -207,7 +207,7 @@ export default function UmtPendingReleaseChunksGrid() {
   const targetChunkId = actionTarget?.chunkId ?? 0;
   const emailMutation = useUmtSendReleaseChunkEmail(targetChunkId);
   const triggerBuildsMutation = useUmtTriggerReleaseChunkBuilds(targetChunkId);
-  const cstMutation = useUmtTriggerCstBuild(targetChunkId);
+  const cstMutation = useUmtRetriggerCstBuild(targetChunkId);
   const dockerMutation = useUmtRetriggerDockerBuild(targetChunkId);
   const releaseMutation = useUmtReleaseChunk(targetChunkId);
 

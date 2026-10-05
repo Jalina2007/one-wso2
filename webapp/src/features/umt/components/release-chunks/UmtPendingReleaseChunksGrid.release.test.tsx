@@ -86,7 +86,7 @@ vi.mock("../../api/useUmtReleaseChunkActions", () => ({
   useUmtTriggerProductBuild: idleMutation,
   useUmtTriggerTgBuild: idleMutation,
   useUmtTriggerReleaseChunkBuilds: idleMutation,
-  useUmtTriggerCstBuild: idleMutation,
+  useUmtRetriggerCstBuild: idleMutation,
   useUmtRetriggerDockerBuild: idleMutation,
   useUmtReleaseChunk: () => ({ isPending: false, mutateAsync: state.releaseMutate }),
   useUmtSendReleaseChunkEmail: idleMutation,

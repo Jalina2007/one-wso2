@@ -108,14 +108,14 @@ export function useUmtTriggerReleaseChunkBuilds(chunkId: number) {
   });
 }
 
-export function useUmtTriggerCstBuild(chunkId: number) {
+export function useUmtRetriggerCstBuild(chunkId: number) {
   const getAccessToken = useAccessToken();
   const queryClient = useQueryClient();
 
   return useMutation<void, Error, void>({
     mutationFn: async () => {
       const accessToken = await getAccessToken();
-      await authedPost(umtServiceUrls.releaseChunkTriggerCstBuild(chunkId), accessToken, null);
+      await authedPost(umtServiceUrls.releaseChunkRetriggerCstBuild(chunkId), accessToken, null);
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["umt-release-chunk-build-status"] });
