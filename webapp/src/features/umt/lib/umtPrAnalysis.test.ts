@@ -12,6 +12,7 @@ import {
   PREFERRED_VERSION_REGEX,
   bundleInfoApplies,
   bundlesInfoPathError,
+  extractZipEntriesWithinLimits,
   findUnsafeZipEntry,
   groupFileOperationsByType,
   isManualFileTooLarge,
@@ -24,6 +25,7 @@ import {
   prAnalysisStatusMessage,
   relativeJarPathError,
   umtSvnLocationRegex,
+  UmtZipRejectedError,
   zipTargetDirectory,
 } from "./umtPrAnalysis";
 
@@ -351,3 +353,81 @@ describe("findUnsafeZipEntry", () => {
   });
 });
 
+describe("extractZipEntriesWithinLimits", () => {
+  const MB = 1024 * 1024;
+
+  async function loadEntries(bytes: Uint8Array) {
+    const zip = await JSZip.loadAsync(bytes);
+    return Object.values(zip.files).filter((entry) => !entry.dir);
+  }
+
+  async function buildZip(files: Record<string, Uint8Array | string>) {
+    const zip = new JSZip();
+    for (const [name, content] of Object.entries(files)) zip.file(name, content);
+    return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+  }
+
+  // Forges every entry's declared uncompressed size.
+  function forgeDeclaredSizes(bytes: Uint8Array, size: number): Uint8Array {
+    const forged = bytes.slice();
+    const view = new DataView(forged.buffer);
+    for (let i = 0; i + 4 <= forged.length; i++) {
+      const signature = view.getUint32(i, true);
+      if (signature === 0x04034b50) view.setUint32(i + 22, size, true);
+      else if (signature === 0x02014b50) view.setUint32(i + 24, size, true);
+    }
+    return forged;
+  }
+
+  function filesOfSize(count: number, bytes: number): Record<string, Uint8Array> {
+    const content = new Uint8Array(bytes);
+    return Object.fromEntries(Array.from({ length: count }, (_, i) => [`lib/file-${i}.jar`, content]));
+  }
+
+  it("unpacks every entry of an archive within the limits", async () => {
+    const entries = await loadEntries(await buildZip({ "lib/a.jar": "alpha", "bin/b.sh": "beta" }));
+    const extracted = await extractZipEntriesWithinLimits(entries);
+
+    expect(extracted.map((entry) => entry.name).sort()).toEqual(["bin/b.sh", "lib/a.jar"]);
+    expect(extracted.find((entry) => entry.name === "lib/a.jar")?.blob.size).toBe("alpha".length);
+  });
+
+  it("rejects an archive with an unsafe entry path", async () => {
+    const entries = await loadEntries(await buildZip({ "lib/../../evil.jar": "bad" }));
+    await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/not a safe path/);
+  });
+
+  it("rejects an archive with more than 100 files", async () => {
+    const entries = await loadEntries(await buildZip(filesOfSize(101, 1)));
+    await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/at most 100 files/);
+
+    const atLimit = await loadEntries(await buildZip(filesOfSize(100, 1)));
+    await expect(extractZipEntriesWithinLimits(atLimit)).resolves.toHaveLength(100);
+  });
+
+  it("rejects an entry declared larger than 2 MB, and accepts one of exactly 2 MB", async () => {
+    const tooLarge = await loadEntries(await buildZip({ "lib/big.jar": new Uint8Array(2 * MB + 1) }));
+    await expect(extractZipEntriesWithinLimits(tooLarge)).rejects.toThrow(/"lib\/big.jar" is larger than 2 MB/);
+
+    const atLimit = await loadEntries(await buildZip({ "lib/big.jar": new Uint8Array(2 * MB) }));
+    await expect(extractZipEntriesWithinLimits(atLimit)).resolves.toHaveLength(1);
+  });
+
+  it("rejects an archive whose declared total is over 70 MB", async () => {
+    const entries = await loadEntries(await buildZip(filesOfSize(36, 2 * MB)));
+    await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/larger than 70 MB/);
+  });
+
+  it("stops unpacking an entry that is larger than its forged declared size", async () => {
+    const forged = forgeDeclaredSizes(await buildZip({ "lib/bomb.jar": new Uint8Array(3 * MB) }), 10);
+    const entries = await loadEntries(forged);
+    await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(UmtZipRejectedError);
+    await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/"lib\/bomb.jar" is larger than 2 MB/);
+  });
+
+  it("rejects an entry within the limits whose real size doesn't match its forged declared size", async () => {
+    const forged = forgeDeclaredSizes(await buildZip({ "lib/small.jar": new Uint8Array(MB) }), 10);
+    const entries = await loadEntries(forged);
+    await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/"lib\/small.jar" could not be unzipped/);
+  });
+});

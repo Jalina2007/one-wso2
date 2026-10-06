@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import type JSZip from "jszip";
 import { UMT_PR_ANALYSIS_STATUS, isUmtPrAnalysisFailed, type UmtUpdateType } from "../api/umtTypes";
 import type { UmtFileOperation } from "../api/umtUpdates";
 
@@ -85,12 +86,106 @@ export function findUnsafeZipEntry(
   return undefined;
 }
 
+const MAX_ZIP_ENTRIES = 100;
+const MAX_ZIP_ENTRY_BYTES = 2 * 1024 * 1024;
+const MAX_ZIP_EXPANDED_BYTES = 70 * 1024 * 1024;
+
 // Thrown before any entry is uploaded.
 export class UmtZipRejectedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "UmtZipRejectedError";
   }
+}
+
+function declaredUncompressedSize(entry: JSZip.JSZipObject): number | undefined {
+  // Private JSZip field, not in its typings.
+  const size = (entry as unknown as { _data?: { uncompressedSize?: unknown } })._data?.uncompressedSize;
+  return typeof size === "number" ? size : undefined;
+}
+
+// Resolves undefined once more than `limit` bytes have been unpacked.
+function readZipEntryWithinLimit(entry: JSZip.JSZipObject, limit: number): Promise<Blob | undefined> {
+  return new Promise((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    const stream = (
+      entry as unknown as { internalStream(type: "uint8array"): JSZip.JSZipStreamHelper<Uint8Array> }
+    ).internalStream("uint8array");
+    stream
+      .on("data", (chunk) => {
+        size += chunk.length;
+        if (size > limit) {
+          stream.pause();
+          resolve(undefined);
+          return;
+        }
+        chunks.push(chunk);
+      })
+      .on("error", reject)
+      .on("end", () => resolve(new Blob(chunks as BlobPart[])))
+      .resume();
+  });
+}
+
+function formatMb(bytes: number): string {
+  return `${bytes / (1024 * 1024)} MB`;
+}
+
+// Checks and unpacks every entry before anything is uploaded.
+export async function extractZipEntriesWithinLimits(
+  entries: JSZip.JSZipObject[],
+): Promise<{ name: string; blob: Blob }[]> {
+  const unsafeEntry = findUnsafeZipEntry(entries);
+  if (unsafeEntry) {
+    throw new UmtZipRejectedError(
+      `The zip cannot be added because "${unsafeEntry.name}" is not a safe path. ${unsafeEntry.error}`,
+    );
+  }
+  if (entries.length > MAX_ZIP_ENTRIES) {
+    throw new UmtZipRejectedError(
+      `The zip has ${entries.length} files. A zip can contain at most ${MAX_ZIP_ENTRIES} files.`,
+    );
+  }
+
+  const entryTooLarge = (name: string) =>
+    new UmtZipRejectedError(
+      `The zip cannot be added because "${name}" is larger than ${formatMb(MAX_ZIP_ENTRY_BYTES)} when unzipped.`,
+    );
+  const totalTooLarge = () =>
+    new UmtZipRejectedError(
+      `The zip cannot be added because its contents are larger than ${formatMb(MAX_ZIP_EXPANDED_BYTES)} when unzipped.`,
+    );
+
+  // Declared sizes can be forged; the streaming check below is the real limit.
+  let declaredTotal = 0;
+  for (const entry of entries) {
+    const declared = declaredUncompressedSize(entry);
+    if (declared === undefined) continue;
+    if (declared > MAX_ZIP_ENTRY_BYTES) throw entryTooLarge(entry.name);
+    declaredTotal += declared;
+  }
+  if (declaredTotal > MAX_ZIP_EXPANDED_BYTES) throw totalTooLarge();
+
+  const extracted: { name: string; blob: Blob }[] = [];
+  let total = 0;
+  for (const entry of entries) {
+    const remaining = MAX_ZIP_EXPANDED_BYTES - total;
+    const limit = Math.min(MAX_ZIP_ENTRY_BYTES, remaining);
+    let blob: Blob | undefined;
+    try {
+      blob = await readZipEntryWithinLimit(entry, limit);
+    } catch {
+      // JSZip errors when an entry doesn't match its header.
+      throw new UmtZipRejectedError(
+        `The zip cannot be added because "${entry.name}" could not be unzipped. The zip may be corrupted.`,
+      );
+    }
+    if (!blob) throw limit < MAX_ZIP_ENTRY_BYTES ? totalTooLarge() : entryTooLarge(entry.name);
+    total += blob.size;
+    extracted.push({ name: entry.name, blob });
+  }
+  return extracted;
 }
 
 export function isPrAnalyzeDisabled(params: {

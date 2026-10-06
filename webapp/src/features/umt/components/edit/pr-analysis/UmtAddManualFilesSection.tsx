@@ -45,7 +45,7 @@ import { useNotifications } from "@context/notifications/NotificationsContext";
 import {
   bundleInfoApplies,
   bundlesInfoPathError,
-  findUnsafeZipEntry,
+  extractZipEntriesWithinLimits,
   githubRawUrlError,
   isManualFileTooLarge,
   isZipDisallowedForPath,
@@ -355,20 +355,14 @@ export default function UmtAddManualFilesSection({
   ): Promise<UmtFileOperation[]> {
     const zip = await JSZip.loadAsync(zipFile);
     const entries = Object.values(zip.files).filter((entry) => !entry.dir);
-    const unsafeEntry = findUnsafeZipEntry(entries);
-    if (unsafeEntry) {
-      throw new UmtZipRejectedError(
-        `The zip cannot be added because "${unsafeEntry.name}" is not a safe path. ${unsafeEntry.error}`,
-      );
-    }
+    const extracted = await extractZipEntriesWithinLimits(entries);
     const rows: UmtFileOperation[] = [];
     // Resolve once: `path` may still carry the archive's own name on the end,
     // which would otherwise become a directory segment in every entry's path.
     const targetDir = zipTargetDirectory(path, zipFile.name);
 
-    for (const entry of entries) {
-      const blob = await entry.async("blob");
-      const extractedFile = new File([blob], entry.name);
+    for (const entry of extracted) {
+      const extractedFile = new File([entry.blob], entry.name);
       try {
         await upload.mutateAsync({ relativePath: targetDir, sourceFilePath, file: extractedFile });
       } catch (error) {
