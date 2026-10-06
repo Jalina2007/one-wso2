@@ -5,18 +5,21 @@
 // in compliance with the License. You may obtain a copy at
 // http://www.apache.org/licenses/LICENSE-2.0
 
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import {
   GITHUB_PR_REGEX,
   PREFERRED_VERSION_REGEX,
   bundleInfoApplies,
   bundlesInfoPathError,
+  findUnsafeZipEntry,
   groupFileOperationsByType,
   isManualFileTooLarge,
   isPrAnalyzeDisabled,
   isZipDisallowedForPath,
   jarNameError,
   manualFileNameMatchesPath,
+  manualFilePathError,
   pluginsFileHasMatchingBundleInfo,
   prAnalysisStatusMessage,
   relativeJarPathError,
@@ -285,3 +288,66 @@ describe("bundle info field validators", () => {
     expect(relativeJarPathError("../dropins/my-component_1.2.3.jar")).toBeDefined();
   });
 });
+
+describe("manualFilePathError", () => {
+  it("accepts product-pack-relative paths, with or without a trailing slash", () => {
+    expect(manualFilePathError("repository/components/foo.jar")).toBeUndefined();
+    expect(manualFilePathError("repository/components/dropins/")).toBeUndefined();
+    expect(manualFilePathError("bin/./wso2server.sh")).toBeUndefined();
+    expect(manualFilePathError("lib/my..component.jar")).toBeUndefined();
+  });
+
+  it("rejects traversal segments", () => {
+    expect(manualFilePathError("../x")).toBeDefined();
+    expect(manualFilePathError("a/../../x")).toBeDefined();
+    expect(manualFilePathError("a/..")).toBeDefined();
+    expect(manualFilePathError("a/ .. /x")).toBeDefined();
+  });
+
+  it("rejects absolute, Windows-style and empty paths", () => {
+    expect(manualFilePathError("/absolute")).toBeDefined();
+    expect(manualFilePathError(" /absolute")).toBeDefined();
+    expect(manualFilePathError("a\\b")).toBeDefined();
+    expect(manualFilePathError("C:/x")).toBeDefined();
+    expect(manualFilePathError("")).toBeDefined();
+    expect(manualFilePathError("   ")).toBeDefined();
+  });
+
+  it("rejects control characters", () => {
+    expect(manualFilePathError("a\u0000b")).toBeDefined();
+    expect(manualFilePathError("a/b\nc")).toBeDefined();
+    expect(manualFilePathError("a\u007fb")).toBeDefined();
+  });
+
+  it("rejects paths longer than 200 characters", () => {
+    expect(manualFilePathError("a".repeat(200))).toBeUndefined();
+    expect(manualFilePathError("a".repeat(201))).toBeDefined();
+  });
+
+  it("rejects paths more than 40 levels deep", () => {
+    expect(manualFilePathError(Array.from({ length: 40 }, () => "a").join("/"))).toBeUndefined();
+    expect(manualFilePathError(Array.from({ length: 41 }, () => "a").join("/"))).toBeDefined();
+  });
+});
+
+describe("findUnsafeZipEntry", () => {
+  it("returns undefined when every entry is safe", () => {
+    expect(findUnsafeZipEntry([{ name: "lib/a.jar" }, { name: "bin/b.sh" }])).toBeUndefined();
+  });
+
+  it("names the first unsafe entry", () => {
+    expect(findUnsafeZipEntry([{ name: "lib/a.jar" }, { name: "/etc/passwd" }])?.name).toBe("/etc/passwd");
+  });
+
+  it("checks the name as stored in the archive rather than JSZip's cleaned-up one", async () => {
+    const source = new JSZip();
+    source.file("lib/safe.jar", "ok");
+    source.file("lib/../../evil.jar", "bad");
+    const loaded = await JSZip.loadAsync(await source.generateAsync({ type: "uint8array" }));
+    const entries = Object.values(loaded.files).filter((entry) => !entry.dir);
+
+    expect(entries.some((entry) => entry.name === "evil.jar")).toBe(true);
+    expect(findUnsafeZipEntry(entries)?.name).toBe("lib/../../evil.jar");
+  });
+});
+

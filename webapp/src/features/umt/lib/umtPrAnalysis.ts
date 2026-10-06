@@ -47,6 +47,52 @@ export function githubRawUrlError(value: string): string | undefined {
 const MAX_MANUAL_FILE_BYTES = 50 * 1024 * 1024;
 const RESTRICTED_RELATIVE_JAR_PATHS = ["/dropins"];
 
+const MAX_MANUAL_PATH_LENGTH = 200;
+const MAX_MANUAL_PATH_DEPTH = 40;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTER_REGEX = /[\u0000-\u001f\u007f]/;
+const DRIVE_LETTER_REGEX = /^[a-z]:/i;
+
+// Paths must be relative to the product pack.
+export function manualFilePathError(path: string): string | undefined {
+  const trimmed = path.trim();
+  if (!trimmed) return "The path is empty.";
+  if (trimmed.length > MAX_MANUAL_PATH_LENGTH) {
+    return `The path is longer than ${MAX_MANUAL_PATH_LENGTH} characters.`;
+  }
+  if (CONTROL_CHARACTER_REGEX.test(trimmed)) return "The path contains control characters.";
+  if (trimmed.includes("\\")) return "The path must use '/' as the separator, not '\\'.";
+  if (trimmed.startsWith("/")) return "The path must be relative to the product pack, not start with '/'.";
+  if (DRIVE_LETTER_REGEX.test(trimmed)) return "The path must not start with a drive letter.";
+
+  const segments = trimmed.split("/").filter(Boolean);
+  if (segments.some((segment) => segment.trim() === "..")) return "The path must not contain '..'.";
+  if (segments.length > MAX_MANUAL_PATH_DEPTH) {
+    return `The path is more than ${MAX_MANUAL_PATH_DEPTH} levels deep.`;
+  }
+  return undefined;
+}
+
+// JSZip strips `..` from `name`, so check the original name.
+export function findUnsafeZipEntry(
+  entries: { name: string; unsafeOriginalName?: string }[],
+): { name: string; error: string } | undefined {
+  for (const entry of entries) {
+    const name = entry.unsafeOriginalName ?? entry.name;
+    const error = manualFilePathError(name);
+    if (error) return { name, error };
+  }
+  return undefined;
+}
+
+// Thrown before any entry is uploaded.
+export class UmtZipRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UmtZipRejectedError";
+  }
+}
+
 export function isPrAnalyzeDisabled(params: {
   status: string | null | undefined;
   hasNewInputsSinceLastAnalysis: boolean;
