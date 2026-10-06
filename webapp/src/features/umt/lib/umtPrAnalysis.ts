@@ -50,8 +50,9 @@ const RESTRICTED_RELATIVE_JAR_PATHS = ["/dropins"];
 
 const MAX_MANUAL_PATH_LENGTH = 200;
 const MAX_MANUAL_PATH_DEPTH = 40;
+// Control, invisible and text-direction characters, which can disguise a name.
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTER_REGEX = /[\u0000-\u001f\u007f]/;
+const CONTROL_CHARACTER_REGEX = /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
 const DRIVE_LETTER_REGEX = /^[a-z]:/i;
 
 // Paths must be relative to the product pack.
@@ -61,7 +62,7 @@ export function manualFilePathError(path: string): string | undefined {
   if (trimmed.length > MAX_MANUAL_PATH_LENGTH) {
     return `The path is longer than ${MAX_MANUAL_PATH_LENGTH} characters.`;
   }
-  if (CONTROL_CHARACTER_REGEX.test(trimmed)) return "The path contains control characters.";
+  if (CONTROL_CHARACTER_REGEX.test(trimmed)) return "The path contains control or invisible characters.";
   if (trimmed.includes("\\")) return "The path must use '/' as the separator, not '\\'.";
   if (trimmed.startsWith("/")) return "The path must be relative to the product pack, not start with '/'.";
   if (DRIVE_LETTER_REGEX.test(trimmed)) return "The path must not start with a drive letter.";
@@ -70,6 +71,14 @@ export function manualFilePathError(path: string): string | undefined {
   if (segments.some((segment) => segment.trim() === "..")) return "The path must not contain '..'.";
   if (segments.length > MAX_MANUAL_PATH_DEPTH) {
     return `The path is more than ${MAX_MANUAL_PATH_DEPTH} levels deep.`;
+  }
+  return undefined;
+}
+
+// SVN and GitHub sources take their file name from the end of the URL.
+export function sourceUrlFileNameError(fileName: string): string | undefined {
+  if (fileName === "." || fileName === ".." || manualFilePathError(fileName)) {
+    return `The end of the source URL ("${fileName}") is not a valid file name.`;
   }
   return undefined;
 }
@@ -175,7 +184,9 @@ export async function extractZipEntriesWithinLimits(
     let blob: Blob | undefined;
     try {
       blob = await readZipEntryWithinLimit(entry, limit);
-    } catch {
+    } catch (error) {
+      // A TypeError is a bug in this code, not a bad zip.
+      if (error instanceof TypeError) throw error;
       // JSZip errors when an entry doesn't match its header.
       throw new UmtZipRejectedError(
         `The zip cannot be added because "${entry.name}" could not be unzipped. The zip may be corrupted.`,

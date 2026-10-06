@@ -24,6 +24,7 @@ import {
   pluginsFileHasMatchingBundleInfo,
   prAnalysisStatusMessage,
   relativeJarPathError,
+  sourceUrlFileNameError,
   umtSvnLocationRegex,
   UmtZipRejectedError,
   zipTargetDirectory,
@@ -321,6 +322,20 @@ describe("manualFilePathError", () => {
     expect(manualFilePathError("a\u007fb")).toBeDefined();
   });
 
+  it("rejects invisible and text-direction characters", () => {
+    expect(manualFilePathError("lib/\u202eraj.exe")).toBeDefined();
+    expect(manualFilePathError("lib/a\u200b.jar")).toBeDefined();
+    expect(manualFilePathError("lib/\u2066a.jar")).toBeDefined();
+    expect(manualFilePathError("lib/\ufeffa.jar")).toBeDefined();
+    expect(manualFilePathError("lib/a\u0085.jar")).toBeDefined();
+  });
+
+  it("accepts non-ASCII names", () => {
+    expect(manualFilePathError("lib/café.jar")).toBeUndefined();
+    expect(manualFilePathError("docs/説明.txt")).toBeUndefined();
+    expect(manualFilePathError("docs/ملف.txt")).toBeUndefined();
+  });
+
   it("rejects paths longer than 200 characters", () => {
     expect(manualFilePathError("a".repeat(200))).toBeUndefined();
     expect(manualFilePathError("a".repeat(201))).toBeDefined();
@@ -425,9 +440,35 @@ describe("extractZipEntriesWithinLimits", () => {
     await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/"lib\/bomb.jar" is larger than 2 MB/);
   });
 
+  it("lets a programming error through instead of reporting a corrupted zip", async () => {
+    const [entry] = await loadEntries(await buildZip({ "lib/a.jar": "alpha" }));
+    const broken = Object.assign(Object.create(entry), { internalStream: undefined });
+
+    await expect(extractZipEntriesWithinLimits([broken])).rejects.toThrow(TypeError);
+  });
+
   it("rejects an entry within the limits whose real size doesn't match its forged declared size", async () => {
     const forged = forgeDeclaredSizes(await buildZip({ "lib/small.jar": new Uint8Array(MB) }), 10);
     const entries = await loadEntries(forged);
     await expect(extractZipEntriesWithinLimits(entries)).rejects.toThrow(/"lib\/small.jar" could not be unzipped/);
+  });
+});
+
+
+describe("sourceUrlFileNameError", () => {
+  it("accepts ordinary file names", () => {
+    expect(sourceUrlFileNameError("my-component_1.2.3.jar")).toBeUndefined();
+    expect(sourceUrlFileNameError("wso2server.sh")).toBeUndefined();
+    expect(sourceUrlFileNameError("README")).toBeUndefined();
+  });
+
+  it("rejects names that point at a directory rather than a file", () => {
+    expect(sourceUrlFileNameError("..")).toBeDefined();
+    expect(sourceUrlFileNameError(".")).toBeDefined();
+    expect(sourceUrlFileNameError("")).toBeDefined();
+  });
+
+  it("rejects names the path check rejects", () => {
+    expect(sourceUrlFileNameError("a\\b.jar")).toBeDefined();
   });
 });

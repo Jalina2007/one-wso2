@@ -53,6 +53,7 @@ import {
   manualFileNameMatchesPath,
   manualFilePathError,
   relativeJarPathError,
+  sourceUrlFileNameError,
   umtSvnLocationRegex,
   UmtZipRejectedError,
   zipTargetDirectory,
@@ -158,6 +159,7 @@ export default function UmtAddManualFilesSection({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const needsBundleInfo = bundleInfoApplies(relativePath, operation);
+  const relativePathError = relativePath ? manualFilePathError(relativePath) : undefined;
 
   function resetForm() {
     setRelativePath("");
@@ -269,6 +271,13 @@ export default function UmtAddManualFilesSection({
     // case can only be reported afterwards — see below.
     const isZip = Boolean(fileForUpload?.name.toLowerCase().endsWith(".zip"));
     if (!isZip) {
+      if (!fileForUpload) {
+        const fileNameError = sourceUrlFileNameError(lastPathSegment(sourceFilePath));
+        if (fileNameError) {
+          setFormError(fileNameError);
+          return;
+        }
+      }
       const filePath = singleEntryFilePath(fileForUpload, relativePath, sourceFilePath);
       if (files.some((row) => row.file === filePath)) {
         setFormError(`"${filePath}" has already been added.`);
@@ -560,8 +569,8 @@ export default function UmtAddManualFilesSection({
               label="Path in Product Pack"
               value={relativePath}
               onChange={(e) => setRelativePath(e.target.value)}
-              error={Boolean(relativePath) && Boolean(manualFilePathError(relativePath))}
-              helperText={relativePath ? manualFilePathError(relativePath) : undefined}
+              error={Boolean(relativePathError)}
+              helperText={relativePathError}
             />
             <FormControl fullWidth>
               <InputLabel id="manual-file-operation-label">Operation</InputLabel>
