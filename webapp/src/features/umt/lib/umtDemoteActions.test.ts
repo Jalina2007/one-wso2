@@ -80,7 +80,7 @@ describe("computeUmtDemoteActions", () => {
   });
 
   it("returns no demote buttons for other verifying-family states", () => {
-    for (const state of ["Released", "UAT", "UATRequested"]) {
+    for (const state of ["Released", "UAT", "UATRequested"] as const) {
       expect(computeUmtDemoteActions("verifying", state, false, false, null)).toEqual([]);
     }
   });

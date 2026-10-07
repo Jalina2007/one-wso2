@@ -52,6 +52,7 @@ import { useUmtMeta } from "../../../api/useUmtMeta";
 import { useUmtProductAnalysis } from "../../../api/useUmtUpdateViewData";
 import { UmtPartialProductAnalysisSaveError, useUmtSaveProductAnalysis } from "../../../api/useUmtProductAnalysis";
 import { groupFileOperationsByType } from "../../../lib/umtPrAnalysis";
+import { umtLifecycleState } from "../../../lib/umtLifecycleState";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -67,7 +68,7 @@ function productKey(name: string | null | undefined, version: string | null | un
 
 export default function UmtProductAnalysisStep({ id, update }: { id: string; update: UmtUpdateSummary }) {
   const { showSuccess, showError } = useNotifications();
-  const productAnalysis = useUmtProductAnalysis(id, update.lifecycleState, { alwaysEnabled: true });
+  const productAnalysis = useUmtProductAnalysis(id, umtLifecycleState(update.lifecycleState), { alwaysEnabled: true });
   const meta = useUmtMeta();
   const saveAnalysis = useUmtSaveProductAnalysis(id);
 

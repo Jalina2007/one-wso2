@@ -42,6 +42,7 @@ import { useNotifications } from "@context/notifications/NotificationsContext";
 import type { UmtBundleInfoChange, UmtFileOperation, UmtPullRequestAnalysisItem, UmtUpdateSummary } from "../../../api/umtUpdates";
 import type { UmtUpdateType } from "../../../api/umtTypes";
 import { useUmtPullRequestAnalysis } from "../../../api/useUmtUpdateViewData";
+import { umtLifecycleState } from "../../../lib/umtLifecycleState";
 import {
   UmtPartialProceedError,
   useUmtPrAnalysisStatus,
@@ -70,8 +71,9 @@ const { DataGrid: DataGridComponent } = DataGrid;
 
 export default function UmtPrAnalysisStep({ id, update }: { id: string; update: UmtUpdateSummary }) {
   const { showSuccess, showError } = useNotifications();
-  const pullRequestAnalysis = useUmtPullRequestAnalysis(id, update.lifecycleState, { alwaysEnabled: true });
-  const isDevelopment = update.lifecycleState === "Development";
+  const lifecycleState = umtLifecycleState(update.lifecycleState);
+  const pullRequestAnalysis = useUmtPullRequestAnalysis(id, lifecycleState, { alwaysEnabled: true });
+  const isDevelopment = lifecycleState === "Development";
   const status = useUmtPrAnalysisStatus(id, update.praStatus, isDevelopment);
   const startAnalysis = useUmtStartPullRequestAnalysis(id);
   const proceed = useUmtProceedFromPrAnalysis(id);

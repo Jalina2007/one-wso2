@@ -29,6 +29,7 @@ import {
 } from "../api/useUmtUpdateActions";
 import { isValidGithubIssueUrl } from "../lib/umtCreateUpdate";
 import { useUmtUpdateViewData } from "../api/useUmtUpdateViewData";
+import { umtLifecycleState } from "../lib/umtLifecycleState";
 import EditableLinkSection from "./UmtEditableLinkSection";
 import {
   ProductAnalysisSection,
@@ -52,7 +53,8 @@ export default function UmtUpdateViewSections({
   id: string;
   update: UmtUpdateSummary;
 }) {
-  const viewData = useUmtUpdateViewData(id, update.lifecycleState, Boolean(update.isHotfix));
+  const lifecycleState = umtLifecycleState(update.lifecycleState);
+  const viewData = useUmtUpdateViewData(id, lifecycleState, Boolean(update.isHotfix));
   const publicPullRequests = update.publicPullRequests ?? [];
   const gate = useUmtGate();
   const saveIssues = useUmtSaveIssues(id);
@@ -61,7 +63,7 @@ export default function UmtUpdateViewSections({
   // The add action is hidden once an update is Released; the admin-only
   // delete column follows the same rule this codebase already applies
   // elsewhere (e.g. File Approval's promote gate).
-  const canAddLinks = update.lifecycleState !== "Released";
+  const canAddLinks = lifecycleState !== "Released";
 
   return (
     <Stack spacing={3} sx={{ mt: 3 }}>
@@ -148,7 +150,7 @@ export default function UmtUpdateViewSections({
       <DependencySection query={viewData.dependencies} />
       {update.isHotfix && <HotfixSection query={viewData.hotfixInfo} />}
 
-      {update.lifecycleState === "Completed" && (
+      {lifecycleState === "Completed" && (
         <DividedTableSection title="Completion Details">
           <DenseTable
             ariaLabel="Completion details"

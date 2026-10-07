@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { Box, Stack, Typography } from "@wso2/oxygen-ui";
 import { describeError } from "@api/errors";
 import { useNotifications } from "@context/notifications/NotificationsContext";
+import type { UmtLifecycleState } from "../../api/umtTypes";
 import type { UmtUpdateSummary } from "../../api/umtUpdates";
 import { useUmtGate } from "../../api/useUmtGate";
 import { useUmtLifecycleTransition } from "../../api/useUmtLifecycleTransition";
@@ -30,6 +31,7 @@ import {
   type UmtEditStepId,
 } from "../../lib/umtEditSteps";
 import { computeUmtDemoteActions } from "../../lib/umtDemoteActions";
+import { umtLifecycle, umtLifecycleState } from "../../lib/umtLifecycleState";
 import { readPersistedEditStep, writePersistedEditStep } from "../../lib/umtLocalState";
 import { isDescriptionInstructionComplete } from "../../lib/umtDescriptionInstruction";
 import { isIntegrationTestsComplete } from "../../lib/umtIntegrationTests";
@@ -57,16 +59,17 @@ export default function UmtUpdateEditTab({
   id: string;
   update: UmtUpdateSummary;
 }) {
-  const pullRequestAnalysis = useUmtPullRequestAnalysis(id, update.lifecycleState);
-  const productAnalysis = useUmtProductAnalysis(id, update.lifecycleState, { alwaysEnabled: true });
-  const stagingTestResults = useUmtStagingTestResults(id, update.lifecycleState);
+  const lifecycleState = umtLifecycleState(update.lifecycleState);
+  const pullRequestAnalysis = useUmtPullRequestAnalysis(id, lifecycleState);
+  const productAnalysis = useUmtProductAnalysis(id, lifecycleState, { alwaysEnabled: true });
+  const stagingTestResults = useUmtStagingTestResults(id, lifecycleState);
   const gate = useUmtGate();
   const transition = useUmtLifecycleTransition(id);
   const { showSuccess, showError } = useNotifications();
 
-  const hasFileOps = umtHasAdditionalFileOperations(pullRequestAnalysis.data, update.lifecycleState);
-  const steps = computeUmtEditSteps(update.lifecycle, hasFileOps);
-  const backendActiveIndex = umtActiveStepIndex(update.lifecycleState, steps);
+  const hasFileOps = umtHasAdditionalFileOperations(pullRequestAnalysis.data, lifecycleState);
+  const steps = computeUmtEditSteps(umtLifecycle(update.lifecycle), hasFileOps);
+  const backendActiveIndex = umtActiveStepIndex(lifecycleState, steps);
   const backendActiveId = steps[backendActiveIndex]?.id;
 
   // Identifies this particular stay in the current lifecycle state: the
@@ -131,7 +134,7 @@ export default function UmtUpdateEditTab({
   const isSecurityAdvisory = currentStep.id === "security-advisory";
   const isTesting = currentStep.id === "testing";
   const isVerifying = currentStep.id === "verifying";
-  const isReleasedVerifying = isVerifying && update.lifecycleState === "Released";
+  const isReleasedVerifying = isVerifying && lifecycleState === "Released";
   const isTerminal = currentStep.id === "completed" || currentStep.id === "cloud-released";
   const roleAllowed = !isFileApproval || gate.isAdmin || gate.isProductLead;
   // Proceed here promotes lifecycle state, so it shouldn't be available
@@ -153,12 +156,12 @@ export default function UmtUpdateEditTab({
   // must have reached Staging, AND every product's manual test result must
   // already be submitted.
   const testingReady =
-    !isTesting || (stagingTestResults.isSuccess && isTestingComplete(update.lifecycleState, stagingTestResults.data));
+    !isTesting || (stagingTestResults.isSuccess && isTestingComplete(lifecycleState, stagingTestResults.data));
   // Only Released has a real forward action (the Complete Update dialog);
   // every other verifying-family state (UATStaging/UAT/UATRequested/OnHold)
   // has no working transition in this pass, so Proceed stays disabled for
   // all of them uniformly.
-  const verifyingReady = !isVerifying || update.lifecycleState === "Released";
+  const verifyingReady = !isVerifying || lifecycleState === "Released";
   // A security update can't reach UAT without an advisory, so Next waits for
   // at least one saved advisory rather than letting the gap surface later,
   // and for any unsaved changes, which leaving the step would discard.
@@ -177,7 +180,7 @@ export default function UmtUpdateEditTab({
   // Support's single transition is hardcoded to "Released"; every other
   // wired step sends the backend's own promoteStages[0] rather than a
   // value this shell invents.
-  const nextLifecycleState = isCloudDevelopment ? "Released" : update.promoteStages?.[0];
+  const nextLifecycleState = isCloudDevelopment ? "Released" : umtLifecycleState(update.promoteStages?.[0]);
 
   const isValidate = currentStep.id === "validate";
   // Back is a plain, backend-call-free control shown only on Integration
@@ -193,12 +196,12 @@ export default function UmtUpdateEditTab({
 
   const demoteActions = computeUmtDemoteActions(
     currentStep.id,
-    update.lifecycleState,
+    lifecycleState,
     update.isHotfix ?? false,
     gate.isAdmin,
     update.demoteStages,
   );
-  const handleDemote = async (target: string) => {
+  const handleDemote = async (target: UmtLifecycleState) => {
     try {
       await transition.mutateAsync(target);
       showSuccess(`Update ${id} demoted to ${target}`);
@@ -298,7 +301,7 @@ export default function UmtUpdateEditTab({
                           ? "Save your security advisory changes before proceeding."
                           : "Save at least one security advisory before proceeding."
                         : !testingReady
-                          ? update.lifecycleState !== "Staging"
+                          ? lifecycleState !== "Staging"
                             ? "Waiting for the testing environment to reach Staging before proceeding."
                             : "Every product needs a submitted test result before proceeding."
                           : !verifyingReady

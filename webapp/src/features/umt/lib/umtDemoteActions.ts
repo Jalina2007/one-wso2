@@ -14,11 +14,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import type { UmtLifecycleState } from "../api/umtTypes";
 import type { UmtEditStepId } from "./umtEditSteps";
+import { umtLifecycleState } from "./umtLifecycleState";
 
 export interface UmtDemoteAction {
   label: string;
-  targetLifecycleState: string;
+  targetLifecycleState: UmtLifecycleState;
   color?: "error";
 }
 
@@ -28,7 +30,7 @@ export interface UmtDemoteAction {
 // separate branching for them.
 export function computeUmtDemoteActions(
   stepId: UmtEditStepId,
-  lifecycleState: string | null | undefined,
+  lifecycleState: UmtLifecycleState | null | undefined,
   isHotfix: boolean,
   isAdmin: boolean,
   demoteStages: readonly string[] | null | undefined,
@@ -54,10 +56,12 @@ export function computeUmtDemoteActions(
     case "validate":
       // The valid targets differ across the testing states (Staging, for one,
       // can only request a demotion), so they come from the backend.
-      return (demoteStages ?? []).map((stage) => ({
-        label: umtDemoteStageLabel(stage),
-        targetLifecycleState: stage,
-      }));
+      return (demoteStages ?? []).flatMap((stage) => {
+        const targetLifecycleState = umtLifecycleState(stage);
+        return targetLifecycleState
+          ? [{ label: umtDemoteStageLabel(targetLifecycleState), targetLifecycleState }]
+          : [];
+      });
     case "verifying":
       if (lifecycleState === "UATStaging") {
         return [{ label: "Demote to Testing", targetLifecycleState: "Staging" }];
@@ -74,7 +78,7 @@ export function computeUmtDemoteActions(
 // A staging demotion is requested rather than applied directly; the update
 // ends up back in Development once it completes, which is what the user asked
 // for.
-function umtDemoteStageLabel(stage: string): string {
+function umtDemoteStageLabel(stage: UmtLifecycleState): string {
   if (stage === "DemoteStagingRequested") return "Demote to Development";
   if (stage === "OnHold") return "Change to On Hold";
   return `Demote to ${stage}`;
