@@ -371,18 +371,20 @@ describe("findUnsafeZipEntry", () => {
 describe("extractZipEntriesWithinLimits", () => {
   const MB = 1024 * 1024;
 
+  /** Loads a zip and returns its file entries. */
   async function loadEntries(bytes: Uint8Array) {
     const zip = await JSZip.loadAsync(bytes);
     return Object.values(zip.files).filter((entry) => !entry.dir);
   }
 
+  /** Builds a deflate-compressed zip from name-to-content pairs. */
   async function buildZip(files: Record<string, Uint8Array | string>) {
     const zip = new JSZip();
     for (const [name, content] of Object.entries(files)) zip.file(name, content);
     return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
   }
 
-  // Forges every entry's declared uncompressed size.
+  /** Forges every entry's declared uncompressed size. */
   function forgeDeclaredSizes(bytes: Uint8Array, size: number): Uint8Array {
     const forged = bytes.slice();
     const view = new DataView(forged.buffer);
@@ -394,6 +396,7 @@ describe("extractZipEntriesWithinLimits", () => {
     return forged;
   }
 
+  /** Returns `count` files of `bytes` bytes each. */
   function filesOfSize(count: number, bytes: number): Record<string, Uint8Array> {
     const content = new Uint8Array(bytes);
     return Object.fromEntries(Array.from({ length: count }, (_, i) => [`lib/file-${i}.jar`, content]));

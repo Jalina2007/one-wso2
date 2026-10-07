@@ -91,6 +91,7 @@ interface UmtAddManualFilesSectionProps {
   onDirty: () => void;
 }
 
+/** Manual Files section of the PR Analysis step, with its Add Manual File dialog. */
 export default function UmtAddManualFilesSection({
   updateId,
   disabled,
@@ -203,6 +204,7 @@ export default function UmtAddManualFilesSection({
     setSelectedFile(file);
   }
 
+  /** Validates the Add Manual File form, then uploads the file or zip and adds its rows. */
   async function handleAdd() {
     setFormError(undefined);
     if (!relativePath.trim() || !operation) {
@@ -356,6 +358,7 @@ export default function UmtAddManualFilesSection({
     return [{ file: singleEntryFilePath(file, path, sourceFilePath), operation: op, sourceFilePath }];
   }
 
+  /** Checks and unpacks a zip, then uploads its entries into the target directory. */
   async function addZipEntries(
     zipFile: File,
     path: string,

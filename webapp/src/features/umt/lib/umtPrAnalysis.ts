@@ -55,7 +55,7 @@ const MAX_MANUAL_PATH_DEPTH = 40;
 const CONTROL_CHARACTER_REGEX = /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
 const DRIVE_LETTER_REGEX = /^[a-z]:/i;
 
-// Paths must be relative to the product pack.
+/** Returns why a path is unsafe, or undefined. Paths must be relative to the product pack. */
 export function manualFilePathError(path: string): string | undefined {
   const trimmed = path.trim();
   if (!trimmed) return "The path is empty.";
@@ -75,7 +75,7 @@ export function manualFilePathError(path: string): string | undefined {
   return undefined;
 }
 
-// SVN and GitHub sources take their file name from the end of the URL.
+/** Validates the file name an SVN or GitHub source takes from the end of its URL. */
 export function sourceUrlFileNameError(fileName: string): string | undefined {
   if (fileName === "." || fileName === ".." || manualFilePathError(fileName)) {
     return `The end of the source URL ("${fileName}") is not a valid file name.`;
@@ -83,7 +83,7 @@ export function sourceUrlFileNameError(fileName: string): string | undefined {
   return undefined;
 }
 
-// JSZip strips `..` from `name`, so check the original name.
+/** Returns the first unsafe zip entry. Checks the original name, as JSZip strips `..` from `name`. */
 export function findUnsafeZipEntry(
   entries: { name: string; unsafeOriginalName?: string }[],
 ): { name: string; error: string } | undefined {
@@ -99,21 +99,22 @@ const MAX_ZIP_ENTRIES = 100;
 const MAX_ZIP_ENTRY_BYTES = 2 * 1024 * 1024;
 const MAX_ZIP_EXPANDED_BYTES = 70 * 1024 * 1024;
 
-// Thrown before any entry is uploaded.
+/** Thrown when a zip fails a check, before any entry is uploaded. */
 export class UmtZipRejectedError extends Error {
+  /** @param message Shown to the user in the Add Manual File dialog. */
   constructor(message: string) {
     super(message);
     this.name = "UmtZipRejectedError";
   }
 }
 
+/** Returns the uncompressed size the archive declares for an entry, from a private JSZip field. */
 function declaredUncompressedSize(entry: JSZip.JSZipObject): number | undefined {
-  // Private JSZip field, not in its typings.
   const size = (entry as unknown as { _data?: { uncompressedSize?: unknown } })._data?.uncompressedSize;
   return typeof size === "number" ? size : undefined;
 }
 
-// Resolves undefined once more than `limit` bytes have been unpacked.
+/** Unpacks an entry, resolving undefined once more than `limit` bytes have been unpacked. */
 function readZipEntryWithinLimit(entry: JSZip.JSZipObject, limit: number): Promise<Blob | undefined> {
   return new Promise((resolve, reject) => {
     const chunks: Uint8Array[] = [];
@@ -137,11 +138,12 @@ function readZipEntryWithinLimit(entry: JSZip.JSZipObject, limit: number): Promi
   });
 }
 
+/** Formats a byte count in MB for error messages. */
 function formatMb(bytes: number): string {
   return `${bytes / (1024 * 1024)} MB`;
 }
 
-// Checks and unpacks every entry before anything is uploaded.
+/** Checks and unpacks every entry before anything is uploaded. Throws UmtZipRejectedError on failure. */
 export async function extractZipEntriesWithinLimits(
   entries: JSZip.JSZipObject[],
 ): Promise<{ name: string; blob: Blob }[]> {
