@@ -24,8 +24,8 @@
 // usePromotionRequests call with/without enableBuFilter rather than two
 // separate endpoints.
 import { useState } from "react";
-import { Box, Chip, DataGrid, Grid, IconButton, MenuItem, Select, Skeleton, Tooltip, Typography } from "@wso2/oxygen-ui";
-import { InboxIcon, RefreshCwIcon, TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
+import { alpha, Box, Card, Chip, DataGrid, Grid, IconButton, MenuItem, Select, Skeleton, Tooltip, Typography } from "@wso2/oxygen-ui";
+import { ChevronDownIcon } from "@wso2/oxygen-ui-icons-react";
 import { humanizeHttpError } from "@api/http";
 import { useUserInfo } from "@api/useUserInfo";
 import { useAsgardeoUser } from "@hooks/useAsgardeoUser";
@@ -34,12 +34,18 @@ import { usePromotionPrivileges } from "../api/usePromotionRoles";
 import { usePromotionRequests } from "../api/usePromotionRequests";
 import { basePromotionRequestColumns } from "../components/promotionRequestColumns";
 import PromotionEmptyState from "../components/PromotionEmptyState";
+import PromotionRequestDetailDialog from "../components/PromotionRequestDetailDialog";
 import { PromotionGridToolbar } from "../components/PromotionGridToolbar";
-import { promotionRequestColor } from "../util/promotionStatus";
+import { promotionRequestChipColor } from "../util/promotionStatus";
 import { GRID_NO_POINTER_FOCUS_SX } from "@utils/dataGridSx";
 import type { PromotionRequestFull } from "../api/types";
+import type { Theme } from "@wso2/oxygen-ui";
 
-const ROW_COLOR_SX = { "& .row-approved": { bgcolor: "success.50" } };
+// `.50`/`.100` shade tokens aren't guaranteed on a semantic color — some
+// Oxygen presets define only `main`/`contrastText`, so a literal "success.50"
+// silently rendered no background at all. `alpha()` on `.main` (which every
+// preset defines) always resolves to a visible tint.
+const ROW_COLOR_SX = { "& .row-approved": { bgcolor: (theme: Theme) => alpha(theme.palette.success.main, 0.08) } };
 
 export default function CycleHistoryTab() {
   const userInfo = useUserInfo();
@@ -49,6 +55,7 @@ export default function CycleHistoryTab() {
 
   const cycles = useInactivePromotionCycles();
   const [selectedCycleId, setSelectedCycleId] = useState<number | "">("");
+  const [viewingRequest, setViewingRequest] = useState<PromotionRequestFull | null>(null);
   const selectedCycle = cycles.data?.promotionCycles.find((c) => c.id === selectedCycleId);
 
   // Source's own role branch is an `if (HR_ADMIN) ... else if (FUNCTIONAL_LEAD)`
@@ -66,12 +73,29 @@ export default function CycleHistoryTab() {
   const columns: DataGrid.GridColDef<PromotionRequestFull>[] = [
     ...basePromotionRequestColumns(),
     {
+      display: "flex",
       field: "status",
       headerName: "Promotion Board Approval Status",
       flex: 1.2,
       minWidth: 180,
       renderCell: (params) => (
-        <Chip label={params.value} size="small" sx={{ bgcolor: promotionRequestColor(params.value), color: "white" }} />
+        <Chip label={params.value} size="small" variant="outlined" color={promotionRequestChipColor(params.value)} />
+      ),
+    },
+    {
+      display: "flex",
+      field: "action",
+      headerName: "Action",
+      sortable: false,
+      filterable: false,
+      disableExport: true,
+      width: 90,
+      renderCell: (params) => (
+        <Tooltip title="View details">
+          <IconButton size="small" onClick={() => setViewingRequest(params.row)}>
+            <ChevronDownIcon size={16} />
+          </IconButton>
+        </Tooltip>
       ),
     },
   ];
@@ -80,12 +104,9 @@ export default function CycleHistoryTab() {
 
   return (
     <>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, gap: 1.5 }}>
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void cycles.refetch()}>
-            <RefreshCwIcon size={16} />
-          </IconButton>
-        </Tooltip>
+      <PromotionRequestDetailDialog request={viewingRequest} onClose={() => setViewingRequest(null)} />
+
+      <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", mb: 2, gap: 1.5 }}>
         <Select
           size="small"
           displayEmpty
@@ -113,38 +134,37 @@ export default function CycleHistoryTab() {
         <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 1 }} />
       ) : cycles.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load promotion cycles. ${humanizeHttpError(cycles.error)}`}
         />
       ) : !selectedCycle ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="Select a promotion cycle to view details." />
+        <PromotionEmptyState message="Select a promotion cycle to view details." />
       ) : (
         <>
           <Grid container spacing={3} sx={{ p: 2.5, mb: 2, border: 1, borderColor: "divider", borderRadius: 1 }}>
             <Grid size={{ xs: 6, md: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>Cycle Name</Typography>
-              <Typography sx={{ fontSize: 14 }}>{selectedCycle.name}</Typography>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>Cycle Name</Typography>
+              <Typography variant="body2">{selectedCycle.name}</Typography>
             </Grid>
             <Grid size={{ xs: 6, md: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>Start Date</Typography>
-              <Typography sx={{ fontSize: 14 }}>{selectedCycle.startDate}</Typography>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>Start Date</Typography>
+              <Typography variant="body2">{selectedCycle.startDate}</Typography>
             </Grid>
             <Grid size={{ xs: 6, md: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>End Date</Typography>
-              <Typography sx={{ fontSize: 14 }}>{selectedCycle.endDate}</Typography>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>End Date</Typography>
+              <Typography variant="body2">{selectedCycle.endDate}</Typography>
             </Grid>
             <Grid size={{ xs: 6, md: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>Lead Deadline</Typography>
-              <Typography sx={{ fontSize: 14 }}>{selectedCycle.leadDeadline}</Typography>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>Lead Deadline</Typography>
+              <Typography variant="body2">{selectedCycle.leadDeadline}</Typography>
             </Grid>
             <Grid size={{ xs: 6, md: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>FL Deadline</Typography>
-              <Typography sx={{ fontSize: 14 }}>{selectedCycle.functionalLeadDeadline}</Typography>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>FL Deadline</Typography>
+              <Typography variant="body2">{selectedCycle.functionalLeadDeadline}</Typography>
             </Grid>
             <Grid size={{ xs: 6, md: 2 }}>
-              <Typography sx={{ fontSize: 12, fontWeight: 600, color: "text.secondary" }}>Board Deadline</Typography>
-              <Typography sx={{ fontSize: 14 }}>{selectedCycle.promotionBoardDeadline}</Typography>
+              <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>Board Deadline</Typography>
+              <Typography variant="body2">{selectedCycle.promotionBoardDeadline}</Typography>
             </Grid>
           </Grid>
 
@@ -152,23 +172,24 @@ export default function CycleHistoryTab() {
             <Skeleton variant="rectangular" height={320} sx={{ borderRadius: 1 }} />
           ) : requests.isError ? (
             <PromotionEmptyState
-              icon={<TriangleAlertIcon size={28} />}
               tone="error"
               message={`Unable to load promotion requests. ${humanizeHttpError(requests.error)}`}
             />
           ) : rows.length === 0 ? (
-            <PromotionEmptyState icon={<InboxIcon size={28} />} message="There is no promotion request in this cycle." />
+            <PromotionEmptyState message="There is no promotion request in this cycle." />
           ) : (
-            <DataGrid.DataGrid
-              rows={rows}
-              columns={columns}
-              getRowClassName={(params) => (params.row.status === "APPROVED" ? "row-approved" : "")}
-              showToolbar
-              slots={{ toolbar: PromotionGridToolbar }}
-              sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX, ...ROW_COLOR_SX }}
-              initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-              pageSizeOptions={[10, 25, 50]}
-            />
+            <Card variant="outlined" sx={{ p: 2 }}>
+              <DataGrid.DataGrid
+                rows={rows}
+                columns={columns}
+                getRowClassName={(params) => (params.row.status === "APPROVED" ? "row-approved" : "")}
+                showToolbar
+                slots={{ toolbar: PromotionGridToolbar }}
+                sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX, ...ROW_COLOR_SX }}
+                initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+                pageSizeOptions={[10, 25, 50]}
+              />
+            </Card>
           )}
         </>
       )}

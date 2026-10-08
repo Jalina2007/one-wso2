@@ -81,9 +81,68 @@ async function idTokenStillLive(): Promise<boolean> {
   }
 }
 
+/**
+ * The `sub` this tab has already resolved, shared by every instance of the
+ * hook below.
+ *
+ * There is exactly one signed-in user per tab, so every call site resolves the
+ * same string — but each call site has its own `useState`, so each one used to
+ * start at `{status: "loading"}` and re-decode the token from scratch. That is
+ * not merely wasteful: `userSub` is part of every finance query KEY, so a hook
+ * that has not resolved yet reads `["opd-user-info", undefined]` — a different,
+ * EMPTY cache entry — and reports no data for it. Mounting a screen therefore
+ * showed a skeleton over data the app already had, every time.
+ *
+ * Switching Finance → Overview's dropdown to OPD Claims mounts that whole
+ * dashboard fresh, so that was a skeleton flash on every switch. Seeded from
+ * here instead, a fresh mount starts at "ready", keys straight onto the cached
+ * query, and renders the content immediately.
+ *
+ * Cleared on sign-out, so a second account in the same tab cannot be seeded
+ * with the first one's identity. Two layers, because neither alone is
+ * reliable — see `forgetResolvedSubOnSignOut` below for the one that
+ * actually has to hold.
+ */
+let resolvedSub: string | null = null;
+
+/**
+ * The real sign-out boundary. `useSecureSignOut` is every production path
+ * out of a session, and it calls this unconditionally alongside its own
+ * `qc.clear()` — so the shared identity is dropped whether or not any
+ * `useAsgardeoSub()` instance happens to be mounted at that moment.
+ *
+ * That "whether or not" is not a hedge, it is the actual bug this closes.
+ * The effect below ALSO clears `resolvedSub` when it observes `isSignedIn`
+ * go false — but that only runs for an instance that is both mounted and
+ * re-renders with the new value. `AuthGuard` swaps its whole authenticated
+ * subtree for a spinner in the SAME render that `isSignedIn` goes false,
+ * unmounting every consumer of this hook before any of them gets a chance to
+ * react to the very prop change that is tearing them down. A component torn
+ * down never re-renders to observe what tore it down. So on every normal
+ * sign-out, `resolvedSub` was left holding the outgoing user's identity —
+ * and the next account to sign in in the same tab would seed straight from
+ * it, synchronously, before its own token had even been read, issuing its
+ * first requests under the PREVIOUS user's subject until decoding caught up.
+ *
+ * The effect's own clear stays, for a sign-out that does not reach
+ * `useSecureSignOut` at all — Asgardeo's own session-expiry detection, say,
+ * which sets `isSignedIn` false directly with no callback of ours in the
+ * loop. Belt and braces: this function is the belt.
+ */
+export function forgetResolvedSubOnSignOut(): void {
+  resolvedSub = null;
+}
+
+/** Test-only: drop the shared identity so each test starts from nothing. */
+export function __resetResolvedSubForTests(): void {
+  resolvedSub = null;
+}
+
 export function useAsgardeoSub(): { state: SubState; retry: () => void } {
   const { isSignedIn, getDecodedIdToken } = useAsgardeo();
-  const [state, setState] = useState<SubState>({ status: "loading" });
+  const [state, setState] = useState<SubState>(() =>
+    resolvedSub ? { status: "ready", sub: resolvedSub } : { status: "loading" },
+  );
   // A tick counter drives the identity-resolution effect: bumping it
   // re-runs getDecodedIdToken() so a user-visible "Retry" can recover
   // from a decode error without having to sign out and back in.
@@ -92,17 +151,47 @@ export function useAsgardeoSub(): { state: SubState; retry: () => void } {
 
   useEffect(() => {
     if (!isSignedIn) {
+      // A different account may sign in next; it must not inherit this one's
+      // identity from the shared cache above.
+      resolvedSub = null;
       setState({ status: "loading" });
       return;
     }
     let cancelled = false;
-    setState({ status: "loading" });
+    // Announce "loading" only when there is nothing resolved to keep. This
+    // effect re-runs whenever `isSignedIn`, `getDecodedIdToken` or a manual
+    // retry changes, and it used to reset to `loading` unconditionally — so an
+    // identity this hook had ALREADY resolved was withdrawn for as long as the
+    // re-check took.
+    //
+    // Nothing downstream can absorb that. `foldIdentityError` below turns
+    // "identity loading + query still pending" into a synthetic `isLoading`,
+    // and a query that is DISABLED has `isPending` true forever (it never
+    // fetches, so it never resolves) — an OPD or Expense backend that isn't
+    // configured in this environment, or a queue gated behind a role the
+    // reader lacks, is exactly that. So every re-run flipped those hooks back
+    // to "loading", `useFinanceGate.isResolving` with them, and every screen
+    // keyed off it — Finance → Overview, Claim Approval, their rail rows —
+    // blanked and came back. That is the blinking.
+    //
+    // A re-check is still worth running (a token rotation does change nothing
+    // else about it), it just runs in the background now: the resolved `sub`
+    // stays on screen until a DIFFERENT one arrives. An error state is not
+    // kept — a retry from there is someone asking to see the loading state.
+    setState((prev) => (prev.status === "ready" ? prev : { status: "loading" }));
     getDecodedIdToken()
       .then((token) => {
         if (cancelled) return;
         const s = (token as { sub?: string } | null | undefined)?.sub;
         if (typeof s === "string" && s.length > 0) {
-          setState({ status: "ready", sub: s });
+          // Shared, so the NEXT screen to mount starts from this answer
+          // instead of decoding the token again behind a skeleton.
+          resolvedSub = s;
+          // Same sub, same object: a re-check that confirms what we already
+          // knew must not re-render every consumer of this hook.
+          setState((prev) =>
+            prev.status === "ready" && prev.sub === s ? prev : { status: "ready", sub: s },
+          );
         } else {
           setState({
             status: "error",
@@ -142,6 +231,7 @@ export function useAsgardeoSub(): { state: SubState; retry: () => void } {
             if (cancelled) return;
             const s = (retried as { sub?: string } | null | undefined)?.sub;
             if (typeof s === "string" && s.length > 0) {
+              resolvedSub = s;
               setState({ status: "ready", sub: s });
               return;
             }
@@ -155,6 +245,7 @@ export function useAsgardeoSub(): { state: SubState; retry: () => void } {
           if (cancelled) return;
           const s = (token as { sub?: string } | null | undefined)?.sub;
           if (typeof s === "string" && s.length > 0) {
+            resolvedSub = s;
             setState({ status: "ready", sub: s });
             return;
           }
@@ -195,52 +286,84 @@ export function useAsgardeoSub(): { state: SubState; retry: () => void } {
   return { state, retry };
 }
 
-// Folds a failed identity resolution into a query's own result shape, so a
-// page sees a real error (with a retry path) instead of an indefinitely
-// disabled query — `enabled: ... && Boolean(userSub)` never flips true, so
-// the query itself never runs and never reports an error either, leaving
-// the page stuck showing an empty/loading state forever. Every sub-keyed
-// query (leave, finance backends, ...) should route its result through
-// this before returning it — this generalizes the pattern useMeProfile
-// introduced for its own single query.
+// Folds identity resolution into a query's own result shape, so a page sees
+// a real loading or error state (with a retry path, on error) instead of an
+// indefinitely disabled query — `enabled: ... && Boolean(userSub)` never
+// flips true while identity is unresolved, so the query itself never runs.
+// Every sub-keyed query (leave, finance backends, ...) should route its
+// result through this before returning it — this generalizes the pattern
+// useMeProfile introduced for its own single query.
 //
-// Identity errors always take precedence over whatever error state the
-// query itself happens to carry. Don't special-case query.isError here —
-// React Query's real refetch() bypasses `enabled` (see the note on
-// useMeProfile above), so a disabled query CAN end up with a real isError
-// from some earlier forced refetch attempt (a stray double-click, the
-// devtools' manual refetch, ...) even while identity is unresolved. If we
-// deferred to that instead, the page would show whatever unrelated error
-// that fetch produced, with `.refetch` pointing at React Query's real
-// refetch — which just re-fires the same doomed queryFn instead of ever
-// retrying identity, permanently shadowing the one error that's actually
-// recoverable. Once identity resolves (`enabled` flips true), the real
-// query state takes over normally.
+// Two branches, in order of precedence:
 //
-// The synthetic result doesn't match React Query's discriminated union
+//  1. Identity failed — synthesize a real, actionable error (unchanged from
+//     before). Takes precedence over whatever error state the query itself
+//     happens to carry: React Query's real refetch() bypasses `enabled`
+//     (see the note on useMeProfile above), so a disabled query CAN end up
+//     with a real isError from some earlier forced refetch attempt (a stray
+//     double-click, the devtools' manual refetch, ...) even while identity
+//     is unresolved. Deferring to that instead would show whatever
+//     unrelated error that fetch produced, with `.refetch` pointing at
+//     React Query's real refetch — which just re-fires the same doomed
+//     queryFn instead of ever retrying identity, permanently shadowing the
+//     one error that's actually recoverable.
+//
+//  2. Identity is still resolving AND the query has no data of its own yet
+//     (`isPending`) — synthesize a loading state. Without this, a disabled
+//     query with no cached data reports `isLoading: false` in React Query
+//     v5 (`isLoading` there is `isPending && isFetching`, and a disabled
+//     query is never `isFetching`), so every caller of this hook — CC, OPD
+//     and Expense Claims user-info alike — briefly read as "settled, and
+//     access denied" during the gap between mount and identity resolving,
+//     before the real query ever gets a chance to run. `FinanceOverviewPage`
+//     and every finance rail gate compute `isResolving` from these hooks'
+//     `isLoading`, so that gap read as the whole Finance section flashing
+//     "not available for your role" (or its skeleton) before settling on
+//     the real answer a moment later — reported as the app "continuously
+//     refreshing" or "flickering". `isPending` (not `isSuccess`/`isError`)
+//     is the guard: once the query has resolved for real at least once, a
+//     later identity re-check (a token refresh cycle, say) must not hide
+//     already-known-good data or a real error behind a fresh skeleton.
+//
+// The synthetic results don't match React Query's discriminated union
 // exactly (the four *Result variants have exclusive boolean flags), so we
 // cast through unknown — callers only read isError + error + isPending +
-// isLoading + isFetching + isSuccess + refetch, and this shape sets those
+// isLoading + isFetching + isSuccess + refetch, and both shapes set those
 // consistently.
 export function foldIdentityError<TData>(
   query: UseQueryResult<TData, Error>,
   identityState: SubState,
   retryIdentity: () => void,
 ): UseQueryResult<TData, Error> {
-  if (identityState.status !== "error") return query;
-  const synthetic = {
-    ...query,
-    isError: true,
-    isPending: false,
-    isLoading: false,
-    isSuccess: false,
-    isFetching: false,
-    status: "error" as const,
-    error: new Error(identityState.message),
-    refetch: (async () => {
-      retryIdentity();
-      return query;
-    }) as typeof query.refetch,
-  };
-  return synthetic as unknown as UseQueryResult<TData, Error>;
+  if (identityState.status === "error") {
+    const synthetic = {
+      ...query,
+      isError: true,
+      isPending: false,
+      isLoading: false,
+      isSuccess: false,
+      isFetching: false,
+      status: "error" as const,
+      error: new Error(identityState.message),
+      refetch: (async () => {
+        retryIdentity();
+        return query;
+      }) as typeof query.refetch,
+    };
+    return synthetic as unknown as UseQueryResult<TData, Error>;
+  }
+  if (identityState.status === "loading" && query.isPending) {
+    const synthetic = {
+      ...query,
+      isError: false,
+      isPending: true,
+      isLoading: true,
+      isSuccess: false,
+      isFetching: true,
+      status: "pending" as const,
+      fetchStatus: "fetching" as const,
+    };
+    return synthetic as unknown as UseQueryResult<TData, Error>;
+  }
+  return query;
 }

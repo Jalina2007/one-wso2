@@ -124,13 +124,15 @@ export default function RecommendationEditForm({
                 sx={{ width: 200 }}
                 value={
                   employeeInfo.data
-                    ? formatDate(employeeInfo.data.employeeInfo.lastPromotedDate) || "N/A"
+                    ? employeeInfo.data.employeeInfo.lastPromotedDate
+                      ? formatDate(employeeInfo.data.employeeInfo.lastPromotedDate)
+                      : "N/A"
                     : "…"
                 }
               />
             </Field>
             {employeeInfo.isError && (
-              <Typography sx={{ fontSize: 12.5, color: "error.main" }}>
+              <Typography variant="caption" sx={{ display: "block", color: "error.main" }}>
                 Couldn&apos;t load the applicant&apos;s record. {humanizeHttpError(employeeInfo.error)}
               </Typography>
             )}
@@ -155,6 +157,7 @@ export default function RecommendationEditForm({
         <Button
           size="large"
           variant="contained"
+          color="primary"
           disabled={!isValidContent || !isModified || busy}
           onClick={handleSave}
         >
@@ -177,7 +180,7 @@ export default function RecommendationEditForm({
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <Box>
-      <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>{label}</Typography>
+      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>{label}</Typography>
       {children}
     </Box>
   );

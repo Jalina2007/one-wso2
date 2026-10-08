@@ -20,6 +20,11 @@ import type { PromotionRequestStatus, RecommendationStatus } from "../api/types"
 // used by the Lead Portal's History tab (and, once ported, every other
 // history-style grid this app's admin/board/functional-lead portals show).
 
+// A theme palette role, not a fixed hex — a Chip tinted with one of these
+// stays legible across every Oxygen theme preset instead of only the one
+// it was picked against.
+export type PromotionChipColor = "default" | "primary" | "secondary" | "success" | "error" | "warning" | "info";
+
 /** A cycle-scoped request status reads as "in progress" while its cycle is
  * still the open one — otherwise the raw status (APPROVED/REJECTED/...)
  * would misleadingly look final for a request whose cycle can still move
@@ -38,46 +43,44 @@ export function promotionRequestStatusLabel(
   return status;
 }
 
-export function promotionRequestColor(status: PromotionRequestStatus): string {
+// Same semantic convention ParStatusChip already established for this app's
+// other status chips: pending/in-progress reads as warning, draft reads as
+// info (not a muted/neutral default — a draft is still something live, just
+// not submitted yet), completed as success, rejected as error.
+export function promotionRequestChipColor(status: PromotionRequestStatus): PromotionChipColor {
   switch (status) {
-    case "DECLINED":
-      return "#FF5630";
-    case "IN_PROGRESS":
-    case "DRAFT":
-      return "#FFAB00";
-    case "REQUESTED":
     case "APPROVED":
-      return "#76BA1B";
-    case "SUBMITTED":
-      return "#A980FF";
-    case "WITHDRAW":
-      return "#172B4D";
+      return "success";
+    case "IN_PROGRESS":
     case "FL_APPROVED":
-      return "#FF5630";
+    case "WITHDRAW":
+      return "warning";
+    case "DECLINED":
     case "FL_REJECTED":
     case "REJECTED":
-      return "#FF0000";
     case "REMOVED":
-      return "#DE350B";
+      return "error";
+    case "SUBMITTED":
+      return "primary";
+    case "DRAFT":
+      return "info";
     case "EXPIRED":
-      return "#727681";
+      return "default";
     default:
-      return "#0052CC";
+      return "info"; // REQUESTED, ACTIVE, PROCESSING
   }
 }
 
-export function recommendationColor(status: RecommendationStatus): string {
+export function recommendationChipColor(status: RecommendationStatus): PromotionChipColor {
   switch (status) {
-    case "DECLINED":
-      return "#FF5630";
-    case "REQUESTED":
-      return "#36B37E";
     case "SUBMITTED":
-      return "#6554C0";
+      return "success";
+    case "DECLINED":
+      return "error";
     case "EXPIRED":
-      return "#DE350B";
+      return "default";
     default:
-      return "#0052CC";
+      return "warning"; // REQUESTED — shown as "Pending", same as ParStatusChip's own Pending
   }
 }
 

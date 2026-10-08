@@ -24,7 +24,11 @@ import { PerspectiveProvider } from "@context/perspective/PerspectiveContext";
 import { NotificationsProvider } from "@context/notifications/NotificationsContext";
 import { HttpError } from "@api/http";
 import { registerAuthAccessors } from "@api/authBridge";
+import { isSilentSignInFrame } from "@api/silentSignInFrame";
 import App from "./App";
+
+// Read once: a document does not move between frames.
+const inSilentSignInFrame = isSilentSignInFrame();
 
 // Registers the live getIdToken/getAccessToken/signInSilently into
 // @api/authBridge so http.ts's 401 → silent-reauth → retry path (access_token)
@@ -82,23 +86,28 @@ export default function AppWithConfig() {
         user: { fetchUserProfile: false, fetchOrganizations: false },
       }}
     >
-      <AuthBridgeMount />
-      <QueryClientProvider client={queryClient}>
-        <ThemePreferenceProvider>
-          <BrowserRouter>
-            <PerspectiveProvider>
-              <NotificationsProvider>
-                <App />
-              </NotificationsProvider>
-            </PerspectiveProvider>
-          </BrowserRouter>
-        </ThemePreferenceProvider>
-        {ReactQueryDevtools && (
-          <Suspense fallback={null}>
-            <ReactQueryDevtools initialIsOpen={false} />
-          </Suspense>
-        )}
-      </QueryClientProvider>
+      {/* In the SDK's silent sign-in iframe only the provider runs — see isSilentSignInFrame. */}
+      {inSilentSignInFrame ? null : (
+        <>
+          <AuthBridgeMount />
+          <QueryClientProvider client={queryClient}>
+            <ThemePreferenceProvider>
+              <BrowserRouter>
+                <PerspectiveProvider>
+                  <NotificationsProvider>
+                    <App />
+                  </NotificationsProvider>
+                </PerspectiveProvider>
+              </BrowserRouter>
+            </ThemePreferenceProvider>
+            {ReactQueryDevtools && (
+              <Suspense fallback={null}>
+                <ReactQueryDevtools initialIsOpen={false} />
+              </Suspense>
+            )}
+          </QueryClientProvider>
+        </>
+      )}
     </AsgardeoProvider>
   );
 }

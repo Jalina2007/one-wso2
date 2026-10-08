@@ -408,7 +408,12 @@ export default function BankAccountRequestDialog({
         {step === "holder" && <Button variant="contained" onClick={goToBankInfo}>Continue</Button>}
         {step === "bank" && <Button variant="contained" onClick={goToReview}>Continue</Button>}
         {step === "review" && (
-          <Button variant="contained" onClick={() => setConfirming(true)} disabled={mutation.isPending}>
+          <Button
+            variant="contained"
+            onClick={() => setConfirming(true)}
+            disabled={mutation.isPending}
+            loading={mutation.isPending}
+          >
             Save
           </Button>
         )}
@@ -421,7 +426,7 @@ export default function BankAccountRequestDialog({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirming(false)}>Cancel</Button>
-          <Button variant="contained" onClick={submit} disabled={mutation.isPending}>
+          <Button variant="contained" onClick={submit} disabled={mutation.isPending} loading={mutation.isPending}>
             Yes
           </Button>
         </DialogActions>

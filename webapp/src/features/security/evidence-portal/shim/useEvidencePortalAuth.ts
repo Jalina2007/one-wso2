@@ -46,10 +46,10 @@ import { registerAuth } from "../api/client";
 // via getAuthToken(), and on 401 call `_auth.refreshAccessToken()` once, then
 // retry through axios). Handing it fetchWithReauth would nest one retry loop
 // inside another for no benefit. What its retry path actually needs is
-// exactly what @api/authBridge's refreshAccessToken() does standalone: force
-// one silent re-auth. The retried axios call then attaches whatever token
-// getAuthToken() reads afterwards — which, because the re-auth just renewed
-// the underlying Asgardeo session, is the fresh one.
+// exactly what @api/authBridge's refreshAccessToken() does standalone: renew
+// the session once — the refresh-token exchange first, a silent re-auth if
+// that fails. The retried axios call then attaches whatever token
+// getAuthToken() reads afterwards, which after a renewal is the fresh one.
 //
 // ── ON AUTH LOST ─────────────────────────────────────────────────────────
 // Left unregistered, deliberately. @api/authBridge's refreshAccessToken()

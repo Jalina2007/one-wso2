@@ -17,29 +17,31 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router";
 import type { ReactNode } from "react";
 
 // The eligibility boundaries below were computed, not tuned until green: with
-// the default 1095-day rule and ApplyTab.tsx:168's `- 1`, an anchor of
-// 2024-01-01 becomes eligible on 2027-01-01 and is one day short on 2026-12-31.
-// The 2024→2027 span crosses a leap year, so counting by eye gets it wrong.
+// the default 2555-day (7 × 365) rule, an anchor of 2020-01-01 becomes eligible
+// on 2026-12-30 and is one day short on 2026-12-29. The span crosses two leap
+// days, so counting by eye lands two days late.
 
 const profile = {
   workEmail: "me@wso2.com" as string | undefined,
   leadEmail: "lead@wso2.com" as string | null,
-  employmentStartDate: "2024-01-01",
+  employmentStartDate: "2020-01-01",
   location: "Sri Lanka",
+  jobBand: 5 as number | null,
 };
 
 const config = {
   isSabbaticalLeaveEnabled: true,
   sabbaticalLeavePolicyUrl: "https://policy.test/sabbatical",
   sabbaticalLeaveUserGuideUrl: "https://guide.test/sabbatical",
-  sabbaticalLeaveEligibilityDuration: 1095,
+  sabbaticalLeaveEligibilityDuration: 2555,
   sabbaticalLeaveMaxApplicationDuration: 42,
+  sabbaticalLeaveMinJobBand: 5,
   cachedEmails: { mandatoryMails: [], optionalMails: [] },
 };
 
@@ -139,6 +141,7 @@ beforeEach(() => {
   state.userInfoFailed = false;
   profile.workEmail = "me@wso2.com";
   profile.leadEmail = "lead@wso2.com";
+  profile.jobBand = 5;
   state.leaves = [];
   state.canSee = true;
   state.featureEnabled = true;
@@ -173,6 +176,14 @@ async function fillValidRequest() {
   setDate(/Leave request start date/, "2027-03-01");
   setDate(/Leave request end date/, "2027-03-10");
   for (const box of screen.getAllByRole("checkbox")) fireEvent.click(box);
+}
+
+const HANDOVER_ACK = /I acknowledge that sabbatical leave is subject to appropriate planning and handover/;
+const APPROVAL_ACK = /I confirm that I have reviewed and approved this sabbatical leave request/;
+
+async function confirmSubmit() {
+  const dialog = await screen.findByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Yes" }));
 }
 
 // ApplyTab.tsx:328-334. Without a lead there is nobody to route the request to,
@@ -214,12 +225,12 @@ describe("the last-sabbatical anchor", () => {
   });
 });
 
-// ApplyTab.tsx:158-184. The `- 1` in eligibilityGapDays makes the boundary a day
-// stricter than a plain difference, and the sentence names which anchor it used.
+// The boundary is the leave backend's — a plain difference of at least the
+// configured days — and the sentence names which anchor it used.
 describe("the eligibility warning", () => {
   it("does not appear on the first eligible day", async () => {
     show();
-    setDate(/Leave request start date/, "2027-01-01");
+    setDate(/Leave request start date/, "2026-12-30");
     await waitFor(() =>
       expect(screen.queryByText(/must be at least/)).not.toBeInTheDocument(),
     );
@@ -227,10 +238,10 @@ describe("the eligibility warning", () => {
 
   it("appears one day earlier", async () => {
     show();
-    setDate(/Leave request start date/, "2026-12-31");
+    setDate(/Leave request start date/, "2026-12-29");
     expect(
       await screen.findByText(
-        "The leave start date must be at least 3 years after the employment start date.",
+        "The leave start date must be at least 7 years after the employment start date.",
       ),
     ).toBeInTheDocument();
   });
@@ -241,14 +252,14 @@ describe("the eligibility warning", () => {
     setDate(/Leave request start date/, "2027-01-01");
     expect(
       await screen.findByText(
-        "The leave start date must be at least 3 years after the last sabbatical leave end date.",
+        "The leave start date must be at least 7 years after the last sabbatical leave end date.",
       ),
     ).toBeInTheDocument();
   });
 
   it("blocks the submit, not just decorates the form", async () => {
     show();
-    setDate(/Leave request start date/, "2026-12-31");
+    setDate(/Leave request start date/, "2026-12-29");
     setDate(/Leave request end date/, "2027-01-05");
     for (const box of screen.getAllByRole("checkbox")) fireEvent.click(box);
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
@@ -320,24 +331,80 @@ describe("what the form says when you press Apply", () => {
   });
 });
 
+// Policy V2.6: sabbatical is for job band 5 and above. Like a missing lead, it
+// replaces the form — there is nothing the applicant can fill in to fix it.
+describe("the job band", () => {
+  it("blocks a band below the minimum", async () => {
+    profile.jobBand = 4;
+    show();
+    expect(
+      await screen.findByText("Sabbatical leave is available for job band 5 and above."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
+  });
+
+  it("asks someone with no band recorded to contact People Operations", async () => {
+    profile.jobBand = null;
+    show();
+    expect(await screen.findByText(/job band is not recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/contact the People Operations team/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
+  });
+
+  it("lets the minimum band apply", async () => {
+    profile.jobBand = 5;
+    show();
+    expect(await screen.findByRole("button", { name: "Apply" })).toBeInTheDocument();
+  });
+});
+
+// Policy V2.6: the applicant acknowledges the handover. It sits on the form with
+// the other three acknowledgements and is required the same way.
+describe("the handover acknowledgement", () => {
+  it("is on the form", async () => {
+    show();
+    expect(await screen.findByRole("checkbox", { name: HANDOVER_ACK })).toBeInTheDocument();
+  });
+
+  it("is required like the other acknowledgements", async () => {
+    show();
+    await fillValidRequest();
+    fireEvent.click(screen.getByRole("checkbox", { name: HANDOVER_ACK }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(
+      await screen.findByText("Please acknowledge all the required checkboxes"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("leaves the confirmation with nothing to tick", async () => {
+    show();
+    await fillValidRequest();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Yes" })).toBeEnabled();
+  });
+});
+
 // ApplyTab.tsx:275-298. SabbaticalApplicationRequest declares a
 // lastSabbaticalLeaveEndDate field, but the submit is the ordinary POST /leaves
 // and nothing sends it — the date travels inside the free-text comment, which is
 // where the approver reads it.
 describe("what actually gets submitted", () => {
   it("appends the last-sabbatical date to the comment", async () => {
-    state.leaves = [{ id: 1, endDate: "2024-01-01T00:00:00Z" }];
+    state.leaves = [{ id: 1, endDate: "2020-02-01T00:00:00Z" }];
     show();
     await fillValidRequest();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Yes" }));
+    await confirmSubmit();
 
     await waitFor(() => expect(submitMutate).toHaveBeenCalled());
     expect(submitMutate.mock.calls[0][0]).toMatchObject({
       leaveType: "sabbatical",
       startDate: "2027-03-01",
       endDate: "2027-03-10",
-      comment: " **** Last Sabbatical Leave End Date: 2024-01-01 ****",
+      comment: " **** Last Sabbatical Leave End Date: 2020-02-01 ****",
     });
   });
 
@@ -345,7 +412,7 @@ describe("what actually gets submitted", () => {
     show();
     await fillValidRequest();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Yes" }));
+    await confirmSubmit();
 
     await waitFor(() => expect(submitMutate).toHaveBeenCalled());
     expect(submitMutate.mock.calls[0][0].comment).toBe("");
@@ -486,9 +553,47 @@ describe("deciding on a request", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
     expect(approveMutate).not.toHaveBeenCalled();
 
+    fireEvent.click(await screen.findByRole("checkbox", { name: APPROVAL_ACK }));
     fireEvent.click(await screen.findByRole("button", { name: "Yes, Approve" }));
     await waitFor(() => expect(approveMutate).toHaveBeenCalled());
     expect(approveMutate.mock.calls[0][0]).toEqual({ id: 7, action: "approve" });
+  });
+});
+
+// Policy V2.6: the lead confirms the handover plan before approving. Rejecting
+// needs no such confirmation.
+describe("the approval confirmation", () => {
+  const pendingRow = {
+    id: 7,
+    email: "report@wso2.com",
+    startDate: "2027-03-01T00:00:00Z",
+    endDate: "2027-03-20T00:00:00Z",
+    numberOfDays: 20,
+    approverEmail: "lead@wso2.com",
+    status: "PENDING",
+  };
+
+  it("holds the approval until it is ticked", async () => {
+    state.isLead = true;
+    state.subordinateCount = 4;
+    state.leaves = [pendingRow];
+    show(<SabbaticalApproveTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    const yes = await screen.findByRole("button", { name: "Yes, Approve" });
+    expect(yes).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: APPROVAL_ACK }));
+    expect(yes).toBeEnabled();
+  });
+
+  it("is not asked for on reject", async () => {
+    state.isLead = true;
+    state.subordinateCount = 4;
+    state.leaves = [pendingRow];
+    show(<SabbaticalApproveTab />);
+    fireEvent.click(await screen.findByRole("button", { name: "Reject" }));
+    expect(await screen.findByRole("button", { name: "Yes, Reject" })).toBeEnabled();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 });
 
@@ -608,6 +713,7 @@ describe("holding the approve button until the team share is known", () => {
     state.leaves = [pendingRow];
     show(<SabbaticalApproveTab />);
     fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: APPROVAL_ACK }));
     expect(await screen.findByRole("button", { name: "Yes, Approve" })).toBeEnabled();
   });
 
@@ -630,7 +736,7 @@ describe("what the screen says after a successful submit", () => {
     show();
     await fillValidRequest();
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Yes" }));
+    await confirmSubmit();
     await waitFor(() => expect(submitMutate).toHaveBeenCalled());
     // Drive the mutation's own success path, the way React Query would.
     submitMutate.mock.calls[0][1].onSuccess();

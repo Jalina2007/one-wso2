@@ -16,9 +16,9 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  promotionRequestColor,
+  promotionRequestChipColor,
   promotionRequestStatusLabel,
-  recommendationColor,
+  recommendationChipColor,
   recommendationStatusLabel,
 } from "./promotionStatus";
 
@@ -40,29 +40,28 @@ describe("promotionRequestStatusLabel", () => {
   });
 });
 
-describe("promotionRequestColor", () => {
-  it("gives every status source itself colours its own distinct colour", () => {
-    // Pins source's own getApplicationColor (utils/utils.ts) mapping —
-    // REMOVED and EXPIRED were the two that got missed porting the
-    // if/else chain to a switch.
-    expect(promotionRequestColor("REMOVED")).toBe("#DE350B");
-    expect(promotionRequestColor("EXPIRED")).toBe("#727681");
-    expect(promotionRequestColor("DECLINED")).toBe("#FF5630");
-    expect(promotionRequestColor("APPROVED")).toBe("#76BA1B");
-    expect(promotionRequestColor("REJECTED")).toBe("#FF0000");
+describe("promotionRequestChipColor", () => {
+  it("gives every status a distinct, theme-safe semantic colour", () => {
+    expect(promotionRequestChipColor("REMOVED")).toBe("error");
+    expect(promotionRequestChipColor("EXPIRED")).toBe("default");
+    expect(promotionRequestChipColor("DECLINED")).toBe("error");
+    expect(promotionRequestChipColor("APPROVED")).toBe("success");
+    expect(promotionRequestChipColor("REJECTED")).toBe("error");
+    expect(promotionRequestChipColor("DRAFT")).toBe("info");
+    expect(promotionRequestChipColor("WITHDRAW")).toBe("warning");
   });
 
-  it("falls back to the generic blue for anything else", () => {
-    expect(promotionRequestColor("PROCESSING")).toBe("#0052CC");
+  it("falls back to info for anything else", () => {
+    expect(promotionRequestChipColor("PROCESSING")).toBe("info");
   });
 });
 
-describe("recommendationColor", () => {
-  it("matches source's own getRecommendationColor mapping", () => {
-    expect(recommendationColor("DECLINED")).toBe("#FF5630");
-    expect(recommendationColor("REQUESTED")).toBe("#36B37E");
-    expect(recommendationColor("SUBMITTED")).toBe("#6554C0");
-    expect(recommendationColor("EXPIRED")).toBe("#DE350B");
+describe("recommendationChipColor", () => {
+  it("gives every recommendation status a distinct, theme-safe semantic colour", () => {
+    expect(recommendationChipColor("DECLINED")).toBe("error");
+    expect(recommendationChipColor("REQUESTED")).toBe("warning");
+    expect(recommendationChipColor("SUBMITTED")).toBe("success");
+    expect(recommendationChipColor("EXPIRED")).toBe("default");
   });
 });
 

@@ -7,22 +7,23 @@
 
 import { describe, expect, it } from "vitest";
 import { umtBackLink } from "./umtBackLink";
+import { umtPaths } from "./umtPaths";
 
 describe("umtBackLink", () => {
   it("defaults to the updates list", () => {
-    expect(umtBackLink(null)).toEqual({ backTo: "/umt/updates" });
-    expect(umtBackLink({ other: 1 })).toEqual({ backTo: "/umt/updates" });
+    expect(umtBackLink(null)).toEqual({ backTo: umtPaths.updates });
+    expect(umtBackLink({ other: 1 })).toEqual({ backTo: umtPaths.updates });
   });
 
   it("uses the caller's UMT path and state", () => {
-    expect(umtBackLink({ backTo: "/umt/release-chunks/new", backState: { selectedIds: [1] } })).toEqual({
-      backTo: "/umt/release-chunks/new",
+    expect(umtBackLink({ backTo: umtPaths.newReleaseChunk, backState: { selectedIds: [1] } })).toEqual({
+      backTo: umtPaths.newReleaseChunk,
       backState: { selectedIds: [1] },
     });
   });
 
   it("ignores a path outside UMT", () => {
-    expect(umtBackLink({ backTo: "https://example.com" })).toEqual({ backTo: "/umt/updates" });
-    expect(umtBackLink({ backTo: "/finance" })).toEqual({ backTo: "/umt/updates" });
+    expect(umtBackLink({ backTo: "https://example.com" })).toEqual({ backTo: umtPaths.updates });
+    expect(umtBackLink({ backTo: "/finance" })).toEqual({ backTo: umtPaths.updates });
   });
 });

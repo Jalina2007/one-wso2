@@ -18,7 +18,7 @@
 
 import type { ReactNode } from "react";
 import { Navigate, Outlet } from "react-router";
-import { Alert, Box, Skeleton, Typography } from "@wso2/oxygen-ui";
+import { Alert, Box, Typography } from "@wso2/oxygen-ui";
 import RoutedTabs from "@components/routed-tabs/RoutedTabs";
 import { useFinanceGate } from "../api/useFinanceGate";
 import {
@@ -66,9 +66,13 @@ export default function ClaimApprovalPage() {
         up your own stay under Me.
       </Typography>
 
-      {gate.isResolving ? (
-        <Skeleton variant="rectangular" height={420} sx={{ borderRadius: 1.5 }} />
-      ) : visible.length === 0 ? (
+      {/* Nothing rendered while resolving — not even a skeleton. The rail
+          already shows no row for this entry until its gate settles, so the
+          content pane matches it: a placeholder here would be the one thing
+          left to blink on the way to a final answer, and this screen's
+          answer flips between "tabs" and "nothing here" rather than filling
+          a fixed shape. */}
+      {gate.isResolving ? null : visible.length === 0 ? (
         <Alert severity="info">You don&apos;t approve claims, so there is nothing here.</Alert>
       ) : (
         <Box sx={fillColumn}>
@@ -91,11 +95,17 @@ export default function ClaimApprovalPage() {
 /**
  * The index route: sends the visitor to the first tab they may open.
  *
- * No `isResolving` branch — the page above holds the <Outlet /> behind its own,
- * so nothing here renders until the three backends have answered.
+ * Its own `isResolving` branch, despite the page above holding the <Outlet />
+ * behind one already. That is a DIFFERENT `useFinanceGate()` — a hook call has
+ * state of its own, and identity resolution starts over for each one — so this
+ * component mounts fresh, the instant the page's gate settles, with its own
+ * still unsettled. For the render or two that takes, `canSee` answers no to
+ * everything and this redirected an approver away from the tab they were
+ * entitled to. A redirect is not undone when the answer arrives.
  */
 export function ClaimApprovalIndex() {
   const gate = useFinanceGate();
+  if (gate.isResolving) return null;
   const first = firstAllowedClaimTab(gate.canSee);
   if (!first) return null; // the page already explains this case
   return <Navigate to={`${CLAIM_APPROVAL_PATH}/${first.segment}`} replace />;
@@ -114,6 +124,20 @@ export function ClaimApprovalTabRoute({
   children: ReactNode;
 }) {
   const gate = useFinanceGate();
+
+  // An unresolved gate reports no roles, and this component decides between
+  // "your tab" and "not available for your role" with no third answer — so
+  // without this it announced the refusal first and the tab a moment later.
+  // That is the flicker on this screen: the approver DID get in, they were
+  // just told they hadn't on the way.
+  //
+  // This gate is not the page's above but a fresh one, mounted the moment the
+  // page's own settled and unsettled again for its first render or two — which
+  // is why the page's guard never covered this one. Nothing rendered while it
+  // resolves, matching the page: a refusal withdrawn a moment later is worse
+  // than a beat of nothing, and the refusal here is the load-bearing one — it
+  // is what a non-approver is left with.
+  if (gate.isResolving) return null;
 
   if (!gate.canSee(gateId)) {
     const first = firstAllowedClaimTab(gate.canSee);

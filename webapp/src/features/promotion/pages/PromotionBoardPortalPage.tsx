@@ -20,28 +20,30 @@
 // own tab bar order exactly: Active Promotion Requests, Approved Requests,
 // Rejected Requests, Functional Lead Rejected Requests.
 import { Navigate, Outlet } from "react-router";
-import { CheckIcon, ClipboardListIcon, ClipboardXIcon, GavelIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
-import PromotionPageShell from "../components/PromotionPageShell";
-import PromotionTabs, { type PromotionTabDef } from "../components/PromotionTabs";
+import { Box, Typography } from "@wso2/oxygen-ui";
+import RoutedTabs, { type RoutedTabDef } from "@components/routed-tabs/RoutedTabs";
 
 const BASE_PATH = "/people-ops/promotion/board";
 
-const TABS: PromotionTabDef[] = [
-  { segment: "active", label: "Active Promotion Requests", icon: <ClipboardListIcon size={18} /> },
-  { segment: "approved", label: "Approved Requests", icon: <CheckIcon size={18} /> },
-  { segment: "rejected", label: "Rejected Requests", icon: <XIcon size={18} /> },
-  { segment: "fl-rejected", label: "Functional Lead Rejected Requests", icon: <ClipboardXIcon size={18} /> },
+const TABS: RoutedTabDef[] = [
+  { segment: "active", label: "Active Promotion Requests" },
+  { segment: "approved", label: "Approved Requests" },
+  { segment: "rejected", label: "Rejected Requests" },
+  { segment: "fl-rejected", label: "Functional Lead Rejected Requests" },
 ];
 
 export default function PromotionBoardPortalPage() {
   return (
-    <PromotionPageShell
-      icon={<GavelIcon size={34} strokeWidth={1.5} />}
-      title="Promotion Board Portal"
-      tabs={<PromotionTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Promotion board portal" />}
-    >
+    <Box>
+      <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
+        Promotion Board Portal
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25 }}>
+        Make the final call on promotion requests that have cleared functional lead review.
+      </Typography>
+      <RoutedTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Promotion board portal" />
       <Outlet />
-    </PromotionPageShell>
+    </Box>
   );
 }
 

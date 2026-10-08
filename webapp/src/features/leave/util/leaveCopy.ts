@@ -263,6 +263,14 @@ export const SABBATICAL = {
       "currently not set in the people management system. Please contact the People " +
       "Operations team to update your profile before applying.",
 
+    /** Policy V2.6. Shown INSTEAD of the form, like the missing-lead block. */
+    jobBandTitle: "Not eligible for sabbatical leave",
+    jobBandBelow: (minJobBand: number) =>
+      `Sabbatical leave is available for job band ${minJobBand} and above.`,
+    jobBandMissing:
+      "Your job band is not recorded in the people management system. Please contact the " +
+      "People Operations team to apply for sabbatical leave.",
+
     employmentStartDate: "Employment Start date", // :343 — always read-only
     lastSabbaticalEndDate: "Last sabbatical leave end date", // :350
     startDate: "Leave request start date*", // :371
@@ -271,7 +279,7 @@ export const SABBATICAL = {
     commentPlaceholder: "Add a comment...", // :420 — three dots, not an ellipsis
     submit: "Apply", // :518
 
-    /** The three acknowledgements. All required; the second carries a link. */
+    /** The acknowledgements. All required; the second carries a link. */
     ackManagerApproval:
       "I confirm that I have discussed my sabbatical leave plans with my lead and have " +
       "obtained their approval.", // :441
@@ -283,6 +291,11 @@ export const SABBATICAL = {
       "I acknowledge that I cannot voluntarily resign from my employment for 6 months after " +
       "completing sabbatical leave. If I do, I will be required to reimburse an amount " +
       "equivalent to the salary paid to me during the sabbatical period.",
+    /** Policy V2.6 — a fourth required acknowledgement. */
+    ackHandover:
+      "I acknowledge that sabbatical leave is subject to appropriate planning and handover " +
+      "between myself and my Lead. I am responsible for ensuring that my responsibilities, " +
+      "objectives and work commitments are appropriately managed during my absence.",
 
     /** Inline, on the field itself. */
     startDateRequired: "Start date is required", // :387
@@ -330,6 +343,11 @@ export const SABBATICAL = {
     /** :63 — leading space is deliberate; it follows a full stop. */
     teamShare: (percent: number) =>
       ` ${percent}% of your team will be on sabbatical during this period.`,
+    /** Policy V2.6 — required before approving; rejecting needs none. */
+    confirmApproveAck:
+      "I confirm that I have reviewed and approved this sabbatical leave request and that " +
+      "appropriate plans are in place to manage the employee's responsibilities, objectives " +
+      "and work commitments during the leave period.",
     confirmApproveOk: "Yes, Approve", // :86
     confirmRejectOk: "Yes, Reject", // :86
     confirmCancel: "Cancel", // :87

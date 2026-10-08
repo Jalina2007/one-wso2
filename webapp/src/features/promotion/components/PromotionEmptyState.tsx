@@ -14,30 +14,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import type { ReactNode } from "react";
 import { Box, Typography } from "@wso2/oxygen-ui";
 
-// Mirrors source's own StateWithImage (component/ui/stateWithImage.tsx) —
-// an icon beside message text, one per state (no pending requests, no open
-// cycle, past deadline, load failure). Source uses a different SVG
-// illustration per state; this uses a different lucide icon + tone per
-// state instead, the same substitution PAR's own ParEmptyState already
-// makes for its one source image (par-app's NoDataView.tsx).
+// Render a centered, icon-free message for empty results and load errors.
 export default function PromotionEmptyState({
-  icon,
   message,
   tone = "primary",
 }: {
-  icon: ReactNode;
   message: string;
   tone?: "primary" | "warning" | "error";
 }) {
   return (
-    <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", textAlign: "center", py: 6 }}>
-      <Box sx={{ color: `${tone}.main`, mr: 1.5, display: "flex" }}>{icon}</Box>
-      <Typography variant="h6" sx={{ color: `${tone}.main`, fontWeight: 700 }}>
-        {message}
-      </Typography>
+    <Box sx={{ textAlign: "center", py: 6 }}>
+      <Typography color={tone === "primary" ? "text.secondary" : `${tone}.main`}>{message}</Typography>
     </Box>
   );
 }

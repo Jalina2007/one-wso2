@@ -54,6 +54,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -142,19 +143,80 @@ describe("fetchWithReauth — attributing a 401", () => {
     expect(refreshAccessToken).not.toHaveBeenCalled();
     expect(out.status).toBe(403);
   });
+});
 
-  // Unchanged by this work, and worth keeping pinned: a mutation is never
-  // replayed, because a 401 does not prove it failed to reach business logic.
-  it("still refreshes but does not replay a POST", async () => {
-    fetchMock.mockResolvedValue(res(401));
+describe("fetchWithReauth — replaying a non-GET", () => {
+  // Every method except GET goes through the same rule; none is special-cased.
+  const NON_GET = ["POST", "PUT", "PATCH", "DELETE"];
+
+  // A token already dead when sent never got past the gateway, so no backend
+  // ran the request and replaying it cannot duplicate anything.
+  it.each(NON_GET)("replays a %s whose token had expired before it was sent", async (method) => {
+    fetchMock.mockResolvedValueOnce(res(401)).mockResolvedValueOnce(res(200));
 
     const out = await fetchWithReauth(
-      "https://any.example.com/a",
-      { method: "POST" },
+      "https://any.example.com/search",
+      { method, body: '{"q":"x"}' },
       deadToken(),
     );
 
     expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const replay = fetchMock.mock.calls[1][1] as RequestInit & { headers: Record<string, string> };
+    expect(replay.method).toBe(method);
+    expect(replay.body).toBe('{"q":"x"}');
+    expect(replay.headers.Authorization).toBe("Bearer fresh-token");
+    expect(out.status).toBe(200);
+  });
+
+  // The rest are never replayed, because there a 401 does not prove the
+  // request failed to reach business logic. The session is still refreshed.
+
+  // Live when sent, expired by the time the 401 came back: the backend may
+  // have done the work before something else refused it.
+  it.each(NON_GET)("does not replay a %s whose token expired while it was in flight", async (method) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const token = jwt({ exp: Math.floor(Date.now() / 1000) + 10 });
+    fetchMock.mockImplementation(async () => {
+      vi.setSystemTime(Date.now() + 120_000);
+      return res(401);
+    });
+
+    const out = await fetchWithReauth("https://any.example.com/submit", { method }, token);
+
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(out.status).toBe(401);
+  });
+
+  it("does not replay a POST when the token cannot be read", async () => {
+    fetchMock.mockResolvedValue(res(401));
+
+    const out = await fetchWithReauth("https://any.example.com/submit", { method: "POST" }, "opaque-token-xyz");
+
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(out.status).toBe(401);
+  });
+
+  it("does not replay a POST on a live token that two origins refused", async () => {
+    fetchMock.mockResolvedValue(res(401));
+    const token = liveToken();
+
+    await fetchWithReauth("https://one.example.com/a", { method: "POST" }, token);
+    const out = await fetchWithReauth("https://two.example.com/b", { method: "POST" }, token);
+
+    expect(refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2); // one each, neither replayed
+    expect(out.status).toBe(401);
+  });
+
+  it("does not replay a POST when the renewal fails", async () => {
+    refreshAccessToken.mockRejectedValue(new Error("no session"));
+    fetchMock.mockResolvedValue(res(401));
+
+    const out = await fetchWithReauth("https://any.example.com/search", { method: "POST" }, deadToken());
+
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(out.status).toBe(401);
   });

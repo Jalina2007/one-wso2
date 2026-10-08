@@ -61,7 +61,14 @@ beforeEach(() => {
 });
 
 function show(initial = "/finance/claim-approval") {
-  return render(
+  return render(tree(initial));
+}
+
+// Split out of `show` so a test can re-render the SAME tree after changing
+// what the gate answers — the point being that the reader is not remounted
+// between the two, which is exactly the transition that used to flash.
+function tree(initial = "/finance/claim-approval") {
+  return (
     <MemoryRouter initialEntries={[initial]}>
       <UrlProbe />
       <Routes>
@@ -85,7 +92,7 @@ function show(initial = "/finance/claim-approval") {
           />
         </Route>
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
@@ -166,6 +173,52 @@ describe("while the backends are still answering", () => {
     state.allow = new Set();
     show();
     expect(await screen.findByTestId("url")).toHaveTextContent("/finance/claim-approval");
+    expect(screen.queryByTestId("tab")).not.toBeInTheDocument();
+  });
+});
+
+// THE regression this screen was reported for. `ClaimApprovalTabRoute` mounts
+// a gate of its OWN, which starts unsettled even though the page's gate has
+// just settled — and an unsettled gate reports no roles. Without its own
+// `isResolving` branch it announced the refusal first and the tab a moment
+// later: the approver did get in, they were just told they hadn't on the way.
+describe("a tab route whose own gate has not settled yet", () => {
+  it("says nothing rather than refusing someone it is about to let in", async () => {
+    state.isResolving = true;
+    state.allow = new Set();
+    show("/finance/claim-approval/needs-you");
+
+    await screen.findByTestId("url");
+    expect(screen.queryByText(/isn't available for your role/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("tab")).not.toBeInTheDocument();
+  });
+
+  // The whole sequence, in the order the reader lives through it: nothing,
+  // then their tab. Never the refusal in between.
+  it("shows the approver their tab without a refusal in between", async () => {
+    state.isResolving = true;
+    state.allow = new Set();
+    const { rerender } = show("/finance/claim-approval/needs-you");
+
+    await screen.findByTestId("url");
+    expect(screen.queryByText(/isn't available for your role/)).not.toBeInTheDocument();
+
+    state.isResolving = false;
+    state.allow = new Set(ALL);
+    rerender(tree("/finance/claim-approval/needs-you"));
+
+    expect(await screen.findByTestId("tab")).toHaveAttribute("data-what", "needs-you");
+    expect(screen.queryByText(/isn't available for your role/)).not.toBeInTheDocument();
+  });
+
+  // The refusal is still the load-bearing answer — it is what a non-approver
+  // is left with once the gate has actually answered.
+  it("still refuses once the gate has answered and the answer is no", async () => {
+    state.isResolving = false;
+    state.allow = new Set();
+    show("/finance/claim-approval/needs-you");
+
+    expect(await screen.findByText(/don't approve claims/)).toBeInTheDocument();
     expect(screen.queryByTestId("tab")).not.toBeInTheDocument();
   });
 });

@@ -41,6 +41,7 @@ const data = {
   opdFails: false,
   appDataFails: false,
   opdUserInfoFails: false,
+  queuesLoading: false,
 };
 
 vi.mock("../expense/useExpense", () => ({
@@ -69,7 +70,7 @@ vi.mock("../expense/useExpense", () => ({
       // Hardcoding `isPending: false` here is what let a screen that waits on
       // the wrong flag pass its tests and spin in the browser.
       isPending: !enabled,
-      isLoading: false,
+      isLoading: enabled && data.queuesLoading,
       isError: data.expenseFails && enabled,
       error: new Error("expense backend down"),
     };
@@ -92,7 +93,7 @@ vi.mock("../opd/useOpd", () => ({
     return {
       data: enabled ? data.opd : [],
       isPending: !enabled,
-      isLoading: false,
+      isLoading: enabled && data.queuesLoading,
       isError: data.opdFails && enabled,
       error: new Error("opd backend down"),
     };
@@ -167,6 +168,7 @@ beforeEach(() => {
   data.opdFails = false;
   data.appDataFails = false;
   data.opdUserInfoFails = false;
+  data.queuesLoading = false;
 });
 
 const show = (body: ReactNode = <NeedsYouTab />) =>
@@ -248,6 +250,39 @@ describe("when a role is missing", () => {
     flags.finance = false;
     show();
     expect(await screen.findByText("Nothing is waiting on you.")).toBeInTheDocument();
+  });
+});
+
+// While the queues are loading, the list area said nothing at all — no
+// skeleton, no spinner — which read exactly like "nothing is waiting on you"
+// on a page that had not actually answered that question yet.
+describe("while the queues are still loading", () => {
+  it("shows a skeleton rather than looking like an empty answer", () => {
+    data.queuesLoading = true;
+    const { container } = show();
+
+    expect(container.querySelector(".MuiSkeleton-root")).toBeInTheDocument();
+    expect(screen.queryByText(/nothing is waiting on you/i)).not.toBeInTheDocument();
+  });
+
+  it("replaces the skeleton with the real answer once the queues settle", async () => {
+    data.queuesLoading = true;
+    const { container, rerender } = show();
+    expect(container.querySelector(".MuiSkeleton-root")).toBeInTheDocument();
+
+    data.queuesLoading = false;
+    // Opens on "As lead" by default when both flags are held (the default
+    // fixture) — populating the finance queue instead would stay invisible
+    // behind that toggle, which is not what this test is about.
+    data.lead = [expenseClaim({})];
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <NeedsYouTab />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("EXP-1")).toBeInTheDocument();
+    expect(container.querySelector(".MuiSkeleton-root")).not.toBeInTheDocument();
   });
 });
 

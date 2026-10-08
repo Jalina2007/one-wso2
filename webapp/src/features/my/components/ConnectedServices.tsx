@@ -57,7 +57,7 @@ export default function ConnectedServices() {
   // it, someone the menu is hiding PAR from would see this button anyway,
   // click it, and land right back here (ParRequiresSomethingToShowRoute).
   const meProfile = useMeProfile();
-  const parGate = useParEmployeeItemVisible(meProfile.data?.employee?.employmentType, meProfile.isLoading);
+  const parGate = useParEmployeeItemVisible(meProfile.data?.employee?.employmentType, meProfile.isPending);
 
   return (
     <>

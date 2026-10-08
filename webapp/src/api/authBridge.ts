@@ -20,20 +20,23 @@
 // AppWithConfig.tsx) registers the live getIdToken/getAccessToken/
 // signInSilently once the SDK is ready.
 //
-// Two callers, two different tokens, one shared re-auth:
+// Two callers, two different tokens, one shared renewal:
 //   - @api/http's 401 → retry path calls refreshAccessToken() — every
 //     backend call in this app authorizes with the access_token.
 //   - @hooks/useAsgardeoSub's getDecodedIdToken() → retry path calls
 //     refreshIdToken() — groups/email/sub are id_token-only claims,
 //     unrelated to which token authorizes backend calls.
-// Neither getIdToken() nor getAccessToken() checks expiry itself — both are
-// plain storage reads — so once a token's lifetime passes, callers keep
-// attaching the same dead value until something re-authenticates.
-// signInSilently() is Asgardeo's cookie-based silent re-auth (the same
-// mechanism people-app, leave-app, menu-app and visitor-app all lean on via
-// their own AuthContext.tsx, just exposed under a different name in this
-// SDK) — refreshing renews the whole session, so both token getters read
-// fresh values off the same renewal.
+//
+// A renewal tries the cheap path first (see refreshSession):
+//   1. Ask the SDK for the token again. When its stored copy has expired it
+//      exchanges the refresh token before answering — no iframe, nothing the
+//      user sees.
+//   2. signInSilently(), Asgardeo's cookie-based silent re-auth in a hidden
+//      iframe, for when the refresh token cannot be used.
+// Either renews the whole session, so both token getters read fresh values
+// off the same renewal.
+
+import { classifyToken } from "@api/tokenExpiry";
 
 type GetToken = () => Promise<string>;
 type SignInSilently = () => Promise<unknown>;
@@ -204,22 +207,73 @@ export function registerAuthAccessors(accessors: {
   markReady();
 }
 
-// Dedup concurrent re-auth attempts — e.g. five cards all firing a request
-// off the same stale token within milliseconds of each other, or a 401
-// retry and an identity-decode retry landing at the same moment — into a
-// single silent re-auth, shared regardless of which token the caller
-// ultimately needs. Mirrors the _isRefreshing/_refreshPromise guard in
-// people-app's APIService (utils/apiService.ts). Cleared as soon as the
-// attempt settles (success or failure), so a later, independent failure
-// starts a fresh attempt rather than replaying a stale result.
+// Dedup concurrent renewals — e.g. five cards all firing a request off the
+// same stale token within milliseconds of each other, or a 401 retry and an
+// identity-decode retry landing at the same moment — into a single attempt,
+// shared regardless of which token the caller ultimately needs. Cleared as
+// soon as the attempt settles (success or failure), so a later, independent
+// failure starts a fresh attempt rather than replaying a stale result.
 //
 // inFlightRefresh is assigned synchronously (before the `await ready`
 // inside the chain below) so two concurrent callers arriving before
 // registration has happened still dedup onto the same promise, instead of
 // each awaiting `ready` separately and racing to start their own refresh.
 let inFlightRefresh: Promise<void> | null = null;
+const renewalListeners = new Set<() => void>();
 
-function refreshSession(): Promise<void> {
+function notifyRenewal(): void {
+  for (const listener of renewalListeners) listener();
+}
+
+/**
+ * Whether a renewal is in flight right now.
+ *
+ * The SDK reports itself as loading while signInSilently() runs, and AuthGuard
+ * treats loading as "not ready yet" and unmounts the page. For a page that is
+ * already signed in that is a renewal, not a sign-in, so AuthGuard reads this to
+ * keep the page mounted. Subscribe/snapshot for the same reason as the
+ * session-expiry pair above.
+ */
+export function subscribeRenewal(listener: () => void): () => void {
+  renewalListeners.add(listener);
+  return () => {
+    renewalListeners.delete(listener);
+  };
+}
+
+export function getRenewalInFlightSnapshot(): boolean {
+  return inFlightRefresh !== null;
+}
+
+/**
+ * Whether the SDK now hands back a live access token other than `rejected`.
+ *
+ * Asking is itself the cheap renewal: when the SDK's stored token has expired it
+ * exchanges the refresh token before answering, and it rejects once that
+ * exchange has failed. `rejected` is the token a backend just refused — a token
+ * revoked before its `exp` still reads as live, so it must not count.
+ */
+async function holdsLiveAccessToken(rejected?: string): Promise<boolean> {
+  if (!getAccessTokenAccessor) return false;
+  try {
+    const token = await getAccessTokenAccessor();
+    return Boolean(token) && token !== rejected && classifyToken(token).kind === "live";
+  } catch {
+    return false;
+  }
+}
+
+/** The id_token counterpart of holdsLiveAccessToken. */
+async function holdsLiveIdToken(): Promise<boolean> {
+  if (!getIdTokenAccessor) return false;
+  try {
+    return classifyToken(await getIdTokenAccessor()).kind === "live";
+  } catch {
+    return false;
+  }
+}
+
+function refreshSession(isRenewed: () => Promise<boolean>): Promise<void> {
   if (inFlightRefresh) return inFlightRefresh;
 
   // Given up on: every further attempt would mint another authorization code
@@ -239,17 +293,22 @@ function refreshSession(): Promise<void> {
   }
 
   inFlightRefresh = ready
-    .then(() => {
+    .then(async () => {
+      if (await isRenewed()) return;
+
       if (!signInSilentlyAccessor) throw new Error("Auth accessors not registered yet");
-      return signInSilentlyAccessor();
+      const result = await signInSilentlyAccessor();
+
+      // Judged by what it leaves in storage as well as by what it returns: its
+      // promise can resolve false after the session was in fact renewed.
+      if (succeeded(result) || (await isRenewed())) return;
+
+      // Turned into a rejection so every caller's existing "refresh failed →
+      // surface the original 401" path applies unchanged. Silently returning
+      // would have callers attach the same dead token again.
+      throw new Error("Silent re-auth did not renew the session.");
     })
-    .then((result) => {
-      if (!succeeded(result)) {
-        // Turned into a rejection so every caller's existing "refresh failed →
-        // surface the original 401" path applies unchanged. Silently returning
-        // would have callers attach the same dead token again.
-        throw new Error("Silent re-auth did not renew the session.");
-      }
+    .then(() => {
       recordRefreshSuccess();
     })
     .catch((error: unknown) => {
@@ -258,12 +317,20 @@ function refreshSession(): Promise<void> {
     })
     .finally(() => {
       inFlightRefresh = null;
+      notifyRenewal();
     });
+  notifyRenewal();
   return inFlightRefresh;
 }
 
-export async function refreshAccessToken(): Promise<string> {
-  await refreshSession();
+/**
+ * Renews the session and returns the fresh access_token.
+ *
+ * `rejectedToken` is the token a backend just refused, so it is never mistaken
+ * for a renewed one.
+ */
+export async function refreshAccessToken(rejectedToken?: string): Promise<string> {
+  await refreshSession(() => holdsLiveAccessToken(rejectedToken));
   if (!getAccessTokenAccessor) throw new Error("Auth accessors not registered yet");
   const token = await getAccessTokenAccessor();
   if (!token) throw new Error("No access_token available from Asgardeo");
@@ -271,7 +338,7 @@ export async function refreshAccessToken(): Promise<string> {
 }
 
 /**
- * The cached id_token, read and nothing else.
+ * The id_token the SDK currently holds, without starting a renewal of our own.
  *
  * Deliberately NOT refreshIdToken: no refreshSession, so calling this can never
  * provoke a silent re-auth and therefore can never raise the session-expired
@@ -284,8 +351,37 @@ export async function rawIdToken(): Promise<string> {
   return (await getIdTokenAccessor()) ?? "";
 }
 
+/**
+ * Whether the SDK holds a usable session, once any renewal it is running has
+ * finished.
+ *
+ * The React context can report signed-out while the SDK is still exchanging a
+ * refresh token for an expired session — the provider only catches up on its own
+ * next check. Asking for the token waits on that exchange, so this answers for
+ * the session as it will be, not as the context last saw it.
+ *
+ * Deliberately does not wait for registration: a caller that is about to
+ * redirect must never hang on a bridge that is not mounted. Unregistered reads
+ * as "no session", which is simply the redirect it would have done anyway.
+ */
+export async function sdkHasSession(): Promise<boolean> {
+  if (!getAccessTokenAccessor) return false;
+  try {
+    return Boolean(await getAccessTokenAccessor());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * How long the React context gets to catch up with a session `sdkHasSession`
+ * reported, before a caller stops trusting that answer. The provider re-checks
+ * every second while signed out, so this is many checks' worth of slack.
+ */
+export const SDK_SESSION_PICKUP_MS = 10_000;
+
 export async function refreshIdToken(): Promise<string> {
-  await refreshSession();
+  await refreshSession(holdsLiveIdToken);
   if (!getIdTokenAccessor) throw new Error("Auth accessors not registered yet");
   const token = await getIdTokenAccessor();
   if (!token) throw new Error("No id_token available from Asgardeo");

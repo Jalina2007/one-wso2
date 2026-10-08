@@ -15,46 +15,44 @@
 // under the License.
 
 import { useMemo } from "react";
-import {
-  PAR_ADMIN_PORTAL_ITEM_ID,
-  PAR_LEAD_PORTAL_ITEM_ID,
-  PROMOTION_ADMIN_PORTAL_ITEM_ID,
-  PROMOTION_BOARD_PORTAL_ITEM_ID,
-  PROMOTION_CYCLE_HISTORY_ITEM_ID,
-  PROMOTION_FUNCTIONAL_LEAD_PORTAL_ITEM_ID,
-  PROMOTION_LEAD_PORTAL_ITEM_ID,
-  PROMOTION_TEAM_HISTORY_ITEM_ID,
-  SRI_LANKA_ONLY_ITEM_IDS,
-  SUBSCRIPTION_ITEM_IDS,
-  SALES_ITEM_IDS,
-  UMT_ADMIN_ITEM_IDS,
-  type PerspectiveSection,
-} from "@constants/perspectives";
-import { capabilitiesFromPrivileges, type Capability } from "@constants/appMenu";
-import { FINANCE_ITEM_IDS } from "@constants/financeApps";
-import { BANKING_ITEM_IDS, LEAVE_ITEM_IDS } from "@constants/meApps";
-import { PAR_EMPLOYEE_ITEM_ID } from "@constants/parApps";
-import { DUE_DILIGENCE_ITEM_IDS } from "@constants/dueDiligenceApps";
-import { SECURITY_ITEM_IDS } from "@constants/securityApps";
-import { INFRA_ITEM_IDS } from "@constants/infraApps";
-import { useInfraGate } from "@features/infra/api/useInfraGate";
+import { SRI_LANKA_ONLY_ITEM_IDS, type PerspectiveSection } from "@constants/perspectives";
+import { capabilitiesFromPrivileges } from "@constants/appMenu";
+import { isPreviewEnabled } from "@config/previewFeatures";
+import { infraVisibility, useInfraGate } from "@features/infra/api/useInfraGate";
 import { useActivePerspective } from "@context/perspective/PerspectiveContext";
 import { useUserInfo } from "@api/useUserInfo";
 import { useMeProfile } from "@features/my/api/useMeProfile";
-import { useFinanceGate } from "@features/finance/api/useFinanceGate";
-import { useLeaveGate } from "@features/leave/api/useLeaveGate";
-import { useBankingAccess } from "@features/my/api/useBankingAccess";
-import { useMarketingOpsGate } from "@features/marketing-ops/api/useMarketingOpsGate";
-import { useDueDiligenceGate } from "@features/due-diligence/api/useDueDiligenceGate";
-import { useSecurityGate } from "@features/security/api/useSecurityGate";
-import { useSalesRailGate } from "@features/sales/api/useSalesGate";
-import { useSubscriptionGate } from "@features/subscriptions/api/useSubscriptionGate";
+import { financeVisibility, useFinanceGate } from "@features/finance/api/useFinanceGate";
+import { misVisibility, useMisGate } from "@features/finance/mis/api/useMisGate";
+import { leaveVisibility, useLeaveGate } from "@features/leave/api/useLeaveGate";
+import { bankingVisibility, useBankingAccess } from "@features/my/api/useBankingAccess";
+import { bankingAdminVisibility, useBankingAdminAccess } from "@features/my/api/useBankingAdminAccess";
+import { marketingVisibility, useMarketingOpsGate } from "@features/marketing-ops/api/useMarketingOpsGate";
+import { dueDiligenceVisibility, useDueDiligenceGate } from "@features/due-diligence/api/useDueDiligenceGate";
+import { securityVisibility, useSecurityGate } from "@features/security/api/useSecurityGate";
+import { salesVisibility, useSalesRailGate } from "@features/sales/api/useSalesGate";
+import { cado2Visibility, useCado2RailGate } from "@features/sales/cado2/api/useCado2RailGate";
+import { subscriptionVisibility, useSubscriptionGate } from "@features/subscriptions/api/useSubscriptionGate";
+import { parVisibility } from "@features/par/api/parVisibility";
 import { useParCanSeeLeadPortal, useParEmployeeItemVisible } from "@features/par/api/useParData";
 import { useParIsAdmin } from "@features/par/api/useParIsAdmin";
-import { usePromotionPrivileges } from "@features/promotion/api/usePromotionRoles";
-import { useUmtGate } from "@features/umt/api/useUmtGate";
+import { promotionVisibility, usePromotionPrivileges } from "@features/promotion/api/usePromotionRoles";
+import { umtVisibility, useUmtGate } from "@features/umt/api/useUmtGate";
+import {
+  engineeringAdminVisibility,
+  useEngineeringAdminGate,
+} from "@features/engineering/api/engineeringAdminVisibility";
 import { isSriLankaWorkLocation } from "@utils/locationGate";
 import { visibleLeavesOf } from "./railActive";
+import {
+  claimOf,
+  claimsForPerspective,
+  foldVisibility,
+  sectionIdsIn,
+  type AdapterName,
+  type VisibilityAdapter,
+  type VisibilityAnswer,
+} from "./visibilityFold";
 
 /**
  * Who can see what in the active perspective.
@@ -97,11 +95,11 @@ export interface PerspectiveVisibility {
    * someone as a verdict — "you have nothing here" and "we could not find out"
    * are different sentences, and only one of them is worth a Retry button.
    *
-   * Partial, and deliberately so: only four of the gates report a failure at
-   * all (Marketing Ops, Due Diligence, Subscriptions, Infra Portal). Finance, Leave and
-   * Security fold a failed privilege read into "no privileges" — their source
-   * apps do the same, and unpicking that is its own change. So this means
-   * "something we needed definitely failed", never "everything else succeeded".
+   * Partial, and deliberately so. Marketing Ops, Due Diligence, Sales,
+   * Subscriptions, Infra, and Finance MIS report a failed read here. Finance,
+   * Leave, Security, and the others fold a failed read into "not allowed", so
+   * an entry that could not be checked stays hidden. So this means "something
+   * we needed definitely failed", never "everything else succeeded".
    */
   isError: boolean;
   /** The first failure worth naming, for ErrorNotice. */
@@ -125,7 +123,26 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // Both perspectives: the claim apps' own screens are under Me, and Claim
   // approval is under Finance. One gate answers for both, so it has to be
   // asked in either place.
+  // No `caps` any more: master data was the one finance item the portal's own
+  // privileges decided, and its backend now answers for itself — see
+  // useFinanceGate's note.
   const financeGate = useFinanceGate(active.key === "me" || active.key === "finance");
+
+  // Finance MIS, also under Finance, but a different backend again — the MIS
+  // ARR service's own /user-info. It cannot share the finance gate above: that
+  // one answers for the three claim apps and would fall through to its open
+  // default for every MIS id.
+  //
+  // It especially cannot fall through to `sectionAllowed`. MIS privilege 987
+  // and this app's PRIVILEGE.EMPLOYEE 987 are the same number meaning opposite
+  // things, so a MIS id reaching the capability check would show company-wide
+  // revenue reporting to every signed-in employee.
+  //
+  // And only while the `mis` preview flag is on. The flag holds MIS back as a
+  // whole, backend included: with the ARR URL set and the flag off, a gate that
+  // still asked would hold every Finance landing on /user-info, and report its
+  // failure as Finance's, for screens nobody can open.
+  const misGate = useMisGate(active.key === "finance" && isPreviewEnabled("mis"));
 
   // Leave is the same problem again: its backend numbers LEAD 879 /
   // PEOPLE_OPS_TEAM 789, unrelated to people-app's 993 / 999. Reading
@@ -136,6 +153,11 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // Banking is open to callers the banking backend says are employees. Its
   // entry lives under Me, so only ask while Me is active.
   const bankingAccess = useBankingAccess(active.key === "me");
+
+  // Banking's admin screens are the same shape of problem again, reachable
+  // from two perspectives (People Ops and Finance — see BANKING_ADMIN_SECTION
+  // in perspectives.ts), so only fetched while either is active.
+  const bankingAdminAccess = useBankingAdminAccess(active.key === "people" || active.key === "finance");
 
   // Marketing Ops is the same shape of problem and needs the same treatment:
   // its rail gates on the MARKETING OPS backend's own Asgardeo groups
@@ -158,6 +180,9 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   const securityGate = useSecurityGate(active.key === "security");
   // Sales: rows hidden when meet-app refuses the caller outright (403) -- see useSalesRailGate.
   const salesGate = useSalesRailGate(active.key === "sales");
+  // CadO2, also under Sales: rows decided by CadO2's own /me, and only while
+  // its preview flag is on -- see useCado2RailGate.
+  const cado2Gate = useCado2RailGate(active.key === "sales" && isPreviewEnabled("cado2"));
 
   // Subscriptions (PickMe Commute / LaaS) is the same shape of problem once
   // more, with one extra wrinkle worth naming: its backend publishes the
@@ -191,24 +216,31 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // means this is a fresh request only the first time something asks, on
   // Me. Only fetched while Me is active — every other perspective has no
   // business asking.
-  const meProfile = useMeProfile(undefined, active.key === "me");
+  const isMe = active.key === "me";
+  const meProfile = useMeProfile(undefined, isMe);
+  // `isMe &&`: a disabled query's isPending stays true forever, so without
+  // this isResolving would read true on every other perspective too.
   const parEmployeeItemGate = useParEmployeeItemVisible(
     meProfile.data?.employee?.employmentType,
-    meProfile.isLoading,
+    isMe && meProfile.isPending,
   );
 
   // promotion-app's Lead Portal — same shape of problem as PAR's above: its
   // Role.LEAD comes from promotion-app's own backend and bears no fixed
   // relationship to people-app's generic "lead" privilege `caps` is built
   // from. Only fetched while People Ops is active.
-  const promotionLeadPortalGate = usePromotionPrivileges(userInfo.data?.workEmail, isPeopleOps);
+  const promotionLeadPortalGate = usePromotionPrivileges(
+    userInfo.data?.workEmail,
+    isPeopleOps && isPreviewEnabled("promotion"),
+  );
 
   // UMT is the same shape of problem again: Product Management is
   // UMT_ADMIN-only, decided by UMT's own /update/user-info roles, which bear
   // no relation to the people-app privilege numbers `caps` is built from.
-  // Only fetched while UMT is the active perspective.
-  const isUmt = active.key === "umt";
-  const umtGate = useUmtGate(isUmt);
+  // Only fetched while Engineering is active and its UMT group exists.
+  const isEngineering = active.key === "engineering" && isPreviewEnabled("engineering");
+  const umtGate = useUmtGate(isEngineering && isPreviewEnabled("umt"));
+  const engineeringAdminGate = useEngineeringAdminGate(isEngineering);
 
   // Both services are a Colombo-office perk, so both screens are Sri-Lanka-only
   // — see isSriLankaWorkLocation. They now sit in different perspectives (self
@@ -231,103 +263,91 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   // it a moment later reads as the rail flickering, and failing CLOSED is the
   // right default for an admin entry point either way.
   const isSriLankaEmployee = isSriLankaWorkLocation(userInfo.data?.workLocation);
-  // Location is handled once, for every id, in resolveVisible below — so this
-  // is only the admin-group question.
-  const subscriptionCanSee = (id: string): boolean => {
-    return id === "people-subscriptions-manage"
-      ? subscriptionGate.isAdmin && !subscriptionGate.isResolving
-      : true;
-  };
-
-  const resolveVisible = (s: PerspectiveSection): boolean => {
-    // Location first, and as an AND rather than a branch: a Colombo-office perk
-    // is hidden from everyone else no matter which backend's gate would
-    // otherwise answer for the id.
-    if (SRI_LANKA_ONLY_ITEM_IDS.has(s.id) && !isSriLankaEmployee) return false;
-    if (DUE_DILIGENCE_ITEM_IDS.has(s.id)) return dueDiligenceGate.canSee(s.id);
-    if (SECURITY_ITEM_IDS.has(s.id)) return securityGate.canSee(s.id);
-    if (SALES_ITEM_IDS.has(s.id)) return salesGate.canSee(s.id);
-    if (FINANCE_ITEM_IDS.has(s.id)) return financeGate.canSee(s.id);
-    if (LEAVE_ITEM_IDS.has(s.id)) return leaveGate.canSee(s.id);
-    if (BANKING_ITEM_IDS.has(s.id)) return bankingAccess.canSee;
-    if (SUBSCRIPTION_ITEM_IDS.has(s.id)) return subscriptionCanSee(s.id);
-    if (s.id === PAR_LEAD_PORTAL_ITEM_ID) return parLeadPortalGate.canSee;
-    if (s.id === PAR_ADMIN_PORTAL_ITEM_ID) return parAdminPortalGate.isAdmin;
-    if (s.id === PAR_EMPLOYEE_ITEM_ID) return parEmployeeItemGate.canSee;
-    if (s.id === PROMOTION_LEAD_PORTAL_ITEM_ID || s.id === PROMOTION_TEAM_HISTORY_ITEM_ID) {
-      return promotionLeadPortalGate.isLead;
-    }
-    if (s.id === PROMOTION_FUNCTIONAL_LEAD_PORTAL_ITEM_ID) {
-      return promotionLeadPortalGate.isFunctionalLead;
-    }
-    if (s.id === PROMOTION_BOARD_PORTAL_ITEM_ID) {
-      return promotionLeadPortalGate.isPromotionBoardMember;
-    }
-    if (s.id === PROMOTION_ADMIN_PORTAL_ITEM_ID) {
-      return promotionLeadPortalGate.isHrAdmin;
-    }
-    if (s.id === PROMOTION_CYCLE_HISTORY_ITEM_ID) {
-      return promotionLeadPortalGate.isHrAdmin || promotionLeadPortalGate.isFunctionalLead;
-    }
-    if (UMT_ADMIN_ITEM_IDS.has(s.id)) return umtGate.isAdmin && !umtGate.isResolving;
-    if (isMarketingOps) return marketingOpsGate.canSee(s.id);
-    if (INFRA_ITEM_IDS.has(s.id)) return infraGate.canSee(s.id);
-    return sectionAllowed(s.requires, caps);
-  };
 
   // Memoised because `?? []` would otherwise hand a fresh array to the
   // dependency lists in SideRail on every render, defeating its useMemos.
   const sections = useMemo(() => active.sections ?? [], [active.sections]);
 
-  const visibleLeaves = visibleLeavesOf(sections, resolveVisible);
-
-  // Each gate answers only for its own perspective, and reports `isResolving`
-  // only while it is enabled — so an OR across all of them is the aggregate
-  // for whichever perspective is active, with no per-perspective branching to
-  // keep in step with the dispatch above.
-  const isResolving =
-    userInfo.isLoading ||
-    financeGate.isResolving ||
-    leaveGate.isResolving ||
-    bankingAccess.isResolving ||
-    marketingOpsGate.isResolving ||
-    dueDiligenceGate.isResolving ||
-    securityGate.isResolving ||
-    salesGate.isResolving ||
-    subscriptionGate.isResolving ||
-    infraGate.isResolving ||
-    parLeadPortalGate.isLoading ||
-    parAdminPortalGate.isLoading ||
-    parEmployeeItemGate.isLoading ||
-    umtGate.isResolving;
-
-  const isError =
-    userInfo.isError ||
-    marketingOpsGate.isError ||
-    dueDiligenceGate.isError ||
-    infraGate.isError ||
-    salesGate.isError ||
-    subscriptionGate.isError;
-  const error = userInfo.isError
-    ? userInfo.error
-    : marketingOpsGate.errorMessage ??
-      dueDiligenceGate.errorMessage ??
-      infraGate.errorMessage ??
-      salesGate.errorMessage ??
-      subscriptionGate.errorMessage;
-  const retry = (): void => {
-    if (userInfo.isError) void userInfo.refetch();
-    if (marketingOpsGate.isError) marketingOpsGate.retry();
-    if (dueDiligenceGate.isError) dueDiligenceGate.retry();
-    if (subscriptionGate.isError) subscriptionGate.retry();
-    if (infraGate.isError) infraGate.retry();
-    if (salesGate.isError) salesGate.retry();
+  const answer = (name: AdapterName): VisibilityAnswer => {
+    switch (name) {
+      case "par":
+        return parVisibility({
+          admin: parAdminPortalGate,
+          lead: parLeadPortalGate,
+          employee: parEmployeeItemGate,
+          profileFailed: meProfile.isError,
+        });
+      case "marketing":
+        return marketingVisibility(marketingOpsGate);
+      case "due-diligence":
+        return dueDiligenceVisibility(dueDiligenceGate);
+      case "finance":
+        return financeVisibility(financeGate);
+      case "leave":
+        return leaveVisibility(leaveGate);
+      case "banking":
+        return bankingVisibility(bankingAccess);
+      case "banking-admin":
+        return bankingAdminVisibility(bankingAdminAccess);
+      case "infra":
+        return infraVisibility(infraGate);
+      case "sales":
+        return salesVisibility(salesGate);
+      case "cado2":
+        return cado2Visibility(cado2Gate);
+      case "promotion":
+        return promotionVisibility(promotionLeadPortalGate);
+      case "security":
+        return securityVisibility(securityGate);
+      case "umt":
+        return umtVisibility(umtGate);
+      case "subscriptions":
+        return subscriptionVisibility(subscriptionGate);
+      case "mis":
+        return misVisibility(misGate);
+      case "engineering":
+        return engineeringAdminVisibility({
+          isAdmin: engineeringAdminGate.isAdmin,
+          resolving: engineeringAdminGate.isResolving,
+        });
+      default: {
+        const neverName: never = name;
+        return neverName;
+      }
+    }
   };
 
-  return { resolveVisible, isResolving, visibleLeaves, isError, error, retry };
+  const snapshot = (name: AdapterName): VisibilityAdapter => ({
+    name,
+    claim: claimOf(name),
+    ...answer(name),
+  });
+
+  const folded = foldVisibility(
+    claimsForPerspective(active.key).map(snapshot),
+    {
+      perspectiveKey: active.key,
+      sectionIds: sectionIdsIn(sections),
+      sriLankaOnlyIds: SRI_LANKA_ONLY_ITEM_IDS,
+      isSriLankaEmployee,
+      employeeRecordResolving: userInfo.isLoading,
+      employeeRecordFailed: userInfo.isError,
+      employeeRecordError: userInfo.error,
+      retryEmployeeRecord: () => void userInfo.refetch(),
+      capabilities: caps,
+    },
+  );
+
+  const resolveVisible = (section: PerspectiveSection): boolean => folded.canSee(section);
+  const visibleLeaves = visibleLeavesOf(sections, resolveVisible);
+
+  return {
+    resolveVisible,
+    isResolving: folded.resolving,
+    visibleLeaves,
+    isError: folded.failed,
+    error: folded.error,
+    retry: folded.retry,
+  };
 }
 
-function sectionAllowed(requires: Capability[] | undefined, caps: Set<Capability>): boolean {
-  if (!requires || requires.length === 0) return true;
-  return requires.some((r) => caps.has(r));
-}

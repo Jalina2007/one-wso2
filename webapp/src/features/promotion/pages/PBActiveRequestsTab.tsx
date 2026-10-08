@@ -24,8 +24,8 @@
 // `from: "promotion_board"` passed to approve/reject, and the deadline field
 // read (promotionBoardDeadline, not functionalLeadDeadline).
 import { useState } from "react";
-import { Alert, Box, Button, DataGrid, IconButton, Skeleton, Stack, Tooltip } from "@wso2/oxygen-ui";
-import { CalendarOffIcon, CheckIcon, ChevronDownIcon, InboxIcon, PencilIcon, RefreshCwIcon, TriangleAlertIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Button, Card, DataGrid, IconButton, Skeleton, Stack, Tooltip } from "@wso2/oxygen-ui";
+import { CheckIcon, ChevronDownIcon, PencilIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { humanizeHttpError } from "@api/http";
 import ConfirmationDialog, { type ConfirmationContent } from "@components/confirmation-dialog/ConfirmationDialog";
 import { useActivePromotionCycle, isPromotionDeadlinePast } from "../api/usePromotionCycle";
@@ -47,10 +47,17 @@ import { formatDate } from "../util/promotionHistory";
 import type { PromotionRequestFull } from "../api/types";
 import { GRID_NO_POINTER_FOCUS_SX } from "@utils/dataGridSx";
 
+const STRIPE_SX = {
+  "& .row-stripe": { bgcolor: "action.hover" },
+};
+
 export default function PBActiveRequestsTab() {
   const cycle = useActivePromotionCycle();
   const deadlinePast = isPromotionDeadlinePast(cycle.cycle?.promotionBoardDeadline);
-  const requests = usePromotionRequests({ statusArray: ["FL_APPROVED"] }, !cycle.isPending);
+  const requests = usePromotionRequests(
+    { statusArray: ["FL_APPROVED"], cycleId: cycle.cycle?.id },
+    !cycle.isPending && Boolean(cycle.cycle),
+  );
 
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [editingRequest, setEditingRequest] = useState<PromotionRequestFull | null>(null);
@@ -90,6 +97,7 @@ export default function PBActiveRequestsTab() {
   const columns: DataGrid.GridColDef<PromotionRequestFull>[] = [
     ...basePromotionRequestColumns(),
     {
+      display: "flex",
       field: "action",
       headerName: "Action",
       sortable: false,
@@ -104,12 +112,12 @@ export default function PBActiveRequestsTab() {
             </IconButton>
           </Tooltip>
           <Tooltip title="Approve">
-            <IconButton size="small" onClick={() => confirmApprove([params.row.id])}>
+            <IconButton size="small" color="success" onClick={() => confirmApprove([params.row.id])}>
               <CheckIcon size={16} />
             </IconButton>
           </Tooltip>
           <Tooltip title="Reject">
-            <IconButton size="small" onClick={() => setRejectTarget([params.row.id])}>
+            <IconButton size="small" color="error" onClick={() => setRejectTarget([params.row.id])}>
               <XIcon size={16} />
             </IconButton>
           </Tooltip>
@@ -162,64 +170,71 @@ export default function PBActiveRequestsTab() {
 
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
         <Stack direction="row" spacing={1}>
-          <Button
-            size="small"
-            startIcon={<CheckIcon size={16} />}
-            disabled={selectedIds.length === 0}
-            onClick={() => confirmApprove(selectedIds)}
-          >
-            Approve
-          </Button>
-          <Button
-            size="small"
-            color="error"
-            startIcon={<XIcon size={16} />}
-            disabled={selectedIds.length === 0}
-            onClick={() => setRejectTarget(selectedIds)}
-          >
-            Reject
-          </Button>
+          <Tooltip title={selectedIds.length === 0 ? "Select requests to approve" : "Approve selected requests"}>
+            <span>
+              <Button
+                size="small"
+                variant="contained"
+                color="success"
+                startIcon={<CheckIcon size={16} />}
+                disabled={selectedIds.length === 0}
+                onClick={() => confirmApprove(selectedIds)}
+              >
+                {`Approve ${selectedIds.length || ""}`.trim()}
+              </Button>
+            </span>
+          </Tooltip>
+          <Tooltip title={selectedIds.length === 0 ? "Select requests to reject" : "Reject selected requests"}>
+            <span>
+              <Button
+                size="small"
+                variant="contained"
+                color="error"
+                startIcon={<XIcon size={16} />}
+                disabled={selectedIds.length === 0}
+                onClick={() => setRejectTarget(selectedIds)}
+              >
+                {`Reject ${selectedIds.length || ""}`.trim()}
+              </Button>
+            </span>
+          </Tooltip>
         </Stack>
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void requests.refetch()}>
-            <RefreshCwIcon size={16} />
-          </IconButton>
-        </Tooltip>
       </Box>
 
-      {cycle.isPending || requests.isPending ? (
+      {cycle.isPending || (Boolean(cycle.cycle) && requests.isPending) ? (
         <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 1 }} />
       ) : cycle.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load the promotion cycle. ${humanizeHttpError(cycle.error)}`}
         />
       ) : deadlinePast ? (
-        <PromotionEmptyState icon={<CalendarOffIcon size={28} />} message="The Promotion Board Deadline has passed." />
+        <PromotionEmptyState message="The Promotion Board Deadline has passed." />
       ) : requests.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load promotion requests. ${humanizeHttpError(requests.error)}`}
         />
       ) : rows.length === 0 ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no active promotion requests" />
+        <PromotionEmptyState message="There are no active promotion requests" />
       ) : (
-        <DataGrid.DataGrid
-          rows={rows}
-          columns={columns}
-          checkboxSelection
-          rowSelectionModel={{ type: "include", ids: new Set(selectedIds) }}
-          onRowSelectionModelChange={(model) =>
-            setSelectedIds(resolveGridSelectedIds(model, rows))
-          }
-          showToolbar
-          slots={{ toolbar: PromotionGridToolbar }}
-          sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX }}
-          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-          pageSizeOptions={[10, 25, 50]}
-        />
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <DataGrid.DataGrid
+            rows={rows}
+            columns={columns}
+            checkboxSelection
+            rowSelectionModel={{ type: "include", ids: new Set(selectedIds) }}
+            onRowSelectionModelChange={(model) =>
+              setSelectedIds(resolveGridSelectedIds(model, rows))
+            }
+            getRowClassName={(params) => (params.indexRelativeToCurrentPage % 2 === 0 ? "row-stripe" : "")}
+            showToolbar
+            slots={{ toolbar: PromotionGridToolbar }}
+            sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX, ...STRIPE_SX }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            pageSizeOptions={[10, 25, 50]}
+          />
+        </Card>
       )}
     </>
   );

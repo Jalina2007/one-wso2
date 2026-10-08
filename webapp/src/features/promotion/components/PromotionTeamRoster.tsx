@@ -15,14 +15,13 @@
 // under the License.
 
 import { useMemo, useState } from "react";
-import { Box, IconButton, Skeleton, TextField, Tooltip, InputAdornment } from "@wso2/oxygen-ui";
-import { RefreshCwIcon, SearchIcon } from "@wso2/oxygen-ui-icons-react";
+import { useOutletContext } from "react-router";
+import { Box, Skeleton } from "@wso2/oxygen-ui";
 import { humanizeHttpError } from "@api/http";
 import { usePromotionTeam } from "../api/usePromotionTeam";
 import PromotionEmptyState from "./PromotionEmptyState";
 import PromotionEmployeeCard from "./PromotionEmployeeCard";
 import PromotionEmployeeHistoryDialog from "./PromotionEmployeeHistoryDialog";
-import { TriangleAlertIcon, InboxIcon } from "@wso2/oxygen-ui-icons-react";
 
 // Ports source's own employeesHistory.tsx / indirectReports.tsx — identical
 // screens bar which relationship they query, so one shared component
@@ -31,7 +30,7 @@ import { TriangleAlertIcon, InboxIcon } from "@wso2/oxygen-ui-icons-react";
 // filteredEmployees uses (not name).
 export default function PromotionTeamRoster({ kind, email }: { kind: "direct" | "indirect"; email: string | undefined }) {
   const team = usePromotionTeam(kind, email);
-  const [searchKey, setSearchKey] = useState("");
+  const searchKey = useOutletContext<string>();
   const [viewingEmail, setViewingEmail] = useState<string | null>(null);
 
   const employees = team.data?.employees ?? [];
@@ -47,30 +46,6 @@ export default function PromotionTeamRoster({ kind, email }: { kind: "direct" | 
     <>
       <PromotionEmployeeHistoryDialog workEmail={viewingEmail} onClose={() => setViewingEmail(null)} />
 
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void team.refetch()}>
-            <RefreshCwIcon size={16} />
-          </IconButton>
-        </Tooltip>
-        <TextField
-          size="small"
-          placeholder="Search"
-          value={searchKey}
-          onChange={(e) => setSearchKey(e.target.value)}
-          sx={{ width: 280 }}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon size={16} />
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
-      </Box>
-
       {team.isPending ? (
         <Box>
           <Skeleton variant="rectangular" height={92} sx={{ borderRadius: 1, mb: 1.5 }} />
@@ -78,14 +53,13 @@ export default function PromotionTeamRoster({ kind, email }: { kind: "direct" | 
         </Box>
       ) : team.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load employees. ${humanizeHttpError(team.error)}`}
         />
       ) : employees.length === 0 ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no employees assigned to you" />
+        <PromotionEmptyState message="There are no employees assigned to you" />
       ) : filtered.length === 0 ? (
-        <PromotionEmptyState icon={<SearchIcon size={28} />} message="No employees found" />
+        <PromotionEmptyState message="No employees found" />
       ) : (
         filtered.map((emp) => (
           <PromotionEmployeeCard key={emp.workEmail} employee={emp} onView={() => setViewingEmail(emp.workEmail)} />

@@ -19,9 +19,10 @@
 // alternating row stripe (source's own getIndexBasedRowColor) instead of
 // the status-based colouring the Approved tab uses.
 import { useState } from "react";
-import { Box, DataGrid, IconButton, Skeleton, Tooltip } from "@wso2/oxygen-ui";
-import { ChevronDownIcon, InboxIcon, RefreshCwIcon, TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
+import { Card, DataGrid, IconButton, Skeleton, Tooltip } from "@wso2/oxygen-ui";
+import { ChevronDownIcon } from "@wso2/oxygen-ui-icons-react";
 import { humanizeHttpError } from "@api/http";
+import { useActivePromotionCycle } from "../api/usePromotionCycle";
 import { usePromotionRequests } from "../api/usePromotionRequests";
 import { basePromotionRequestColumns } from "../components/promotionRequestColumns";
 import PromotionEmptyState from "../components/PromotionEmptyState";
@@ -35,7 +36,11 @@ const STRIPE_SX = {
 };
 
 export default function FLRejectedListTab() {
-  const requests = usePromotionRequests({ statusArray: ["FL_REJECTED"], enableBuFilter: true });
+  const cycle = useActivePromotionCycle();
+  const requests = usePromotionRequests(
+    { statusArray: ["FL_REJECTED"], enableBuFilter: true, cycleId: cycle.cycle?.id },
+    !cycle.isPending && Boolean(cycle.cycle),
+  );
   const [viewingRequest, setViewingRequest] = useState<PromotionRequestFull | null>(null);
 
   const rows = requests.data?.promotionRequests ?? [];
@@ -43,6 +48,7 @@ export default function FLRejectedListTab() {
   const columns: DataGrid.GridColDef<PromotionRequestFull>[] = [
     ...basePromotionRequestColumns(),
     {
+      display: "flex",
       field: "action",
       headerName: "",
       sortable: false,
@@ -63,35 +69,33 @@ export default function FLRejectedListTab() {
     <>
       <PromotionRequestDetailDialog request={viewingRequest} onClose={() => setViewingRequest(null)} />
 
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void requests.refetch()}>
-            <RefreshCwIcon size={16} />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
-      {requests.isPending ? (
+      {cycle.isPending || (Boolean(cycle.cycle) && requests.isPending) ? (
         <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 1 }} />
+      ) : cycle.isError ? (
+        <PromotionEmptyState
+          tone="error"
+          message={`Unable to load the promotion cycle. ${humanizeHttpError(cycle.error)}`}
+        />
       ) : requests.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load promotion requests. ${humanizeHttpError(requests.error)}`}
         />
       ) : rows.length === 0 ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no pending promotion requests" />
+        <PromotionEmptyState message="There are no pending promotion requests" />
       ) : (
-        <DataGrid.DataGrid
-          rows={rows}
-          columns={columns}
-          getRowClassName={(params) => (params.indexRelativeToCurrentPage % 2 === 0 ? "row-stripe" : "")}
-          showToolbar
-          slots={{ toolbar: PromotionGridToolbar }}
-          sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX, ...STRIPE_SX }}
-          initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
-          pageSizeOptions={[10, 25, 50]}
-        />
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <DataGrid.DataGrid
+            rows={rows}
+            columns={columns}
+            getRowClassName={(params) => (params.indexRelativeToCurrentPage % 2 === 0 ? "row-stripe" : "")}
+            showToolbar
+            slots={{ toolbar: PromotionGridToolbar }}
+            sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX, ...STRIPE_SX }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            pageSizeOptions={[10, 25, 50]}
+          />
+        </Card>
       )}
     </>
   );

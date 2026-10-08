@@ -29,12 +29,14 @@
 
 import {
   CreditCardIcon,
+  DatabaseIcon,
   LayoutDashboardIcon,
   ReceiptTextIcon,
   StethoscopeIcon,
 } from "@wso2/oxygen-ui-icons-react";
 import { CC_PATH } from "@features/finance/cc/ccPaths";
 import { FINANCE_OVERVIEW_PATH } from "@features/finance/overview/financeOverviewPaths";
+import { masterDataPaths } from "@features/finance/masterdata/masterDataPaths";
 import type { MenuApp } from "@constants/appMenu";
 
 /**
@@ -140,11 +142,50 @@ export const FINANCE_PERSPECTIVE_APPS: readonly MenuApp[] = [
   },
 ];
 
+/**
+ * Master Data, on its own so the rail can place it last.
+ *
+ * Split out of `FINANCE_PERSPECTIVE_APPS` rather than reordered inside it:
+ * that registry is spread high up the Finance rail, next to the screens
+ * people open all day, and this is reference data an administrator edits
+ * occasionally. It belongs under everything else — see the `finance`
+ * perspective, which spreads this after MIS.
+ */
+export const FINANCE_MASTER_DATA_APPS: readonly MenuApp[] = [
+  {
+    // The reference data the other finance apps are keyed against. Its own
+    // entry rather than a Settings tab inside one of them: all four tables
+    // are shared — an expense type is used by both Expense Claims and Credit
+    // Card Expenses — so filing it under either one would be arbitrary.
+    key: "finance-master-data",
+    name: "Master Data",
+    icon: DatabaseIcon,
+    purpose: "Maintain the subsidiaries, departments, expense types and cards the finance apps refer to.",
+    // `requires: ["admin"]` on all four is a RESTRICTION MARKER, not the gate.
+    // For a finance-claimed id the finance adapter is the only decider
+    // (visibilityFold's `canSee` returns `owner.canSee(...)` without consulting
+    // `requires` at all), and these four are answered by the master-data
+    // backend's own `/user-info` — see useFinanceGate's master-data case. What
+    // the marker still buys is the fail-closed backstop: it puts these ids in
+    // `RESTRICTED_IDS`, so if one is ever renamed and stops matching its
+    // explicit case, it falls to the default and stays HIDDEN rather than
+    // becoming visible to everyone. Read "admin" here as "restricted"; the
+    // portal's 999 privilege no longer opens these rows.
+    items: [
+      { id: "master-data-subsidiaries", label: "Subsidiaries", desc: "WSO2 legal entities and their tax codes.", requires: ["admin"], path: masterDataPaths.subsidiaries },
+      { id: "master-data-departments", label: "Departments", desc: "Departments, engagement codes and their GL codes.", requires: ["admin"], path: masterDataPaths.departments },
+      { id: "master-data-expense-types", label: "Expense Types", desc: "The expense catalogue and the engagements each type is valid for.", requires: ["admin"], path: masterDataPaths.expenseTypes },
+      { id: "master-data-credit-cards", label: "Credit Cards", desc: "The corporate card register and who approves each card's spend.", requires: ["admin"], path: masterDataPaths.creditCards },
+    ],
+  },
+];
+
 /** Every finance-domain app, wherever it is surfaced. */
 export const FINANCE_APPS: readonly MenuApp[] = [
   ...ME_FINANCE_APPS,
   ...FINANCE_OVERVIEW_APPS,
   ...FINANCE_PERSPECTIVE_APPS,
+  ...FINANCE_MASTER_DATA_APPS,
 ];
 
 export const FINANCE_ITEM_IDS: ReadonlySet<string> = new Set([
@@ -177,8 +218,13 @@ export const FINANCE_EYEBROW = {
   // now, and their own titles say which type is being filed.
   claims: eyebrowFor("claims"),
   cc: eyebrowFor("cc"),
+  masterData: eyebrowFor("finance-master-data"),
   // A literal rather than eyebrowFor(...): the OPD dashboard sits behind a
   // preview flag, and with it off the lookup would fall back to the generic
   // "Finance" chip — wrong for a route still reachable directly by URL.
   opd: { icon: StethoscopeIcon, label: "OPD Claims" },
+  // Also a literal: the expense dashboard is reached through Overview, the
+  // same as OPD's, and is not itself an app in the registry `eyebrowFor`
+  // looks up by key.
+  expense: { icon: ReceiptTextIcon, label: "Expense Claims" },
 } as const;

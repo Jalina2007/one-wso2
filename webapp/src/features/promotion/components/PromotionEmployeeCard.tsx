@@ -36,9 +36,9 @@ export default function PromotionEmployeeCard({
   return (
     <Paper
       variant="outlined"
-      sx={{ p: 2.5, mb: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 3 }}
+      sx={{ px: 2, py: 1.5, mb: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2 }}
     >
-      <Avatar src={employee.employeeThumbnail ?? undefined} sx={{ width: 72, height: 72, borderRadius: 3 }} />
+      <Avatar src={employee.employeeThumbnail ?? undefined} sx={{ width: "2.2rem", height: "2.2rem", borderRadius: 3 }} />
 
       <Grid container spacing={2} sx={{ flexGrow: 1, width: "100%" }}>
         <Field size={3} label="Full Name" value={`${employee.firstName ?? "N/A"} ${employee.lastName ?? "N/A"}`} />
@@ -58,8 +58,8 @@ export default function PromotionEmployeeCard({
 function Field({ size, label, value }: { size: number; label: string; value: string }) {
   return (
     <Grid size={{ xs: 12, sm: 6, md: size }}>
-      <Typography sx={{ fontSize: 12.5, fontWeight: 600, color: "text.secondary" }}>{label}:</Typography>
-      <Typography sx={{ fontSize: 14 }}>{value}</Typography>
+      <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary" }}>{label}:</Typography>
+      <Typography variant="body2">{value}</Typography>
     </Grid>
   );
 }

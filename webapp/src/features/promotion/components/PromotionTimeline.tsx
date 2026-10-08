@@ -26,15 +26,26 @@
 // result — column split, dot colours, connector, alternating sides — matches
 // source; only the implementation is different.
 import type { ReactNode } from "react";
-import { Box, Chip, Typography } from "@wso2/oxygen-ui";
-import { AwardIcon, BadgeIcon, type LucideIcon } from "@wso2/oxygen-ui-icons-react";
+import { Box, Chip, SvgIcon, Typography } from "@wso2/oxygen-ui";
 import type { PromotionEmployeeInfoWithLead, PromotionHistoryEntry } from "../api/types";
 import { formatDate, sortPromotionsByBand } from "../util/promotionHistory";
+
+const StarsIcon = () => (
+  <SvgIcon sx={{ fontSize: 20, color: "#fff" }}>
+    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2m4.24 16L12 15.45 7.77 18l1.12-4.81-3.73-3.23 4.92-.42L12 5l1.92 4.53 4.92.42-3.73 3.23z" />
+  </SvgIcon>
+);
+
+const BadgeIcon = () => (
+  <SvgIcon sx={{ fontSize: 20, color: "#fff" }}>
+    <path d="M20 7h-5V4c0-1.1-.9-2-2-2h-2c-1.1 0-2 .9-2 2v3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2M9 12c.83 0 1.5.67 1.5 1.5S9.83 15 9 15s-1.5-.67-1.5-1.5S8.17 12 9 12m3 6H6v-.75c0-1 2-1.5 3-1.5s3 .5 3 1.5zm1-9h-2V4h2zm5 7.5h-4V15h4zm0-3h-4V12h4z" />
+  </SvgIcon>
+);
 
 interface Row {
   key: string | number;
   tone: "primary" | "warning" | "inherit";
-  Icon: LucideIcon;
+  Icon: () => ReactNode;
   opposite: string;
   content: ReactNode;
 }
@@ -56,7 +67,7 @@ export default function PromotionTimeline({
     // history dialog already uses for a SPECIAL chip (PromotionHistoryDialog's
     // own TypeChip), so this reuses that instead of inventing a new mapping.
     tone: entry.promotionType === "SPECIAL" ? "warning" : "primary",
-    Icon: AwardIcon,
+    Icon: StarsIcon,
     opposite: entry.promotionCycle,
     content: (
       <>
@@ -148,8 +159,8 @@ function TimelineRow({ row, last, alternateLeft }: { row: Row; last: boolean; al
 // above to connect to and the last nothing below, but both still render a
 // connector to keep every dot the same visual weight source's own timeline
 // has (source always renders both TimelineConnectors regardless of position).
-function Spine({ tone, Icon, last }: { tone: Row["tone"]; Icon: LucideIcon; last: boolean }) {
-  const color = tone === "inherit" ? "text.secondary" : `${tone}.main`;
+function Spine({ tone, Icon, last }: { tone: Row["tone"]; Icon: Row["Icon"]; last: boolean }) {
+  const color = tone === "inherit" ? "grey.600" : `${tone}.main`;
   return (
     <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       <Box sx={{ width: 2, flex: 1, minHeight: 12, bgcolor: "divider" }} />
@@ -167,7 +178,7 @@ function Spine({ tone, Icon, last }: { tone: Row["tone"]; Icon: LucideIcon; last
           my: 0.5,
         }}
       >
-        <Icon size={17} color="#fff" />
+        <Icon />
       </Box>
       {!last && <Box sx={{ width: 2, flex: 1, minHeight: 12, bgcolor: "divider" }} />}
     </Box>

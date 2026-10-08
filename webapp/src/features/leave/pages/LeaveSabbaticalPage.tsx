@@ -46,6 +46,7 @@ import {
   eligibilityGapDays,
   eligibilityYears,
   exceedsMaxDuration,
+  jobBandBlock,
   maxDurationWeeks,
 } from "../util/sabbatical";
 import { useNavigate } from "react-router";
@@ -120,12 +121,15 @@ function SabbaticalApply() {
   const [ackLead, setAckLead] = useState(false);
   const [ackPolicy, setAckPolicy] = useState(false);
   const [ackResignation, setAckResignation] = useState(false);
+  // Policy V2.6 — the handover acknowledgement, required like the other three.
+  const [ackHandover, setAckHandover] = useState(false);
 
   const [startMissing, setStartMissing] = useState(false);
   const [endMissing, setEndMissing] = useState(false);
   const [ackLeadError, setAckLeadError] = useState(false);
   const [ackPolicyError, setAckPolicyError] = useState(false);
   const [ackResignationError, setAckResignationError] = useState(false);
+  const [ackHandoverError, setAckHandoverError] = useState(false);
 
   const [confirming, setConfirming] = useState(false);
 
@@ -167,6 +171,7 @@ function SabbaticalApply() {
     setAckLeadError(false);
     setAckPolicyError(false);
     setAckResignationError(false);
+    setAckHandoverError(false);
   };
 
   // ApplyTab.tsx:204-273. The order matters: each rule raises one message and
@@ -202,7 +207,8 @@ function SabbaticalApply() {
     if (!ackLead) setAckLeadError(true);
     if (!ackPolicy) setAckPolicyError(true);
     if (!ackResignation) setAckResignationError(true);
-    if (!ackLead || !ackPolicy || !ackResignation) {
+    if (!ackHandover) setAckHandoverError(true);
+    if (!ackLead || !ackPolicy || !ackResignation || !ackHandover) {
       showError(SABBATICAL.apply.acknowledgeAll);
       return;
     }
@@ -234,14 +240,15 @@ function SabbaticalApply() {
           // everything going through the slice gets SnackMessage's "…successfully".
           // Same event, two strings, and the difference is the source's.
           showSuccess(SnackMessage.success.submitLeaveMessage);
-          // :291-296 — dates, comment and the three boxes clear; the anchor the
-          // user typed is left alone.
+          // :291-296 — dates, comment and the boxes clear; the anchor the user
+          // typed is left alone.
           setStartDate("");
           setEndDate("");
           setComment("");
           setAckLead(false);
           setAckPolicy(false);
           setAckResignation(false);
+          setAckHandover(false);
           // Same as the general form: show them what they just submitted.
           const landing = historyPathAfterSubmit("sabbatical", gate.canSee);
           if (landing) navigate(landing);
@@ -274,6 +281,10 @@ function SabbaticalApply() {
     return <Alert severity="info">{SABBATICAL.featureOff}</Alert>;
   }
 
+  // Policy V2.6 — band 5 and above, mirroring the backend's check on POST
+  // /leaves. Read after the flag check, so the config is known to be there.
+  const bandBlock = jobBandBlock(userInfo.data?.jobBand ?? null, config.sabbaticalLeaveMinJobBand);
+
   const guideUrl = config?.sabbaticalLeaveUserGuideUrl;
   const policyUrl = config?.sabbaticalLeavePolicyUrl;
 
@@ -290,7 +301,7 @@ function SabbaticalApply() {
             {SABBATICAL.apply.title}
           </Typography>
           {guideUrl && (
-            <Link href={guideUrl} target="_blank" rel="noopener" underline="hover" sx={{ fontSize: 13 }}>
+            <Link href={guideUrl} target="_blank" rel="noopener noreferrer" underline="hover" sx={{ fontSize: 13 }}>
               {SABBATICAL.apply.userGuide}
             </Link>
           )}
@@ -303,6 +314,14 @@ function SabbaticalApply() {
           <Alert severity="warning" variant="outlined">
             <AlertTitle>{SABBATICAL.apply.noLeadTitle}</AlertTitle>
             {SABBATICAL.apply.noLeadBody}
+          </Alert>
+        ) : bandBlock ? (
+          // The same hard block for the job band: nothing on the form can fix it.
+          <Alert severity="warning" variant="outlined">
+            <AlertTitle>{SABBATICAL.apply.jobBandTitle}</AlertTitle>
+            {bandBlock === "missing"
+              ? SABBATICAL.apply.jobBandMissing
+              : SABBATICAL.apply.jobBandBelow(config.sabbaticalLeaveMinJobBand)}
           </Alert>
         ) : (
           <Stack spacing={2}>
@@ -401,7 +420,7 @@ function SabbaticalApply() {
                   <>
                     {SABBATICAL.apply.ackPolicyBefore}
                     {policyUrl ? (
-                      <Link href={policyUrl} target="_blank" rel="noopener" underline="hover">
+                      <Link href={policyUrl} target="_blank" rel="noopener noreferrer" underline="hover">
                         {SABBATICAL.apply.ackPolicyLink}
                       </Link>
                     ) : (
@@ -419,6 +438,15 @@ function SabbaticalApply() {
                   setAckResignationError(false);
                 }}
                 label={SABBATICAL.apply.ackResignation}
+              />
+              <Acknowledgement
+                checked={ackHandover}
+                error={ackHandoverError}
+                onChange={(v) => {
+                  setAckHandover(v);
+                  setAckHandoverError(false);
+                }}
+                label={SABBATICAL.apply.ackHandover}
               />
             </Stack>
 

@@ -133,7 +133,7 @@ export function ParRequiresActiveCycleRoute({ children }: { children: ReactNode 
  * reasoning as ParRequiresLeadRoute above. */
 export function ParRequiresSomethingToShowRoute({ children }: { children: ReactNode }) {
   const profile = useMeProfile();
-  const { canSee, isLoading } = useParEmployeeItemVisible(profile.data?.employee?.employmentType, profile.isLoading);
+  const { canSee, isLoading } = useParEmployeeItemVisible(profile.data?.employee?.employmentType, profile.isPending);
   if (isLoading) return null;
   if (!canSee) return <Navigate to="/me" replace />;
   return <>{children}</>;

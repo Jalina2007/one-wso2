@@ -59,6 +59,7 @@ import { formatCalendarDate, formatDate } from "../lib/umtDates";
 import { gridCellContentSx } from "../lib/umtGrid";
 import { umtLifecycleState } from "../lib/umtLifecycleState";
 import { writePersistedSelectedTab } from "../lib/umtLocalState";
+import { umtPaths } from "../lib/umtPaths";
 import UmtCreateUpdateDialog from "../components/UmtCreateUpdateDialog";
 import UmtShell from "../components/UmtShell";
 import UmtUpdateFiltersDrawer from "../components/UmtUpdateFiltersDrawer";
@@ -213,7 +214,7 @@ function UmtUpdatesBody() {
 
   const viewUpdate = (id: number) => {
     closeActions();
-    navigate(`/umt/updates/${id}`);
+    navigate(umtPaths.update(id));
   };
 
   // "View"/"Edit"/"Branch" are one detail page with three tabs, not three
@@ -223,7 +224,7 @@ function UmtUpdatesBody() {
   const openUpdateOnTab = (id: number, tab: string) => {
     closeActions();
     writePersistedSelectedTab(String(id), tab);
-    navigate(`/umt/updates/${id}`);
+    navigate(umtPaths.update(id));
   };
 
   const gridColumns = useMemo<DataGrid.GridColDef<UmtUpdateSummary>[]>(
@@ -316,7 +317,7 @@ function UmtUpdatesBody() {
               getRowHeight={() => "auto"}
               hideFooter
               loading={search.isPending}
-              onRowClick={(params) => navigate(`/umt/updates/${params.row.id}`)}
+              onRowClick={(params) => navigate(umtPaths.update(params.row.id))}
               rows={rows}
               slots={{ noRowsOverlay: UpdatesEmptyState }}
               sx={updatesGridSx}

@@ -42,6 +42,7 @@ import { useUmtUpdatesByLifecycleState } from "../api/useUmtUpdates";
 import { useUmtCreateReleaseChunk } from "../api/useUmtReleaseChunkActions";
 import { useUmtGate } from "../api/useUmtGate";
 import { umtReleaseChunkCollisionProducts } from "../lib/umtReleaseChunks";
+import { umtPaths } from "../lib/umtPaths";
 import UmtShell from "../components/UmtShell";
 import type { UmtBackLinkState } from "../lib/umtBackLink";
 import { ChunkCell, ChunkLine } from "../components/release-chunks/umtReleaseChunkGridPrimitives";
@@ -62,8 +63,6 @@ function selectedRowIds(
   return rows.map((row) => row.id).filter((id) => !model.ids.has(id));
 }
 
-const CREATE_RELEASE_CHUNK_PATH = "/umt/release-chunks/new";
-
 function restoredSelectedIds(state: unknown): number[] {
   if (!state || typeof state !== "object" || !("selectedIds" in state)) return [];
   const { selectedIds } = state as { selectedIds: unknown };
@@ -72,7 +71,7 @@ function restoredSelectedIds(state: unknown): number[] {
 
 export default function UmtCreateReleaseChunkPage() {
   return (
-    <UmtShell title="Create Release Chunk" backTo="/umt/release-chunks">
+    <UmtShell title="Create Release Chunk" backTo={umtPaths.releaseChunks}>
       <UmtCreateReleaseChunkBody />
     </UmtShell>
   );
@@ -127,7 +126,7 @@ function UmtCreateReleaseChunkForm() {
     try {
       await createChunk.mutateAsync(updateIds);
       showSuccess("Release chunk created successfully.");
-      navigate("/umt/release-chunks?status=pending");
+      navigate(`${umtPaths.releaseChunks}?status=pending`);
     } catch (error) {
       showError(describeError(error));
     }
@@ -208,8 +207,8 @@ function UmtCreateReleaseChunkForm() {
                 size="small"
                 aria-label={`View update ${params.row.id}`}
                 component={RouterLink}
-                to={`/umt/updates/${params.row.id}`}
-                state={{ backTo: CREATE_RELEASE_CHUNK_PATH, backState: { selectedIds } } satisfies UmtBackLinkState}
+                to={umtPaths.update(params.row.id)}
+                state={{ backTo: umtPaths.newReleaseChunk, backState: { selectedIds } } satisfies UmtBackLinkState}
               >
                 <EyeIcon size={16} />
               </IconButton>

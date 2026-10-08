@@ -15,6 +15,7 @@
 // under the License.
 
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from "@wso2/oxygen-ui";
+import { dialogPaperSx } from "./dialogPaperSx";
 
 export interface ConfirmationContent {
   title: string;
@@ -23,6 +24,8 @@ export interface ConfirmationContent {
   /** Defaults to "Confirm" — override for a caller whose source dialog uses
    * different wording (e.g. "Proceed"). */
   confirmLabel?: string;
+  /** Defaults to "secondary" (every existing caller's current look). */
+  confirmColor?: "primary" | "secondary" | "error";
 }
 
 /**
@@ -40,15 +43,18 @@ export default function ConfirmationDialog({
 }) {
   if (!content) return null;
   return (
-    <Dialog open fullWidth onClose={onClose}>
+    <Dialog open fullWidth onClose={onClose} slotProps={{ paper: { sx: dialogPaperSx } }}>
       <DialogTitle>{content.title}</DialogTitle>
       <DialogContent>
         <DialogContentText>{content.text}</DialogContentText>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+      <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+        <Button size="small" onClick={onClose}>
+          Cancel
+        </Button>
         <Button
-          color="secondary"
+          size="small"
+          color={content.confirmColor ?? "secondary"}
           variant="contained"
           autoFocus
           onClick={() => {

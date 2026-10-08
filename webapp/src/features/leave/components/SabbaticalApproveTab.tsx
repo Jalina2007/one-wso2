@@ -22,10 +22,12 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   Skeleton,
   Stack,
   Table,
@@ -140,6 +142,9 @@ function DecisionDialog({
   const userInfo = useLeaveUserInfo();
   const { showSuccess, showError } = useNotifications();
   const { leave, approving } = target;
+  // Policy V2.6 — the lead confirms the handover plan before approving. The
+  // dialog mounts fresh for each request, so this always starts unticked.
+  const [planConfirmed, setPlanConfirmed] = useState(false);
 
   const subordinateCount = userInfo.data?.subordinateCount ?? 0;
 
@@ -209,6 +214,25 @@ function DecisionDialog({
             ? SABBATICAL.approve.confirmApproveBody(leave.email, dateRange, teamShare)
             : SABBATICAL.approve.confirmRejectBody(leave.email, dateRange)}
         </Typography>
+        {/* Set apart from the message in an outlined box, the way other One WSO2
+            dialogs frame a secondary block, so it reads as its own step. */}
+        {approving && (
+          <Box sx={{ mt: 2, px: 1.5, py: 1, border: 1, borderColor: "divider", borderRadius: 1 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={planConfirmed}
+                  onChange={(e) => setPlanConfirmed(e.target.checked)}
+                />
+              }
+              label={
+                <Typography sx={{ fontSize: 12.5 }}>{SABBATICAL.approve.confirmApproveAck}</Typography>
+              }
+              sx={{ m: 0, alignItems: "flex-start", "& .MuiCheckbox-root": { pt: 0.25 } }}
+            />
+          </Box>
+        )}
       </DialogContent>
       <DialogActions>
         <Button size="small" onClick={onClose} disabled={approve.isPending}>
@@ -219,7 +243,7 @@ function DecisionDialog({
           variant="contained"
           color={approving ? "primary" : "error"}
           onClick={handleConfirm}
-          disabled={approve.isPending || waitingForShare}
+          disabled={approve.isPending || waitingForShare || (approving && !planConfirmed)}
         >
           {approve.isPending
             ? "Working…"

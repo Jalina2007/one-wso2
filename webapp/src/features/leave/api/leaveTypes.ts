@@ -77,6 +77,7 @@ export interface LeaveUserInfo {
   isLead: boolean | null;
   subordinateCount: number;
   location: string | null;
+  jobBand: number | null;
 }
 
 export interface DefaultMail {
@@ -90,6 +91,7 @@ export interface AppConfig {
   sabbaticalLeaveUserGuideUrl: string;
   sabbaticalLeaveEligibilityDuration: number;
   sabbaticalLeaveMaxApplicationDuration: number;
+  sabbaticalLeaveMinJobBand: number;
   cachedEmails: {
     mandatoryMails: DefaultMail[];
     optionalMails: DefaultMail[];

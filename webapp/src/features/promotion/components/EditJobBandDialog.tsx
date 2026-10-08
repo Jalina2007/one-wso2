@@ -102,11 +102,11 @@ function EditJobBandDialogContent({
       <DialogContent dividers>
         <Grid container spacing={2} sx={{ mt: 0.5 }}>
           <Grid size={6}>
-            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>Current Job Band</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Current Job Band</Typography>
             <TextField size="small" disabled fullWidth value={request.currentJobBand} />
           </Grid>
           <Grid size={6}>
-            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>Recommended Job Band *</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Recommended Job Band *</Typography>
             <Autocomplete
               size="small"
               options={JOB_BANDS.filter((band) => band > request.currentJobBand)}
@@ -117,7 +117,11 @@ function EditJobBandDialogContent({
             />
           </Grid>
         </Grid>
-        {warning && <Typography sx={{ fontSize: 12.5, color: "warning.main", mt: 1.5 }}>{warning}</Typography>}
+        {warning && (
+          <Typography variant="caption" sx={{ display: "block", color: "warning.main", mt: 1.5 }}>
+            {warning}
+          </Typography>
+        )}
         {update.isError && (
           <Alert severity="error" sx={{ mt: 1.5 }}>
             {humanizeHttpError(update.error)}
@@ -126,7 +130,7 @@ function EditJobBandDialogContent({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button onClick={handleSave} disabled={update.isPending}>
+        <Button variant="contained" color="primary" onClick={handleSave} disabled={update.isPending}>
           Save
         </Button>
       </DialogActions>

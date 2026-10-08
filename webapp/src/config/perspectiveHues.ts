@@ -27,8 +27,8 @@
  * the launcher is the one surface with nothing else doing that job.
  *
  * SIZING, and the constraint that will eventually break this: the registry holds
- * nine perspective hues. Infra is the ninth, kept as its own teal so the launcher
- * tile stays distinct from UMT. Hue discrimination collapses somewhere past that,
+ * eleven perspective hues, two past the nine perspectiveHues.test.ts allows. Hue
+ * discrimination collapses somewhere past nine,
  * and each new perspective wants one — at which point the answer is a different
  * encoding (hue per domain family, or back to monochrome), not a longer list.
  * perspectiveHues.test.ts caps the palette at nine so that decision is forced
@@ -128,8 +128,8 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
   // and Legal at 225, 18 apart). It reads as audit/caution, which suits the
   // subject, but that is a bonus rather than the reason.
   //
-  // Together with UMT below, this takes the palette to eight hues before Infra.
-  // Infra is the ninth, and the next perspective should force a different encoding.
+  // With Infra after it, the palette reaches eight hues, and the next
+  // perspective should force a different encoding.
   security: {
     hue: "#B8860B",
     light: { bg: "#F9EFD7", fg: "#7E5C07" },
@@ -139,16 +139,6 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
     hue: "#6C89E0",
     light: { bg: "#CFD8F3", fg: "#3854A8" },
     dark: { bg: "#262A34", fg: "#6C89E0" },
-  },
-
-  // Leaf green puts UMT between Security's gold and Finance's teal without
-  // crowding either: its 84-degree hue is 41 degrees from Security and 78 from
-  // Finance. The wash/foreground pairs retain the same contrast headroom
-  // asserted for every launcher tile below.
-  umt: {
-    hue: "#5F8F1F",
-    light: { bg: "#EFF6E6", fg: "#426A16" },
-    dark: { bg: "#20281A", fg: "#8ABF42" },
   },
 
   // Sales. Orchid at 301 degrees, and the ninth hue — see the cap note in
@@ -171,6 +161,31 @@ export const PERSPECTIVE_HUES: Record<string, PerspectiveHue> = {
     hue: "#DD4BDA",
     light: { bg: "#FAE6FA", fg: "#AC3BAA" },
     dark: { bg: "#352135", fg: "#DD4BDA" },
+  },
+
+  // Knowledge Base. This is the TENTH hue (this file's own cap is nine — see
+  // perspectiveHues.test.ts) added under immediate time pressure to fix an
+  // invisible launcher tile (the no-tint fallback renders unreadably dark in
+  // this app's theme); it has NOT had the "different encoding" conversation
+  // this file asks for past the cap. Crimson at 352 degrees, the widest
+  // remaining gap (40.1 degrees, between marketing's pink and Me's orange)
+  // that doesn't crowd the blue/violet cluster (people/legal/csm) or read as
+  // a third green (umt/finance). Measured 6.03:1 light, 4.15:1 dark.
+  "knowledge-base": {
+    hue: "#DD4B5E",
+    light: { bg: "#F7DEE2", fg: "#9B2736" },
+    dark: { bg: "#30171B", fg: "#DD4B5E" },
+  },
+
+  // Engineering. Amber at 27 degrees, 14.5 from Me and 15.7 from Security —
+  // the tightest pair on the wheel, so the terminal mark's silhouette does more
+  // of the telling apart than the colour does. Light wash is the hue at 14%,
+  // dark wash the hue at 12% over the dark tile. Measured 5.34:1 light,
+  // 4.38:1 dark.
+  engineering: {
+    hue: "#D96B12",
+    light: { bg: "#FAEADE", fg: "#984B0D" },
+    dark: { bg: "#2D2420", fg: "#D96B12" },
   },
 };
 

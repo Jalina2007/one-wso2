@@ -15,7 +15,11 @@
 // under the License.
 
 import { describe, expect, it } from "vitest";
-import { latestPromotion, promotionSummary, sortPromotionsByBand } from "./promotionHistory";
+import {
+  latestPromotion,
+  promotionSummary,
+  sortPromotionsByBand,
+} from "./promotionHistory";
 import type { PromotionHistoryEntry } from "../api/types";
 
 // Minimal approved-request fixture; only the fields the ordering and the

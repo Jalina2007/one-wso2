@@ -20,6 +20,7 @@ import {
   eligibilityYears,
   exceedsMaxDuration,
   isEligible,
+  jobBandBlock,
   maxDurationWeeks,
   requestedDurationDays,
 } from "./sabbatical";
@@ -28,8 +29,8 @@ const d = (iso: string) => new Date(`${iso}T00:00:00`);
 
 // The config carries days; every message speaks in years and weeks.
 describe("turning the configured days into the words the user sees", () => {
-  it("reads 1095 days as 3 years", () => {
-    expect(eligibilityYears(1095)).toBe(3);
+  it("reads 2555 days as 7 years", () => {
+    expect(eligibilityYears(2555)).toBe(7);
   });
 
   it("reads 42 days as 6 weeks", () => {
@@ -49,41 +50,57 @@ describe("turning the configured days into the words the user sees", () => {
   });
 });
 
-// The `- 1` is the source's (ApplyTab.tsx:168) and is reproduced deliberately.
-// It makes the check a day stricter than a plain difference. Recorded in the
-// spec's §9 as a question for the live tenant, not corrected here.
+// A plain difference, matching the leave backend's check, so the first day
+// the server accepts is also the first day the form accepts.
 describe("the eligibility gap", () => {
-  it("counts one fewer than the whole days between the dates", () => {
-    expect(eligibilityGapDays(d("2026-01-01"), d("2026-01-11"))).toBe(9);
+  it("counts the whole days between the dates", () => {
+    expect(eligibilityGapDays(d("2026-01-01"), d("2026-01-11"))).toBe(10);
   });
 
   it("is negative when the start is before the anchor", () => {
-    expect(eligibilityGapDays(d("2026-01-11"), d("2026-01-01"))).toBe(-11);
+    expect(eligibilityGapDays(d("2026-01-11"), d("2026-01-01"))).toBe(-10);
   });
 
   it("ignores the time of day on either end", () => {
     const anchor = new Date("2026-01-01T23:59:00");
     const start = new Date("2026-01-11T00:01:00");
-    expect(eligibilityGapDays(anchor, start)).toBe(9);
+    expect(eligibilityGapDays(anchor, start)).toBe(10);
   });
 });
 
 describe("eligibility at the boundary", () => {
-  const anchor = d("2023-01-01");
+  const anchor = d("2019-01-01");
 
-  // The span 2023-01-01 → 2026-01-01 covers a leap year, so it is 1096 whole
-  // days and the -1 brings the gap to exactly 1095. Computed, not guessed: my
-  // first attempt at these dates was a day out.
+  // 7 × 365 = 2555 days. The span covers two leap days (2020, 2024), so the
+  // boundary falls on 2025-12-30, two days before the seventh anniversary.
   it("is not met the day before", () => {
-    expect(isEligible(anchor, d("2025-12-31"), 1095)).toBe(false);
+    expect(isEligible(anchor, d("2025-12-29"), 2555)).toBe(false);
   });
 
   it("is met on the day the gap reaches the limit", () => {
-    expect(isEligible(anchor, d("2026-01-01"), 1095)).toBe(true);
+    expect(isEligible(anchor, d("2025-12-30"), 2555)).toBe(true);
   });
 
   it("stays met after it", () => {
-    expect(isEligible(anchor, d("2026-06-01"), 1095)).toBe(true);
+    expect(isEligible(anchor, d("2026-06-01"), 2555)).toBe(true);
+  });
+});
+
+describe("the job band", () => {
+  it("blocks someone with no band recorded", () => {
+    expect(jobBandBlock(null, 5)).toBe("missing");
+  });
+
+  it("blocks a band below the minimum", () => {
+    expect(jobBandBlock(4, 5)).toBe("below");
+  });
+
+  it("allows the minimum band", () => {
+    expect(jobBandBlock(5, 5)).toBeNull();
+  });
+
+  it("allows a band above the minimum", () => {
+    expect(jobBandBlock(8, 5)).toBeNull();
   });
 });
 

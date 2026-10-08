@@ -14,32 +14,89 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Ports promotion-app's own view/lead/panels/recommendationList.tsx — the
-// Lead Portal's default tab: every REQUESTED recommendation for the open
-// cycle, each row's "Start" swapping the list for RecommendationEditForm
-// (source keeps this in Redux's currentEditObject; here it's just local
-// state, since nothing else on the page needs to reach into it).
+// Every REQUESTED recommendation for the open cycle, as a data grid —
+// matching the convention every other portal in this app (Admin/Functional
+// Lead/Promotion Board) already uses. "Start" opens the edit form in a
+// dialog, the same "dialog on row action" pattern every other grid in this
+// app uses, since MUI X DataGrid Community has no inline row-expansion.
 import { useState } from "react";
-import { Box, IconButton, Skeleton, Tooltip } from "@wso2/oxygen-ui";
-import { CalendarOffIcon, InboxIcon, RefreshCwIcon, TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
+import { Box, Card, Chip, DataGrid, IconButton, Popover, Skeleton, TextField, Tooltip, Typography } from "@wso2/oxygen-ui";
+import { CheckIcon, PlayIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
 import { useUserInfo } from "@api/useUserInfo";
 import { useAsgardeoUser } from "@hooks/useAsgardeoUser";
 import { humanizeHttpError } from "@api/http";
 import { useActivePromotionCycle, isPromotionDeadlinePast } from "../api/usePromotionCycle";
-import { useLeadRecommendations } from "../api/useLeadRecommendations";
+import { useDeclineRecommendation, useLeadRecommendations } from "../api/useLeadRecommendations";
 import { formatDate } from "../util/promotionHistory";
 import PromotionDeadlineBanner from "../components/PromotionDeadlineBanner";
 import PromotionEmptyState from "../components/PromotionEmptyState";
-import PromotionTableHeader from "../components/PromotionTableHeader";
-import RecommendationCard from "../components/RecommendationCard";
-import RecommendationEditForm from "../components/RecommendationEditForm";
+import { PromotionGridToolbar } from "../components/PromotionGridToolbar";
+import RecommendationEditDialog from "../components/RecommendationEditDialog";
+import { GRID_NO_POINTER_FOCUS_SX } from "@utils/dataGridSx";
+import type { PromotionRecommendation } from "../api/types";
 
-const COLUMNS = [
-  { title: "Employee Name", size: 4, align: "left" as const },
-  { title: "Promotion Cycle", size: 2, align: "left" as const },
-  { title: "Employee Email", size: 4, align: "left" as const },
-  { title: "Actions", size: 2, align: "right" as const },
-];
+function DeclineButton({ recommendationID }: { recommendationID: number }) {
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+  const [comment, setComment] = useState("");
+  const decline = useDeclineRecommendation();
+
+  return (
+    <>
+      <Tooltip title="Decline">
+        <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+          <XIcon size={16} />
+        </IconButton>
+      </Tooltip>
+      <Popover
+        open={Boolean(anchorEl)}
+        anchorEl={anchorEl}
+        onClose={() => setAnchorEl(null)}
+        anchorOrigin={{ vertical: "top", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Box sx={{ p: 2.5, width: 320 }}>
+          <TextField
+            fullWidth
+            label="Reason for decline"
+            multiline
+            minRows={3}
+            maxRows={6}
+            slotProps={{ htmlInput: { maxLength: 250 } }}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.5 }}>
+            {comment.length}/250
+          </Typography>
+          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1 }}>
+            <IconButton
+              size="small"
+              onClick={() => {
+                setComment("");
+                setAnchorEl(null);
+              }}
+            >
+              <XIcon size={16} />
+            </IconButton>
+            <IconButton
+              size="small"
+              color="success"
+              disabled={comment === "" || decline.isPending}
+              onClick={() =>
+                decline.mutate(
+                  { id: recommendationID, comment },
+                  { onSuccess: () => setAnchorEl(null) },
+                )
+              }
+            >
+              <CheckIcon size={16} />
+            </IconButton>
+          </Box>
+        </Box>
+      </Popover>
+    </>
+  );
+}
 
 export default function LeadPendingRequestsTab() {
   const userInfo = useUserInfo();
@@ -56,12 +113,52 @@ export default function LeadPendingRequestsTab() {
     !cycle.isPending && Boolean(cycle.cycle) && !deadlinePast,
   );
 
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editing, setEditing] = useState<PromotionRecommendation | null>(null);
   const list = recommendations.data?.recommendations ?? [];
-  const editing = list.find((r) => r.recommendationID === editingId) ?? null;
+
+  const columns: DataGrid.GridColDef<PromotionRecommendation>[] = [
+    {
+      display: "flex",
+      field: "employeeName",
+      headerName: "Employee Name",
+      flex: 1.3,
+      minWidth: 180,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          {params.value}
+          {params.row.promotionType === "TIME_BASED" && (
+            <Chip label="Time Based" size="small" variant="outlined" color="info" />
+          )}
+        </Box>
+      ),
+    },
+    { field: "employeeEmail", headerName: "Employee Email", flex: 1.4, minWidth: 200 },
+    { field: "promotionCycle", headerName: "Promotion Cycle", flex: 1, minWidth: 140 },
+    {
+      display: "flex",
+      field: "action",
+      headerName: "Actions",
+      sortable: false,
+      filterable: false,
+      disableExport: true,
+      width: 110,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex" }}>
+          <Tooltip title="Start">
+            <IconButton size="small" onClick={() => setEditing(params.row)}>
+              <PlayIcon size={16} />
+            </IconButton>
+          </Tooltip>
+          <DeclineButton recommendationID={params.row.recommendationID} />
+        </Box>
+      ),
+    },
+  ];
 
   return (
     <>
+      <RecommendationEditDialog recommendation={editing} leadEmail={leadEmail ?? ""} onClose={() => setEditing(null)} />
+
       {cycle.cycle && !deadlinePast && (
         <PromotionDeadlineBanner>
           Please review (Approve / Reject) eligible employees before the deadline:{" "}
@@ -69,56 +166,37 @@ export default function LeadPendingRequestsTab() {
         </PromotionDeadlineBanner>
       )}
 
-      {!editing && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
-          <Tooltip title="Refresh">
-            <IconButton size="small" onClick={() => void recommendations.refetch()}>
-              <RefreshCwIcon size={16} />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      )}
-
-      {!editing && cycle.cycle && !deadlinePast && list.length > 0 && (
-        <PromotionTableHeader columns={COLUMNS} />
-      )}
-
       {cycle.isPending || (recommendations.isPending && Boolean(cycle.cycle) && !deadlinePast) ? (
-        <Box>
-          <Skeleton variant="rectangular" height={76} sx={{ borderRadius: 1, mb: 1.5 }} />
-          <Skeleton variant="rectangular" height={76} sx={{ borderRadius: 1 }} />
-        </Box>
+        <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 1 }} />
       ) : cycle.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load the promotion cycle. ${humanizeHttpError(cycle.error)}`}
         />
       ) : !cycle.cycle ? (
-        <PromotionEmptyState
-          icon={<CalendarOffIcon size={28} />}
-          message="We are not accepting promotion requests right now"
-        />
+        <PromotionEmptyState message="We are not accepting promotion requests right now" />
       ) : deadlinePast ? (
-        <PromotionEmptyState icon={<CalendarOffIcon size={28} />} message="The Lead deadline has passed." />
+        <PromotionEmptyState message="The Lead deadline has passed." />
       ) : recommendations.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load recommendation requests. ${humanizeHttpError(recommendations.error)}`}
         />
-      ) : editing ? (
-        <RecommendationEditForm
-          recommendation={editing}
-          leadEmail={leadEmail ?? ""}
-          onBack={() => setEditingId(null)}
-        />
       ) : list.length === 0 ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no pending promotion requests." />
+        <PromotionEmptyState message="There are no pending promotion requests." />
       ) : (
-        list.map((r) => (
-          <RecommendationCard key={r.recommendationID} recommendation={r} onStart={() => setEditingId(r.recommendationID)} />
-        ))
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <DataGrid.DataGrid
+            rows={list}
+            getRowId={(row) => row.recommendationID}
+            columns={columns}
+            showToolbar
+            slots={{ toolbar: PromotionGridToolbar }}
+            sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            pageSizeOptions={[10, 25, 50]}
+          />
+        </Card>
       )}
     </>
   );

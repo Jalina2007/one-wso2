@@ -175,16 +175,22 @@ export function useParHasActiveCycle(
  * Comparing case-insensitively means the exact casing doesn't matter either
  * way.
  *
- * Fails OPEN (visible) while `employmentType` hasn't loaded yet, same
- * reasoning as useParHasLead: a UX-only visibility decision must never hide
- * the item from someone just because a fetch hasn't landed yet.
+ * Fails OPEN (visible) once `isPending` clears, same reasoning as
+ * useParHasLead: never hide the item just because a fetch hasn't landed —
+ * including on a profile fetch error, which each screen enforces access
+ * against regardless of what this menu happened to show.
+ *
+ * Pass a caller's own `isPending`, not `isLoading`: `isLoading` is
+ * `isPending && isFetching`, which reads `false` while the profile query is
+ * still `enabled: false` awaiting identity resolution — a window where
+ * `employmentType` is genuinely unknown but `isLoading` already says "done".
  */
 export function useParEmployeeItemVisible(
   employmentType: string | undefined,
-  isLoading: boolean,
+  isPending: boolean,
 ): { canSee: boolean; isLoading: boolean } {
   const isIntern = employmentType?.toLowerCase() === "internship";
-  return { canSee: !isIntern, isLoading };
+  return { canSee: !isIntern, isLoading: isPending };
 }
 
 // Returns the caller's currently-OPEN par cycle (if any). Non-lead/non-admin

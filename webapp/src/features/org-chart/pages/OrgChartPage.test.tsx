@@ -17,9 +17,11 @@
 // Exercises the Company filter dropdown end to end: it renders, isolates the
 // tree to the selected company plus the ancestor path to the Chairman,
 // combines with the Teams legend filter by AND rather than replacing it, and
-// gets cleared by Reset view. Everything else on the page (search, hide
-// interns, expand all) already has its own coverage via manual/live testing
-// during the port — this file is specifically for the new filter.
+// gets cleared by Reset view. "Expand all" already has its own coverage via
+// manual/live testing during the port. Also covers the filtered "N reports"
+// pill and department stats (both scoped by company/hideInterns rather than
+// the raw directory), and the search dropdown's focus/blur/click-away state
+// machine.
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
@@ -121,6 +123,44 @@ const EMPLOYEES: EmployeeDirectoryRecord[] = [
     workLocation: "Colombo",
     employeeStatus: "Active",
   },
+  {
+    employeeId: "6",
+    firstName: "Kavi",
+    lastName: "IndiaIntern",
+    workEmail: "intern-india@wso2.com",
+    employeeThumbnail: null,
+    designation: "Intern",
+    jobBand: null,
+    startDate: "2026-01-01",
+    managerEmail: "vp-india@wso2.com",
+    businessUnit: "Engineering",
+    team: "Engineering",
+    subTeam: null,
+    unit: null,
+    employmentType: "Intern",
+    company: "WSO2- INDIA",
+    workLocation: "Bengaluru",
+    employeeStatus: "Active",
+  },
+  {
+    employeeId: "7",
+    firstName: "Deepa",
+    lastName: "PeopleOpsIntern",
+    workEmail: "peopleops-intern-india@wso2.com",
+    employeeThumbnail: null,
+    designation: "Intern",
+    jobBand: null,
+    startDate: "2026-01-01",
+    managerEmail: "hr-india@wso2.com",
+    businessUnit: "People Operations",
+    team: "People Operations",
+    subTeam: null,
+    unit: null,
+    employmentType: "Intern",
+    company: "WSO2- INDIA",
+    workLocation: "Bengaluru",
+    employeeStatus: "Active",
+  },
 ];
 
 vi.mock("../api/useOrgChart", () => ({
@@ -199,5 +239,147 @@ describe("OrgChartPage company filter", () => {
 
     expect(screen.getByRole("combobox")).toHaveTextContent("Global");
     expect(screen.getByText(/Priya/)).toBeInTheDocument();
+  });
+});
+
+// Scopes a query to one row by its data-work-email, rather than matching
+// Chip/Typography text globally — several rows can legitimately show the
+// same "N reports" text (e.g. two different managers both with 1 report),
+// so an unscoped getByText would be ambiguous.
+function rowFor(workEmail: string): HTMLElement {
+  const row = document.querySelector(`[data-work-email="${workEmail}"]`);
+  if (!row) throw new Error(`No row rendered for ${workEmail}`);
+  return row as HTMLElement;
+}
+
+function reportsPillText(workEmail: string): string {
+  return within(rowFor(workEmail)).getByText(/reports?$/).textContent ?? "";
+}
+
+// Same idea for the top stat tiles and the Teams legend — scopes to the
+// tile/row identified by its own caption rather than matching a bare number
+// that could coincidentally match something else on the page.
+function statTileValue(caption: string): string {
+  const tile = screen.getByText(caption).closest("div") as HTMLElement;
+  return within(tile).getByText(/^\d+$/).textContent ?? "";
+}
+
+function departmentLegendCount(departmentName: string): string {
+  const row = screen.getByText(departmentName).closest("div") as HTMLElement;
+  return within(row).getByText(/^\d+$/).textContent ?? "";
+}
+
+describe("OrgChartPage filtered report counts and stats", () => {
+  it("the \"N reports\" pill reflects the company filter, not the manager's raw total", () => {
+    render(<OrgChartPage />);
+    // Unfiltered: the Chairman has 2 direct reports, Vasu (India) and Priya
+    // (WSO2 (Pvt) Ltd).
+    expect(reportsPillText("chairman@wso2.com")).toBe("2 reports");
+
+    pickCompany("WSO2- INDIA");
+
+    // Priya drops out (wrong company, and no one under her matches either),
+    // so the pill shrinks to match the row actually rendered underneath.
+    expect(reportsPillText("chairman@wso2.com")).toBe("1 report");
+    expect(screen.queryByText(/Priya/)).not.toBeInTheDocument();
+  });
+
+  it("the \"N reports\" pill reflects \"Hide interns\", excluding the intern from the count", () => {
+    render(<OrgChartPage />);
+    // Unfiltered: Vasu has 3 direct reports (Esha, Hari, and Kavi the intern).
+    expect(reportsPillText("vp-india@wso2.com")).toBe("3 reports");
+
+    fireEvent.click(screen.getByRole("switch"));
+
+    expect(reportsPillText("vp-india@wso2.com")).toBe("2 reports");
+  });
+
+  it("a manager whose entire visible team is filtered out still shows an expandable 0-report row", () => {
+    render(<OrgChartPage />);
+    // Hari's only direct report, Deepa, is an intern — expand down to Hari
+    // first so the row's chip is actually mounted to assert against.
+    fireEvent.click(screen.getByText(/Vasu/));
+    expect(reportsPillText("hr-india@wso2.com")).toBe("1 report");
+    fireEvent.click(screen.getByText(/Hari/));
+    expect(screen.getByText(/Deepa/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("switch"));
+
+    // hasReports still keys off the raw (unfiltered) children, so Hari stays
+    // expandable with "0 reports" instead of losing the chevron/chip entirely.
+    expect(reportsPillText("hr-india@wso2.com")).toBe("0 reports");
+    expect(screen.getByText("All direct reports are hidden by filters.")).toBeInTheDocument();
+  });
+
+  it("department stats (teams count and per-team headcount) are scoped by the company filter", () => {
+    render(<OrgChartPage />);
+    // Unfiltered: Executive, Engineering, Sales, People Operations.
+    expect(statTileValue("teams")).toBe("4");
+
+    pickCompany("WSO2- INDIA");
+
+    // Only Engineering and People Operations exist within this company.
+    expect(statTileValue("teams")).toBe("2");
+  });
+
+  it("department stats are scoped by \"Hide interns\" but total headcount is not", () => {
+    render(<OrgChartPage />);
+    expect(statTileValue("in directory")).toBe("7"); // always the full roster
+    expect(departmentLegendCount("Engineering")).toBe("3"); // Vasu + Esha + Kavi
+
+    fireEvent.click(screen.getByRole("switch"));
+
+    // Total headcount is unaffected by "Hide interns" — only the legend is.
+    expect(statTileValue("in directory")).toBe("7");
+    expect(departmentLegendCount("Engineering")).toBe("2");
+  });
+});
+
+describe("OrgChartPage search dropdown", () => {
+  function search(text: string) {
+    const input = screen.getByPlaceholderText(/Find a person by name or email/i);
+    fireEvent.change(input, { target: { value: text } });
+    fireEvent.focus(input);
+    return input;
+  }
+
+  it("shows matches while the input is focused and closes when focus leaves the widget entirely", () => {
+    render(<OrgChartPage />);
+    const input = search("Esha");
+
+    expect(screen.getByText(/IndiaEngineer/)).toBeInTheDocument();
+
+    fireEvent.blur(input, { relatedTarget: document.body });
+
+    expect(screen.queryByText(/IndiaEngineer/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the dropdown open when focus moves to a result inside the widget (e.g. via Tab)", () => {
+    render(<OrgChartPage />);
+    const input = search("Esha");
+    const result = screen.getByText(/IndiaEngineer/);
+
+    fireEvent.blur(input, { relatedTarget: result });
+
+    expect(screen.getByText(/IndiaEngineer/)).toBeInTheDocument();
+  });
+
+  it("picking a result expands the tree to reveal them and clears the search box", () => {
+    render(<OrgChartPage />);
+    const input = search("Esha");
+
+    fireEvent.click(screen.getByText(/IndiaEngineer/));
+
+    expect((input as HTMLInputElement).value).toBe("");
+    // The dropdown is gone (query cleared) and Esha is now visible in the
+    // tree itself instead, with her ancestor (Vasu) auto-expanded to reveal her.
+    expect(screen.getByText(/IndiaEngineer/)).toBeInTheDocument();
+  });
+
+  it("shows a no-match message instead of a dropdown of results", () => {
+    render(<OrgChartPage />);
+    search("nobody-matches-this-query");
+
+    expect(screen.getByText(/No one matches/)).toBeInTheDocument();
   });
 });

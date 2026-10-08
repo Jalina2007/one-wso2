@@ -17,10 +17,10 @@
 // The sabbatical rules, as pure functions of their inputs.
 //
 // Transcribed from ApplyTab.tsx rather than reasoned about: the two config
-// values are DAYS (1095 and 42 by default) but every message speaks in years and
-// weeks, and the eligibility gap is computed with a `- 1` that is easy to lose.
+// values are DAYS (2555 and 42 by default) but every message speaks in years
+// and weeks.
 
-/** ApplyTab.tsx:103 — `parseFloat((days / 365).toFixed(1))`, so 1095 → 3. */
+/** Days shown as years to one decimal place, so 2555 → 7. */
 export function eligibilityYears(eligibilityDurationDays: number): number {
   return parseFloat((eligibilityDurationDays / 365).toFixed(1));
 }
@@ -31,11 +31,9 @@ export function maxDurationWeeks(maxApplicationDurationDays: number): number {
 }
 
 /**
- * Whole days from `anchor` to `start`, minus one — ApplyTab.tsx:168.
- *
- * The `- 1` is the source's and is reproduced deliberately. It makes the check a
- * day stricter than a plain difference would be; §9 of the spec records that as
- * a question against the live tenant rather than something to correct here.
+ * Whole days from `anchor` to `start` — the same count the leave backend
+ * checks on submit, so the form never refuses a start date the server would
+ * accept.
  *
  * Both ends are normalised to midnight first, so a time-of-day difference cannot
  * shift the result by a day.
@@ -45,7 +43,7 @@ export function eligibilityGapDays(anchor: Date, start: Date): number {
   const s = new Date(start);
   a.setHours(0, 0, 0, 0);
   s.setHours(0, 0, 0, 0);
-  return Math.round((s.getTime() - a.getTime()) / 86_400_000) - 1;
+  return Math.round((s.getTime() - a.getTime()) / 86_400_000);
 }
 
 /** ApplyTab.tsx:168-169 — eligible once the gap reaches the configured days. */
@@ -55,6 +53,16 @@ export function isEligible(
   eligibilityDurationDays: number,
 ): boolean {
   return eligibilityGapDays(anchor, start) >= eligibilityDurationDays;
+}
+
+/**
+ * Why the job band keeps someone from applying, or null when it does not —
+ * mirrors the backend's check on POST /leaves. No band recorded is its own
+ * case: the fix is a profile update by People Operations, not a promotion.
+ */
+export function jobBandBlock(jobBand: number | null, minJobBand: number): "missing" | "below" | null {
+  if (jobBand === null) return "missing";
+  return jobBand < minJobBand ? "below" : null;
 }
 
 /** ApplyTab.tsx:194 — inclusive of both ends, so a single day is 1. */

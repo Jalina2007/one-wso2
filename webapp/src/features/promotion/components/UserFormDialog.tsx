@@ -32,7 +32,7 @@ import {
 } from "@wso2/oxygen-ui";
 import { useAdminEmployeeDirectory, useInsertUser, useUpdateUser } from "../api/useAdminUsers";
 import FunctionalLeadAclSelector from "./FunctionalLeadAclSelector";
-import { ASSIGNABLE_PROMOTION_ROLES, promotionRoleColor } from "../util/promotionRoleColors";
+import { ASSIGNABLE_PROMOTION_ROLES, promotionRoleChipColor } from "../util/promotionRoleColors";
 import { buildAclPayload, selectionFromAcl, type PromotionAclSelection } from "../util/promotionAcl";
 import type { PromotionBusinessUnitAccess, PromotionRole, PromotionUser } from "../api/types";
 
@@ -90,7 +90,7 @@ function UserFormDialogContent({
   );
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const directory = useAdminEmployeeDirectory(false, pickerOpen && !isEdit);
+  const directory = useAdminEmployeeDirectory(true, pickerOpen && !isEdit);
   const insertUser = useInsertUser();
   const updateUser = useUpdateUser();
   const saving = insertUser.isPending || updateUser.isPending;
@@ -121,7 +121,7 @@ function UserFormDialogContent({
       <DialogContent dividers>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 0.5 }}>
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>Employee *</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Employee *</Typography>
             {isEdit ? (
               <TextField fullWidth size="small" disabled value={email} />
             ) : (
@@ -137,7 +137,7 @@ function UserFormDialogContent({
             )}
           </Box>
           <Box>
-            <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>Roles *</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Roles *</Typography>
             <Select
               fullWidth
               size="small"
@@ -147,7 +147,7 @@ function UserFormDialogContent({
               renderValue={(selected) => (
                 <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}>
                   {(selected as PromotionRole[]).map((r) => (
-                    <Chip key={r} label={r} size="small" sx={{ bgcolor: promotionRoleColor(r), color: "white" }} />
+                    <Chip key={r} label={r} size="small" variant="outlined" color={promotionRoleChipColor(r)} />
                   ))}
                 </Box>
               )}
@@ -161,14 +161,14 @@ function UserFormDialogContent({
           </Box>
           <Collapse in={needsAcl}>
             <Box>
-              <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>Functional Lead Access Levels *</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Functional Lead Access Levels *</Typography>
               <FunctionalLeadAclSelector
                 businessUnits={businessUnits}
                 selection={aclSelection}
                 onChange={setAclSelection}
               />
               {aclSelection.size === 0 && (
-                <Typography sx={{ fontSize: 12, color: "warning.main", mt: 0.5 }}>
+                <Typography variant="caption" sx={{ display: "block", color: "warning.main", mt: 0.5 }}>
                   Please configure functional lead access levels
                 </Typography>
               )}
@@ -178,7 +178,7 @@ function UserFormDialogContent({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button disabled={!canSave} onClick={handleSave}>
+        <Button variant="contained" color="primary" disabled={!canSave} onClick={handleSave}>
           Save
         </Button>
       </DialogActions>

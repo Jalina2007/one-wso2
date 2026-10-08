@@ -34,8 +34,7 @@ import type { PromotionBusinessUnitAccess, PromotionDepartmentAccess } from "../
 // tri-state selection semantics (checking a parent selects every
 // descendant, a partially-selected parent shows indeterminate) as a single
 // expandable tree instead — simpler to get right for a picker this deep,
-// and no less capable. See docs/ported-apps/promotion-app.md's own
-// deviation entry.
+// and no less capable.
 export default function FunctionalLeadAclSelector({
   businessUnits,
   selection,
@@ -48,7 +47,7 @@ export default function FunctionalLeadAclSelector({
   return (
     <Box sx={{ maxHeight: 320, overflow: "auto", border: 1, borderColor: "divider", borderRadius: 1, p: 1 }}>
       {businessUnits.length === 0 ? (
-        <Typography sx={{ fontSize: 13, color: "text.secondary", p: 1 }}>No business units found.</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>No business units found.</Typography>
       ) : (
         businessUnits.map((bu) => <BuNode key={bu.id} bu={bu} selection={selection} onChange={onChange} />)
       )}
@@ -85,7 +84,7 @@ function BuNode({
           indeterminate={state === "indeterminate"}
           onChange={(_e, checked) => onChange(toggleBu(selection, bu, checked))}
         />
-        <Typography sx={{ fontSize: 13.5, fontWeight: 600 }}>{bu.name}</Typography>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{bu.name}</Typography>
       </Box>
       {depts.length > 0 && (
         <Collapse in={open}>
@@ -129,7 +128,7 @@ function DeptNode({
           indeterminate={state === "indeterminate"}
           onChange={(_e, checked) => onChange(toggleDept(selection, dept, checked))}
         />
-        <Typography sx={{ fontSize: 13 }}>{dept.name}</Typography>
+        <Typography variant="body2">{dept.name}</Typography>
       </Box>
       {teams.length > 0 && (
         <Collapse in={open}>
@@ -142,7 +141,7 @@ function DeptNode({
                   checked={selection.has(`team:${team.id}`)}
                   onChange={(_e, checked) => onChange(toggleTeam(selection, team.id, checked))}
                 />
-                <Typography sx={{ fontSize: 12.5 }}>{team.name}</Typography>
+                <Typography variant="caption">{team.name}</Typography>
               </Box>
             ))}
           </Box>

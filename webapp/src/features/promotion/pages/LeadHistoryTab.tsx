@@ -14,33 +14,29 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Ports promotion-app's own view/lead/panels/recommendationHistory.tsx —
-// every SUBMITTED/DECLINED/EXPIRED recommendation this lead has ever made,
-// across every cycle (not scoped to the open one — source's own
-// getRecommendationsHistory never passes a promotionCycleId either),
-// narrowed to TIME_BASED (source's own RecommendationHistorySlice filters
-// the same way: this page is specifically Time Based Promotions, and the
-// shared /promotion/recommendations resource can carry other promotion
-// types too).
-import { Box, IconButton, Skeleton, Tooltip } from "@wso2/oxygen-ui";
-import { InboxIcon, RefreshCwIcon, TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
+// Every SUBMITTED/DECLINED/EXPIRED recommendation this lead has ever made,
+// across every cycle (not scoped to the open one), narrowed to TIME_BASED.
+// A data grid, matching the convention every other portal in this app
+// already uses.
+import { useState } from "react";
+import { Card, Chip, DataGrid, IconButton, Skeleton, Tooltip } from "@wso2/oxygen-ui";
+import { ChevronDownIcon } from "@wso2/oxygen-ui-icons-react";
 import { useUserInfo } from "@api/useUserInfo";
 import { useAsgardeoUser } from "@hooks/useAsgardeoUser";
 import { humanizeHttpError } from "@api/http";
 import { useActivePromotionCycle } from "../api/usePromotionCycle";
 import { useLeadRecommendations } from "../api/useLeadRecommendations";
 import PromotionEmptyState from "../components/PromotionEmptyState";
-import PromotionTableHeader from "../components/PromotionTableHeader";
-import RecommendationHistoryCard from "../components/RecommendationHistoryCard";
-
-const COLUMNS = [
-  { title: "Employee Name", size: 2, align: "left" as const },
-  { title: "Employee Email", size: 2, align: "center" as const },
-  { title: "Promotion Cycle", size: 2, align: "center" as const },
-  { title: "Lead Status", size: 2, align: "center" as const },
-  { title: "Promotion Status", size: 2, align: "center" as const },
-  { title: "Actions", size: 2, align: "right" as const },
-];
+import RecommendationHistoryDetailDialog from "../components/RecommendationHistoryDetailDialog";
+import { PromotionGridToolbar } from "../components/PromotionGridToolbar";
+import {
+  promotionRequestChipColor,
+  promotionRequestStatusLabel,
+  recommendationChipColor,
+  recommendationStatusLabel,
+} from "../util/promotionStatus";
+import { GRID_NO_POINTER_FOCUS_SX } from "@utils/dataGridSx";
+import type { PromotionRecommendation } from "../api/types";
 
 export default function LeadHistoryTab() {
   const userInfo = useUserInfo();
@@ -48,48 +44,96 @@ export default function LeadHistoryTab() {
   const leadEmail = userInfo.data?.workEmail ?? asgardeoUser.email;
 
   // Only for the "is this row's cycle still the open one" comparison each
-  // card needs — a failed/loading fetch here just means every row reads as
+  // row needs — a failed/loading fetch here just means every row reads as
   // not-active-cycle, which is never wrong for a row whose cycle really
-  // has closed, and no worse than source's own handling (activeCycleId
-  // stays null until its own fetch resolves there too).
+  // has closed.
   const cycle = useActivePromotionCycle();
 
   const history = useLeadRecommendations(leadEmail, ["SUBMITTED", "DECLINED", "EXPIRED"]);
   const list = (history.data?.recommendations ?? []).filter((r) => r.promotionType === "TIME_BASED");
 
+  const [viewing, setViewing] = useState<PromotionRecommendation | null>(null);
+
+  const columns: DataGrid.GridColDef<PromotionRecommendation>[] = [
+    { field: "employeeName", headerName: "Employee Name", flex: 1.2, minWidth: 160 },
+    { field: "employeeEmail", headerName: "Employee Email", flex: 1.3, minWidth: 190 },
+    { field: "promotionCycle", headerName: "Promotion Cycle", flex: 0.9, minWidth: 130 },
+    {
+      display: "flex",
+      field: "recommendationStatus",
+      headerName: "Lead Status",
+      flex: 0.9,
+      minWidth: 130,
+      // The label, not the raw status, so filtering/sorting/export (which
+      // all read `valueGetter`'s output, not `renderCell`'s) match what the
+      // grid actually displays — a filter for "APPROVED" would otherwise
+      // match nothing, since no row's raw status is ever literally APPROVED.
+      valueGetter: (value) => recommendationStatusLabel(value),
+      renderCell: (params) => (
+        <Chip label={params.value} size="small" variant="outlined" color={recommendationChipColor(params.row.recommendationStatus)} />
+      ),
+    },
+    {
+      display: "flex",
+      field: "promotionRequestStatus",
+      headerName: "Promotion Status",
+      flex: 0.9,
+      minWidth: 150,
+      valueGetter: (value, row) => promotionRequestStatusLabel(value, cycle.cycle?.id === row.promotionCycleId),
+      renderCell: (params) => (
+        <Chip label={params.value} size="small" variant="outlined" color={promotionRequestChipColor(params.value)} />
+      ),
+    },
+    {
+      display: "flex",
+      field: "action",
+      headerName: "",
+      sortable: false,
+      filterable: false,
+      disableExport: true,
+      width: 60,
+      renderCell: (params) => {
+        const canExpand =
+          params.row.recommendationStatus === "SUBMITTED" || params.row.recommendationStatus === "DECLINED";
+        return (
+          canExpand && (
+            <Tooltip title="View details">
+              <IconButton size="small" onClick={() => setViewing(params.row)}>
+                <ChevronDownIcon size={16} />
+              </IconButton>
+            </Tooltip>
+          )
+        );
+      },
+    },
+  ];
+
   return (
     <>
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void history.refetch()}>
-            <RefreshCwIcon size={16} />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
-      {list.length > 0 && <PromotionTableHeader columns={COLUMNS} />}
+      <RecommendationHistoryDetailDialog recommendation={viewing} onClose={() => setViewing(null)} />
 
       {history.isPending ? (
-        <Box>
-          <Skeleton variant="rectangular" height={64} sx={{ borderRadius: 1, mb: 1.5 }} />
-          <Skeleton variant="rectangular" height={64} sx={{ borderRadius: 1 }} />
-        </Box>
+        <Skeleton variant="rectangular" height={360} sx={{ borderRadius: 1 }} />
       ) : history.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load recommendations history. ${humanizeHttpError(history.error)}`}
         />
       ) : list.length === 0 ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no submitted requests!" />
+        <PromotionEmptyState message="There are no submitted requests!" />
       ) : (
-        list.map((r) => (
-          <RecommendationHistoryCard
-            key={r.recommendationID}
-            recommendation={r}
-            isActiveCycle={cycle.cycle?.id === r.promotionCycleId}
+        <Card variant="outlined" sx={{ p: 2 }}>
+          <DataGrid.DataGrid
+            rows={list}
+            getRowId={(row) => row.recommendationID}
+            columns={columns}
+            showToolbar
+            slots={{ toolbar: PromotionGridToolbar }}
+            sx={{ border: "none", ...GRID_NO_POINTER_FOCUS_SX }}
+            initialState={{ pagination: { paginationModel: { pageSize: 10 } } }}
+            pageSizeOptions={[10, 25, 50]}
           />
-        ))
+        </Card>
       )}
     </>
   );

@@ -23,6 +23,7 @@
 // non-2xx to get the right retry behavior.
 
 import { refreshAccessToken } from "@api/authBridge";
+import { classifyToken, noteUnauthorized, resetUnauthorizedOrigins } from "@api/tokenExpiry";
 
 // Thrown on non-2xx responses (and on unexpectedly-empty 2xx GETs). Carries
 // the HTTP status so retry logic (both per-query in features and global in
@@ -86,23 +87,29 @@ function buildHeaders(extraHeaders?: Record<string, string>, withJsonBody?: bool
   };
 }
 
-// The access_token eventually expires and getAccessToken() never checks
-// that itself (it's a plain storage read), so any long-lived tab
-// eventually attaches a dead token and every backend starts 401ing at
-// once. On a 401 specifically — never other statuses — try one silent
-// re-auth (dedup'd across concurrent callers in @api/authBridge).
+// getAccessToken() renews an access_token the SDK sees as expired before
+// handing it over, but a request can still carry a dead one: a token read
+// moments before it lapsed, or one the IdP revoked early. On a 401
+// specifically — never other statuses — try one renewal (dedup'd across
+// concurrent callers in @api/authBridge).
 //
-// Only GET is safe to replay ourselves. A 401 doesn't prove a POST/PATCH/
-// DELETE never reached business logic — each backend has its own
-// JwtInterceptor in addition to the gateway's, and none of the ~15
-// backends this app talks to support a client-supplied idempotency key —
-// so resubmitting a mutation risks a duplicate submit/approve/claim if
-// that assumption is ever wrong for one of them. For those, still refresh
-// (heals the session for the user's *next* attempt) but surface the
-// original 401 rather than replaying it.
+// A GET is always safe to replay ourselves. Anything else is replayed only
+// when the token had already expired when the request was SENT: the gateway
+// refuses an expired token before forwarding, so no backend ran the request
+// and there is nothing to duplicate. Judged at send time, not at the 401 — a
+// token that lapsed while the backend was working may have let the work
+// happen first.
+//
+// Otherwise a 401 doesn't prove a POST/PATCH/DELETE never reached business
+// logic — each backend has its own JwtInterceptor in addition to the
+// gateway's, and none of the ~15 backends this app talks to support a
+// client-supplied idempotency key — so resubmitting a mutation risks a
+// duplicate submit/approve/claim if that assumption is ever wrong for one of
+// them. For those, still refresh (heals the session for the user's *next*
+// attempt) but surface the original 401 rather than replaying it.
 //
 // If there's no way to refresh (accessors not registered yet, or the
-// silent re-auth itself fails — e.g. no live Asgardeo session at all),
+// renewal itself fails — e.g. no live Asgardeo session at all),
 // fall back to the original 401 response so the caller's normal
 // HttpError/error-banner path handles it, rather than surfacing a
 // different failure mode for this one case.
@@ -116,24 +123,69 @@ export async function fetchWithReauth(url: string, init: RequestInit, accessToke
     ...init,
     headers: { ...(init.headers as Record<string, string>), Authorization: `Bearer ${token}` },
   });
+  const sentAt = Date.now();
   const first = await fetch(url, withAuth(accessToken));
   if (first.status !== 401) return first;
 
-  const isReplaySafe = (init.method ?? "GET").toUpperCase() === "GET";
+  // Whose fault is this 401?
+  //
+  // Reaching for a silent re-auth on every 401 is what let ONE backend break
+  // the whole app: the re-auth attempt failing is what raises the app-wide
+  // session-expired dialog, and that dialog is not dismissable. A backend
+  // answering 401 for its own reasons — a bad audience, a misconfigured
+  // gateway, a bug — could therefore lock every screen, including the ones it
+  // has nothing to do with.
+  //
+  // The token answers it. If it has not expired, our credentials are fine and
+  // this 401 belongs to the backend that sent it, so the caller's own error
+  // handling should take over untouched.
+  //
+  // The exception is a token revoked BEFORE it expires (disabled at the IdP, or
+  // the session ended there): still live by `exp`, refused by everything. That
+  // is what noteUnauthorized corroborates — our credentials being dead is not
+  // something one backend knows privately, so two distinct origins refusing
+  // within the window re-opens the doubt.
+  //
+  // "unknown" (an opaque or unreadable token) falls through to the old
+  // behaviour deliberately: this check can narrow when re-auth is attempted,
+  // never widen it.
+  const status = classifyToken(accessToken);
+  const corroborated = noteUnauthorized(url);
+  if (status.kind === "live" && !corroborated) {
+    console.warn(
+      `[auth] 401 on ${url} while our access token is still valid ` +
+        `(expires ${new Date(status.expiresAt).toISOString()}). Treating this as that ` +
+        `backend's rejection, not an expired session — no re-auth attempted.`,
+    );
+    return first;
+  }
+
+  const isReplaySafe =
+    (init.method ?? "GET").toUpperCase() === "GET" ||
+    classifyToken(accessToken, sentAt).kind === "expired";
   let freshToken: string;
   try {
-    freshToken = await refreshAccessToken();
+    // The rejected token goes along so the bridge cannot count it as renewed:
+    // a token revoked before its `exp` still reads as live.
+    freshToken = await refreshAccessToken(accessToken);
   } catch (error: unknown) {
     // Returning the original 401 is right — the caller's normal error handling
     // takes over. But silently is not: from outside, a request that 401s
     // because the session died looks exactly like one that 401s because the
     // caller lacks the privilege, and only this line tells them apart.
     console.warn(
-      `[auth] 401 on ${url} and silent re-auth failed, so the 401 stands.`,
+      `[auth] 401 on ${url} and re-auth failed, so the 401 stands.`,
       error instanceof Error ? error.message : "unknown error",
     );
     return first;
   }
+  // The refresh succeeded, so every 401 recorded above belongs to a token that
+  // no longer exists. Leaving them in place lets a single 401 under the NEW
+  // token reach ORIGINS_BEFORE_DOUBT on the strength of a dead one's evidence,
+  // and corroboration is supposed to mean "several backends are refusing the
+  // credentials we hold now".
+  resetUnauthorizedOrigins();
+
   if (!isReplaySafe) return first;
   return fetch(url, withAuth(freshToken));
 }

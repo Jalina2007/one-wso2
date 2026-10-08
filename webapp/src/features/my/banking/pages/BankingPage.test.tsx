@@ -119,6 +119,11 @@ vi.mock("@tanstack/react-query", () => ({
   useIsMutating: () => isMutatingCount.value,
 }));
 
+const showSuccessMock = vi.fn();
+vi.mock("@context/notifications/NotificationsContext", () => ({
+  useNotifications: () => ({ showSuccess: showSuccessMock, showError: vi.fn(), showWarning: vi.fn() }),
+}));
+
 function signedInUser(email: string | null = "person@wso2.com", ready = true) {
   return { ready, email: email ?? undefined, initials: "PP" };
 }
@@ -152,6 +157,9 @@ function account(overrides: Partial<BankAccount>): BankAccount {
     paymentMethod: null,
     effectiveFrom: "2026-01-01",
     createdOn: "2026-01-01",
+    netSuiteInternalId: null,
+    netSuiteVendorId: null,
+    netSuitePaymentFileFormat: null,
     ...overrides,
   };
 }
@@ -227,6 +235,7 @@ beforeEach(() => {
   mutateAsyncMock.mockReset();
   mutateAsyncMock.mockResolvedValue({ applicationID: 42 });
   isMutatingCount.value = 0;
+  showSuccessMock.mockClear();
 });
 
 describe("tab frame", () => {
@@ -740,10 +749,12 @@ describe("Edit/Add popup", () => {
     expect(mutateAsyncMock).toHaveBeenCalledWith(
       expect.objectContaining({ accountHoldersCountry: "Sri Lanka" }),
     );
-    // The source's own success text, naming the account type in lower case.
-    expect(
-      await screen.findByText("Successfully requested the salary bank account change!"),
-    ).toBeInTheDocument();
+    // The success message names the account type in lower case, routed
+    // through the app-wide notification banner rather than a local
+    // Snackbar, so it's asserted via the mocked showSuccess call.
+    await waitFor(() =>
+      expect(showSuccessMock).toHaveBeenCalledWith("Successfully requested the salary bank account change!"),
+    );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -755,9 +766,9 @@ describe("Edit/Add popup", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     await user.click(await screen.findByRole("button", { name: "Yes" }));
 
-    expect(
-      await screen.findByText("Successfully requested the consultancy bank account change!"),
-    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(showSuccessMock).toHaveBeenCalledWith("Successfully requested the consultancy bank account change!"),
+    );
   });
 
   it("sends the request only once when Yes is pressed twice in quick succession", async () => {

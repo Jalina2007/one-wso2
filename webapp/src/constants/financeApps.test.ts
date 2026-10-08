@@ -56,9 +56,20 @@ describe("where each finance app lives", () => {
   // and expense/approvals. Retired item by item as each moved elsewhere, until
   // nothing was left of the group itself.
   it("keeps claims with the person, and the card with finance", async () => {
-    const { ME_FINANCE_APPS, FINANCE_OVERVIEW_APPS, FINANCE_PERSPECTIVE_APPS } = await load();
+    const {
+      ME_FINANCE_APPS,
+      FINANCE_OVERVIEW_APPS,
+      FINANCE_PERSPECTIVE_APPS,
+      FINANCE_MASTER_DATA_APPS,
+    } = await load();
     expect(keys(ME_FINANCE_APPS)).toEqual(["claims"]);
     expect(keys(FINANCE_PERSPECTIVE_APPS)).toEqual(["cc"]);
+    // Master data is on the finance side too — reference data the finance
+    // team maintains for everyone else's apps to read, not something an
+    // employee does for themself — but in a registry of its own, so the rail
+    // can place it last. See the `finance` perspective, which spreads it
+    // after MIS rather than next to the screens people open all day.
+    expect(keys(FINANCE_MASTER_DATA_APPS)).toEqual(["finance-master-data"]);
     // Reading how the allowance is spent is a different job from filing or
     // approving a claim, so the dashboards sit in their own section above the
     // apps rather than one inside each of them.
@@ -83,14 +94,24 @@ describe("where each finance app lives", () => {
   });
 
   it("puts every app KEY in exactly one of the two", async () => {
-    const { FINANCE_APPS, ME_FINANCE_APPS, FINANCE_OVERVIEW_APPS, FINANCE_PERSPECTIVE_APPS } =
-      await load();
-    const financeSide = [...keys(FINANCE_OVERVIEW_APPS), ...keys(FINANCE_PERSPECTIVE_APPS)];
+    const {
+      FINANCE_APPS,
+      ME_FINANCE_APPS,
+      FINANCE_OVERVIEW_APPS,
+      FINANCE_PERSPECTIVE_APPS,
+      FINANCE_MASTER_DATA_APPS,
+    } = await load();
+    const financeSide = [
+      ...keys(FINANCE_OVERVIEW_APPS),
+      ...keys(FINANCE_PERSPECTIVE_APPS),
+      ...keys(FINANCE_MASTER_DATA_APPS),
+    ];
     const overlap = keys(ME_FINANCE_APPS).filter((k) => financeSide.includes(k));
     expect(overlap).toEqual([]);
     expect(keys(FINANCE_APPS).sort()).toEqual([
       "cc",
       "claims",
+      "finance-master-data",
       "finance-overview",
     ]);
   });

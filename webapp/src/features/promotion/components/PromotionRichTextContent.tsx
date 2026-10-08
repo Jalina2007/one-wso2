@@ -24,12 +24,12 @@ import { Typography } from "@wso2/oxygen-ui";
 export default function PromotionRichTextContent({ content }: { content: string }) {
   return (
     <Typography
+      variant="body2"
       sx={{
         whiteSpace: "pre-wrap",
         wordWrap: "break-word",
         overflowWrap: "break-word",
         wordBreak: "break-word",
-        fontSize: 14,
         "& ul, & ol": { pl: "2em", my: "0.5em" },
         "& ul > li": { listStyleType: "disc" },
         "& ol > li": { listStyleType: "decimal" },

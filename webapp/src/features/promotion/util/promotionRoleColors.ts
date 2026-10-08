@@ -15,22 +15,25 @@
 // under the License.
 
 import type { PromotionRole } from "../api/types";
+import type { PromotionChipColor } from "./promotionStatus";
 
 // Ports source's own per-role chip colours (userLine.tsx / roleSelect.tsx).
-export function promotionRoleColor(role: PromotionRole): string {
+// A theme palette role, not a fixed hex — stays legible across every Oxygen
+// theme preset instead of only the one it was picked against.
+export function promotionRoleChipColor(role: PromotionRole): PromotionChipColor {
   switch (role) {
     case "HR_ADMIN":
-      return "#FF5630";
+      return "error";
     case "FUNCTIONAL_LEAD":
-      return "#FFAB00";
+      return "warning";
     case "LEAD":
-      return "#36B37E";
+      return "success";
     case "PROMOTION_BOARD_MEMBER":
-      return "#ababab";
+      return "info";
     case "EMPLOYEE":
-      return "#00875A";
+      return "primary";
     default:
-      return "#0052CC";
+      return "info";
   }
 }
 

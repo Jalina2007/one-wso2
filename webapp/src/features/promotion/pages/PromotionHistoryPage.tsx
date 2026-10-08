@@ -14,34 +14,25 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Standalone /me/promotion — ports promotion-app's own employee route
-// ("Self Promotion History", route.ts, allowRoles: [EMPLOYEE]): view/promotion/
-// promotion.tsx + panels/promotionHistory.tsx + component/promotion/timeline.tsx.
+// Standalone /me/promotion — an employee's own full promotion history,
+// restricted to the EMPLOYEE role.
 //
-// Kept visually close to source rather than reshaped into this app's usual
-// bare-title page: PromotionPageShell reproduces the outlined card + header
-// icon + tab strip from source's own promotion.tsx — right down to the tab
-// strip showing only one tab. Source itself defines two more tabs
-// (Promotion Status, Applications History) but both are commented out in
-// its own render AND routing (promotion.tsx:116-135) — dead code, not
-// merely hidden — so this port doesn't resurrect them either. See
-// docs/ported-apps/promotion-app.md.
+// Promotion History shows a page title and a timeline. A tab strip is
+// unnecessary because this page has no sibling views.
 //
-// This is the fuller, dedicated equivalent of promotion-app's own screen.
-// It reads the same two endpoints as the My-page profile card's "Last
+// This is the fuller, dedicated view of an employee's promotion record. It
+// reads the same two endpoints as the My-page profile card's "Last
 // promotion" line + history dialog (features/my/components/
 // ConnectedServices.tsx, PromotionHistoryDialog.tsx), which stays as its
 // own, separately-designed summary widget rather than being replaced by
 // this page.
-import { Alert, Box, Skeleton, Tab, Tabs } from "@wso2/oxygen-ui";
-import { HistoryIcon, UserCircleIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert, Box, Skeleton, Typography } from "@wso2/oxygen-ui";
 import { useUserInfo } from "@api/useUserInfo";
 import { useAsgardeoUser } from "@hooks/useAsgardeoUser";
 import { humanizeHttpError } from "@api/http";
 import { isPromotionBackendConfigured, usePromotionEmployeeInfo } from "../api/usePromotionEmployeeInfo";
 import { usePromotionHistory } from "../api/usePromotionHistory";
 import PromotionTimeline from "../components/PromotionTimeline";
-import PromotionPageShell from "../components/PromotionPageShell";
 
 export default function PromotionHistoryPage() {
   const userInfo = useUserInfo();
@@ -55,19 +46,14 @@ export default function PromotionHistoryPage() {
   const history = usePromotionHistory(workEmail, true);
 
   return (
-    <PromotionPageShell
-      icon={<UserCircleIcon size={34} strokeWidth={1.5} />}
-      title="Promotion History"
-      tabs={
-        // One tab, matching source's own live tab bar exactly — see the
-        // file header for why the other two source tabs aren't here. A
-        // static Tabs (not PromotionTabs) since there's nowhere else to
-        // navigate to.
-        <Tabs value={0} aria-label="promotion history tabs">
-          <Tab icon={<HistoryIcon size={18} />} iconPosition="start" label="Promotion History" />
-        </Tabs>
-      }
-    >
+    <Box>
+      <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
+        Promotion History
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Every promotion you've been approved for, from the job band you joined at to where you are today.
+      </Typography>
+
       {!configured ? (
         <Alert severity="info">
           This app isn&apos;t connected yet. Set <code>ONE_WSO2_PROMOTION_BACKEND_URL</code> in{" "}
@@ -93,6 +79,6 @@ export default function PromotionHistoryPage() {
           requests={history.data?.promotionRequests ?? []}
         />
       ) : null}
-    </PromotionPageShell>
+    </Box>
   );
 }

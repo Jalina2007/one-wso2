@@ -23,7 +23,7 @@ export default function PromotionSyncStatusLabel({ message }: { message: string 
   return (
     <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.5 }}>
       <CircularProgress size={16} />
-      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>{message}</Typography>
+      <Typography variant="body2" color="text.secondary">{message}</Typography>
     </Box>
   );
 }

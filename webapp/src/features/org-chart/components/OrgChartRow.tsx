@@ -147,7 +147,15 @@ export default function OrgChartRow({
           <Chip
             size="small"
             variant="outlined"
-            label={`${node.children.length} report${node.children.length === 1 ? "" : "s"}`}
+            // The count reflects the CURRENT filters (visibleChildren, the
+            // same list rendered below when expanded) rather than the raw
+            // node.children — otherwise switching the company filter or
+            // toggling "Hide interns" left every "N reports" pill reading
+            // the unfiltered number while the list underneath it actually
+            // shrank. hasReports itself still keys off the raw node.children
+            // so a manager whose entire visible team is filtered out stays
+            // expandable, to show "All direct reports are hidden by filters."
+            label={`${visibleChildren.length} report${visibleChildren.length === 1 ? "" : "s"}`}
             sx={{ flexShrink: 0 }}
           />
         )}

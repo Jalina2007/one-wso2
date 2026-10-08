@@ -20,26 +20,28 @@
 // Two tabs, matching source's own tab bar order exactly: By Promotion
 // Cycle, People HR Archive.
 import { Navigate, Outlet } from "react-router";
-import { ArchiveIcon, HistoryIcon } from "@wso2/oxygen-ui-icons-react";
-import PromotionPageShell from "../components/PromotionPageShell";
-import PromotionTabs, { type PromotionTabDef } from "../components/PromotionTabs";
+import { Box, Typography } from "@wso2/oxygen-ui";
+import RoutedTabs, { type RoutedTabDef } from "@components/routed-tabs/RoutedTabs";
 
 const BASE_PATH = "/people-ops/promotion/cycle-history";
 
-const TABS: PromotionTabDef[] = [
-  { segment: "by-cycle", label: "By Promotion Cycle", icon: <HistoryIcon size={18} /> },
-  { segment: "people-hr-archive", label: "People HR Archive", icon: <ArchiveIcon size={18} /> },
+const TABS: RoutedTabDef[] = [
+  { segment: "by-cycle", label: "By Promotion Cycle" },
+  { segment: "people-hr-archive", label: "People HR Archive" },
 ];
 
 export default function PromotionCycleHistoryPage() {
   return (
-    <PromotionPageShell
-      icon={<HistoryIcon size={34} strokeWidth={1.5} />}
-      title="Promotion Cycle History"
-      tabs={<PromotionTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Promotion cycle history" />}
-    >
+    <Box>
+      <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
+        Promotion Cycle History
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25 }}>
+        Look back at closed promotion cycles and the full People HR promotion archive.
+      </Typography>
+      <RoutedTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Promotion cycle history" />
       <Outlet />
-    </PromotionPageShell>
+    </Box>
   );
 }
 

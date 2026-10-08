@@ -14,6 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import type { VisibilityAnswer } from "@components/side-rail/visibilityFold";
 import { ME_APPS } from "@constants/meApps";
 import { hasAnyLeaveTab } from "../leaveTabs";
 import { LEAVE_PRIVILEGE } from "./leaveTypes";
@@ -117,8 +118,23 @@ export function useLeaveGate(enabled = true): LeaveGate {
     //
     // Still guarded on `enabled`, so a caller that switched this gate off is
     // never told it is mid-flight.
-    isResolving: enabled && userInfo.isPending,
+    //
+    // And only until the first answer. A query with no data goes back to
+    // pending on every refetch, so once /user-info has failed, each retry read
+    // as "resolving" again: LeavePage swapped its routes for a skeleton, the
+    // routes remounting refetched the failed query, and the page looped at the
+    // speed of the error response.
+    isResolving: enabled && userInfo.isPending && userInfo.errorUpdateCount === 0,
     isPeopleOps,
     isLead,
+  };
+}
+
+/** Rail and landing facts. Role flags stay on LeaveGate. */
+export function leaveVisibility(gate: LeaveGate): VisibilityAnswer {
+  return {
+    canSee: (id) => gate.canSee(id),
+    resolving: gate.isResolving,
+    retry: () => undefined,
   };
 }

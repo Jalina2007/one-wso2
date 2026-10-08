@@ -18,11 +18,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FAILURES_BEFORE_PROMPT,
   cooldownFor,
+  getRenewalInFlightSnapshot,
   getSessionExpiredSnapshot,
   refreshAccessToken,
   refreshIdToken,
   registerAuthAccessors,
   resetAuthBridgeFailureState,
+  subscribeRenewal,
   subscribeSessionExpiry,
 } from "@api/authBridge";
 
@@ -213,5 +215,107 @@ describe("concurrent callers", () => {
     signInSilently.mockResolvedValue(false);
     await Promise.allSettled([refreshIdToken(), refreshIdToken(), refreshIdToken()]);
     expect(signInSilently).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The tokens above are opaque, which keeps those tests on the old path: only
+// signInSilently's answer counts. These use readable JWTs, so what the SDK
+// holds takes part in the verdict.
+function jwt(exp: number): string {
+  const seg = (o: unknown) => btoa(JSON.stringify(o)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${seg({ alg: "RS256" })}.${seg({ exp })}.sig`;
+}
+const liveJwt = () => jwt(Math.floor(Date.now() / 1000) + 3600);
+const deadJwt = () => jwt(Math.floor(Date.now() / 1000) - 3600);
+
+function registerHolding(access: () => Promise<string>, id: () => Promise<string> = () => Promise.resolve("id-token")) {
+  registerAuthAccessors({ getIdToken: id, getAccessToken: access, signInSilently });
+}
+
+describe("renewing without the iframe", () => {
+  it("takes the fresh token the SDK hands back", async () => {
+    const fresh = liveJwt();
+    registerHolding(() => Promise.resolve(fresh));
+
+    await expect(refreshAccessToken(deadJwt())).resolves.toBe(fresh);
+    expect(signInSilently).not.toHaveBeenCalled();
+    expect(getSessionExpiredSnapshot()).toBe(false);
+  });
+
+  // A token revoked before its `exp` still reads as live. Counting it as renewed
+  // would retry with the very token the backend just refused.
+  it("does not count the token a backend just rejected", async () => {
+    const revoked = liveJwt();
+    registerHolding(() => Promise.resolve(revoked));
+    signInSilently.mockResolvedValue(false);
+
+    await expect(refreshAccessToken(revoked)).rejects.toThrow(/did not renew/i);
+    expect(signInSilently).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls through to a silent sign-in when the SDK refuses to hand a token over", async () => {
+    const fresh = liveJwt();
+    let refreshed = false;
+    registerHolding(() => (refreshed ? Promise.resolve(fresh) : Promise.reject(new Error("not authenticated"))));
+    signInSilently.mockImplementation(async () => {
+      refreshed = true;
+      return RENEWED;
+    });
+
+    await expect(refreshAccessToken(deadJwt())).resolves.toBe(fresh);
+    expect(signInSilently).toHaveBeenCalledTimes(1);
+  });
+
+  it("does the same for the id_token", async () => {
+    const freshId = liveJwt();
+    registerHolding(() => Promise.resolve("access-token"), () => Promise.resolve(freshId));
+
+    await expect(refreshIdToken()).resolves.toBe(freshId);
+    expect(signInSilently).not.toHaveBeenCalled();
+  });
+});
+
+describe("a silent sign-in is judged by the token it leaves behind", () => {
+  it("succeeds when its promise says false but a fresh token has landed", async () => {
+    const stale = deadJwt();
+    const fresh = liveJwt();
+    let held = stale;
+    registerHolding(() => Promise.resolve(held));
+    signInSilently.mockImplementation(async () => {
+      held = fresh;
+      return false;
+    });
+
+    await expect(refreshAccessToken(stale)).resolves.toBe(fresh);
+    expect(getSessionExpiredSnapshot()).toBe(false);
+  });
+
+  it("still fails when nothing live is left behind", async () => {
+    const stale = deadJwt();
+    registerHolding(() => Promise.resolve(stale));
+    signInSilently.mockResolvedValue(false);
+
+    await expect(refreshAccessToken(stale)).rejects.toThrow(/did not renew/i);
+    expect(getSessionExpiredSnapshot()).toBe(true);
+  });
+});
+
+describe("renewal in flight", () => {
+  it("is reported for exactly as long as the attempt runs", async () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeRenewal(listener);
+    let finish!: (value: unknown) => void;
+    signInSilently.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+
+    const renewal = refreshIdToken();
+    expect(getRenewalInFlightSnapshot()).toBe(true);
+
+    await vi.waitFor(() => expect(signInSilently).toHaveBeenCalled());
+    finish(RENEWED);
+    await renewal;
+
+    expect(getRenewalInFlightSnapshot()).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
   });
 });

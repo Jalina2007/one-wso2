@@ -45,6 +45,8 @@ vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "tok
 const profile = {
   data: { userInfo: { workEmail: "someone@wso2.com" }, employee: { employmentType: "Permanent" } },
   isLoading: false,
+  // Distinct from isLoading on purpose — see useParEmployeeItemVisible.
+  isPending: false,
 };
 vi.mock("@features/my/api/useMeProfile", () => ({ useMeProfile: () => profile }));
 
@@ -76,6 +78,7 @@ beforeEach(() => {
   openCycles.isSuccess = false;
   openCycles.data = undefined;
   profile.isLoading = false;
+  profile.isPending = false;
   profile.data.employee.employmentType = "Permanent";
 });
 
@@ -274,6 +277,15 @@ describe("an intern", () => {
     hasActiveCycle();
     show("/me/performance/history");
     expect(await screen.findByTestId("url")).toHaveTextContent(/^\/me$/);
+  });
+
+  it("is not shown tabs while identity resolution is still pending, even though isLoading is already false", async () => {
+    hasLead("lead@wso2.com");
+    hasActiveCycle();
+    profile.isPending = true;
+    show();
+    expect(await screen.findByTestId("url")).toHaveTextContent("/me/performance");
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   });
 });
 

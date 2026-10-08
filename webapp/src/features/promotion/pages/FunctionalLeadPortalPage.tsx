@@ -20,28 +20,31 @@
 // exactly: Active Promotion Requests, Approved Requests, Rejected
 // Requests, Time Based Promotions.
 import { Navigate, Outlet } from "react-router";
-import { CheckIcon, ClipboardListIcon, RotateCcwIcon, UsersRoundIcon, XIcon } from "@wso2/oxygen-ui-icons-react";
-import PromotionPageShell from "../components/PromotionPageShell";
-import PromotionTabs, { type PromotionTabDef } from "../components/PromotionTabs";
+import { Box, Typography } from "@wso2/oxygen-ui";
+import RoutedTabs, { type RoutedTabDef } from "@components/routed-tabs/RoutedTabs";
 
 const BASE_PATH = "/people-ops/promotion/functional-lead";
 
-const TABS: PromotionTabDef[] = [
-  { segment: "active", label: "Active Promotion Requests", icon: <ClipboardListIcon size={18} /> },
-  { segment: "approved", label: "Approved Requests", icon: <CheckIcon size={18} /> },
-  { segment: "rejected", label: "Rejected Requests", icon: <XIcon size={18} /> },
-  { segment: "time-based", label: "Time Based Promotions", icon: <RotateCcwIcon size={18} /> },
+const TABS: RoutedTabDef[] = [
+  { segment: "active", label: "Active Promotion Requests" },
+  { segment: "approved", label: "Approved Requests" },
+  { segment: "rejected", label: "Rejected Requests" },
+  { segment: "time-based", label: "Time Based Promotions" },
 ];
 
 export default function FunctionalLeadPortalPage() {
   return (
-    <PromotionPageShell
-      icon={<UsersRoundIcon size={34} strokeWidth={1.5} />}
-      title="Functional Lead Portal"
-      tabs={<PromotionTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Functional lead portal" />}
-    >
+    <Box>
+      <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
+        Functional Lead Portal
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25 }}>
+        Review promotion requests from your business unit, and track them through approval, rejection, and
+        time-based promotions.
+      </Typography>
+      <RoutedTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Functional lead portal" />
       <Outlet />
-    </PromotionPageShell>
+    </Box>
   );
 }
 

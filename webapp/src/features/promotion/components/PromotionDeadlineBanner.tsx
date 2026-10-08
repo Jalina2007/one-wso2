@@ -15,8 +15,7 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Box, Typography } from "@wso2/oxygen-ui";
-import { TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
+import { Alert } from "@wso2/oxygen-ui";
 
 // The amber warning banner source repeats verbatim across its own
 // role-scoped screens (recommendationList.tsx's lead deadline warning,
@@ -25,21 +24,8 @@ import { TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
 // copied a third time for the Functional Lead Portal.
 export default function PromotionDeadlineBanner({ children }: { children: ReactNode }) {
   return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1.5,
-        px: 2,
-        py: 1.5,
-        mb: 2,
-        borderRadius: 1,
-        bgcolor: "#FFECB3",
-        color: "#8A6D00",
-      }}
-    >
-      <TriangleAlertIcon size={20} />
-      <Typography sx={{ fontWeight: 500, fontSize: 14 }}>{children}</Typography>
-    </Box>
+    <Alert severity="warning" sx={{ mb: 2 }}>
+      {children}
+    </Alert>
   );
 }

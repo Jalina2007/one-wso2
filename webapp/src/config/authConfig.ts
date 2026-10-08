@@ -44,6 +44,9 @@ declare global {
       // Cafeteria menu backend (daily menu, lunch feedback, dinner orders).
       // Optional — when absent the Menu screen shows a not-connected state.
       ONE_WSO2_MENU_BACKEND_URL?: string;
+      // Today I Learned backend (til-backend) — company-wide learnings feed.
+      // Optional — when absent the Today I Learned screen shows a not-connected state.
+      ONE_WSO2_TIL_BACKEND_URL?: string;
       // Base URL for the digiops-hr subscription-app backend (PickMe Commute
       // and LaaS opt-in/opt-out). Optional — when absent the Subscriptions
       // screens show a not-connected state.
@@ -57,6 +60,14 @@ declare global {
       // Sales app shows a not-connected state and makes no requests.
       // The key keeps its original "REVOPS" name deliberately -- see salesBackendUrl.
       ONE_WSO2_REVOPS_BACKEND_URL?: string;
+      // Base URL for the CadO2 quote tool backend, version segment included.
+      // Optional — when absent (and the `cado2` preview flag is on) CadO2's
+      // pages show a not-connected state and make no requests.
+      ONE_WSO2_CADO2_BACKEND_URL?: string;
+      // Base URL for the MEDDPICC backend (digiops-sales echo-backend), which
+      // powers the Deals tab and the MEDDPICC column under Sales. Optional —
+      // when absent Deals shows a not-connected state and the column is left out.
+      ONE_WSO2_ECHO_BACKEND_URL?: string;
       // Base URL for the digiops-hr promotion-app backend. Optional — when
       // absent, ConnectedServices' "Last promotion" row falls back to a
       // "not configured" state and doesn't fire a request.
@@ -87,7 +98,7 @@ declare global {
       // "not configured" state. Leave-app has its own /user-info +
       // privileges, distinct from people-app.
       ONE_WSO2_LEAVE_BACKEND_URL?: string;
-      // Base URLs for the three digiops-finance backends surfaced in the
+      // Base URLs for the digiops-finance backends surfaced in the
       // Finance perspective. Each is its own service with its own
       // /user-info + role scheme. Optional — when a URL is absent, that
       // app's screens show a "not connected" state instead of firing
@@ -95,6 +106,7 @@ declare global {
       ONE_WSO2_OPD_BACKEND_URL?: string; // opd-claims
       ONE_WSO2_CC_EXPENSES_BACKEND_URL?: string; // cc-expenses
       ONE_WSO2_EXPENSE_CLAIMS_BACKEND_URL?: string; // expense-claims
+      ONE_WSO2_FINANCE_MASTER_DATA_BACKEND_URL?: string; // finance-master-data
       // Base URL for the digiops-finance due_diligence backend — the Due
       // Diligence app, surfaced under both the Finance and Legal
       // perspectives. Same optional/"not connected" contract as the three
@@ -116,6 +128,14 @@ declare global {
       // absent, UmtShell shows a not-connected state and makes no UMT requests.
       // Its /update/user-info roles are local to UMT, not People capabilities.
       ONE_WSO2_UMT_BACKEND_URL?: string;
+      // Finance MIS's ARR service, which also serves its /user-info. Take the
+      // *.wso2.com gateway URL, never the *.choreoapis.dev one Choreo advertises
+      // beside it — the CSP blocks the latter and the failure is silent in a
+      // production build. The version segment is part of the URL and differs by
+      // environment: /v1 in production, /v1.0 in staging. MIS's Flash and Admin
+      // services have no key here: they serve only the Flash Dashboard, which
+      // stays in the MIS app.
+      ONE_WSO2_MIS_ARR_BACKEND_URL?: string;
       // Base URL of the leave-app frontend itself (not its backend) —
       // used to deep-link into flows this webapp doesn't replicate, like
       // sabbatical requests. Optional — when absent, that link is hidden.
@@ -125,6 +145,12 @@ declare global {
       // like the others) whose routes live under /api/*. Optional — when
       // absent, MarketingOpsShell shows a "not connected" state.
       ONE_WSO2_MARKETINGOPS_BACKEND_URL?: string;
+      // Base URL for the digiops-marketing agenda-organizer backend — the
+      // Event Platform screens under Marketing Ops. Its own service: the
+      // marketing-ops /api/me decides what the UI shows, and this backend
+      // enforces its own roles. Optional — when absent, the Event Platform
+      // shell shows a "not connected" state.
+      ONE_WSO2_EVENT_PLATFORM_BACKEND_URL?: string;
       // ISAC's own base URL — a separate marketing application, linked to
       // from the top of the Marketing Ops rail and opened in a new tab.
       // Nothing here calls it as an API. Optional — when absent, the rail
@@ -136,6 +162,11 @@ declare global {
       // requests. Privileges on this service (987 / 762 / 123) are not
       // people-app's.
       ONE_WSO2_INFRA_BACKEND_URL?: string;
+      // Base URL for the Product Download Stats API. Optional — when absent,
+      // Engineering Overview says it isn't connected and makes no requests.
+      // The gateway rewrites the Bearer token into the assertion that API
+      // already checks. Read at call time by the engineering feature.
+      ONE_WSO2_PRODUCT_DOWNLOAD_STATS_BACKEND_URL?: string;
       // Base URL of the Pardot UI, used to deep-link to an email template
       // after Email Workbench pushes it. Not an API — a link target.
       // Optional; defaults to https://pi.pardot.com, which is correct for
@@ -153,11 +184,8 @@ declare global {
       // ONE_WSO2_AUTH_BASE_URL by swapping the api. subdomain for
       // myaccount. (e.g. api.asgardeo.io/t/wso2 → myaccount.asgardeo.io/t/wso2).
       ONE_WSO2_ASGARDEO_MYACCOUNT_URL?: string;
-      // Dev-only escape hatch — when true AND the bundle is a Vite dev
-      // build, AuthGuard treats the user as signed in without ever calling
-      // Asgardeo. Ignored in production builds (see devBypassAuth below),
-      // so a stray true in a prod config.js can't disable auth.
-      ONE_WSO2_DEV_BYPASS_AUTH?: boolean;
+      // Backend that serves the customer-search endpoint used by the NDA page.
+      ONE_WSO2_LEGAL_BACKEND_URL?: string;
       // Features built but not yet released — see @config/previewFeatures.
       // Absent or false hides the feature, so a deployment that says nothing
       // shows nothing. Typed loosely here and narrowed by `PreviewFeature` at
@@ -167,24 +195,15 @@ declare global {
   }
 }
 
-// Gate on import.meta.env.DEV so this constant folds to `false` in the
-// production bundle no matter what config.js says. Vite/esbuild replaces
-// import.meta.env.DEV with a literal `false` at build time and dead-code
-// eliminates the whole branch, so ONE_WSO2_DEV_BYPASS_AUTH becomes inert
-// in shipped code even if an operator accidentally sets it to true.
-export const devBypassAuth =
-  import.meta.env.DEV && window.config?.ONE_WSO2_DEV_BYPASS_AUTH === true;
-
-function readConfig(key: keyof Window["config"], fallback = ""): string {
+function readConfig(key: keyof Window["config"]): string {
   const value = window.config?.[key];
   if (typeof value === "string" && value) return value;
-  if (devBypassAuth) return fallback;
   throw new Error(
     `Missing runtime config: window.config.${key}. Populate public/config.js from public/config.js.example.`,
   );
 }
 
-const baseUrl = readConfig("ONE_WSO2_AUTH_BASE_URL", "https://dev.local/asgardeo");
+const baseUrl = readConfig("ONE_WSO2_AUTH_BASE_URL");
 
 // Derive Asgardeo's hosted My Account portal URL from the tenant base URL.
 // Standard Asgardeo Cloud shape: api.asgardeo.io/t/<tenant> → myaccount.asgardeo.io/t/<tenant>.
@@ -197,9 +216,9 @@ function deriveMyAccountUrl(base: string): string {
 
 export const authConfig = {
   baseUrl,
-  clientId: readConfig("ONE_WSO2_AUTH_CLIENT_ID", "dev-mode-client"),
-  afterSignInUrl: readConfig("ONE_WSO2_AUTH_SIGN_IN_REDIRECT_URL", "http://localhost:3000"),
-  afterSignOutUrl: readConfig("ONE_WSO2_AUTH_SIGN_OUT_REDIRECT_URL", "http://localhost:3000"),
+  clientId: readConfig("ONE_WSO2_AUTH_CLIENT_ID"),
+  afterSignInUrl: readConfig("ONE_WSO2_AUTH_SIGN_IN_REDIRECT_URL"),
+  afterSignOutUrl: readConfig("ONE_WSO2_AUTH_SIGN_OUT_REDIRECT_URL"),
   // Asgardeo's hosted My Account portal — opened from the top-bar profile menu.
   myAccountUrl: deriveMyAccountUrl(baseUrl),
   // Same scope set as Novera and the leave/menu backends — groups is

@@ -24,7 +24,7 @@
  * branching the build or holding work out of `main`.
  *
  * ```js
- * ONE_WSO2_PREVIEW_FEATURES: { umt: true },
+ * ONE_WSO2_PREVIEW_FEATURES: { engineering: true, umt: true },
  * ```
  *
  * ## Absent means off
@@ -55,13 +55,12 @@
  */
 export type PreviewFeature =
   /**
-   * The whole UMT perspective — rail entry, launcher tile, landing-page
-   * option, favourites eligibility, and the `/umt` route. UMT is still being
-   * ported: only its dashboard exists so far (see perspectives.ts), and that
-   * is gated as a whole rather than screen-by-screen because the thing that
-   * needs to stay preview-only is the perspective's presence itself, not one
-   * route inside it. `useUmtGate`'s own role check against the UMT backend is
-   * unrelated and keeps working the same regardless of this flag.
+   * Engineering → UMT, the whole app — its rail group and every route under
+   * `/engineering/umt`. Needs `engineering` on as well: UMT lives inside that
+   * perspective, so without it there is no rail to show UMT in. Held back as a
+   * whole, the same way Finance MIS is inside Finance. `useUmtGate`'s own role
+   * check against the UMT backend is unrelated and keeps working the same
+   * regardless of this flag.
    */
   | "umt"
   /* The whole Infra Portal perspective. Still being ported, so the waffle
@@ -73,12 +72,50 @@ export type PreviewFeature =
    * the whole "Promotion" group under People Ops (Lead Portal, Team
    * Promotion History, Functional Lead Portal, Promotion Board Portal,
    * Admin Portal, Promotion Cycle History) — rail entries and routes
-   * alike. Unlike umt/infra this isn't a whole perspective; it's a set of
+   * alike. Unlike infra this isn't a whole perspective; it's a set of
    * items nested inside Me and People Ops, gated the same way so the
    * feature can ship to `main` without going live in production before
-   * it's ready — see docs/ported-apps/promotion-app.md.
+   * it's ready.
    */
-  | "promotion";
+  | "promotion"
+  /**
+   * The whole Engineering perspective — waffle tile, rail, favourites,
+   * landing choices, and the Download Stats screens. The perspective stays
+   * hidden until this is on. A direct visit while it is off says Engineering
+   * is not available.
+   */
+  | "engineering"
+  /**
+   * Finance → Finance MIS — the ARR, QRR and MRR Builds and ARR Analysis,
+   * rail entries and routes alike. Held back as a whole until Finance has
+   * verified its figures. `useMisGate`'s own privilege check is unrelated and
+   * keeps working the same either way.
+   */
+  | "mis"
+  /**
+   * Marketing Ops → Event Platform, the whole app — its rail group and every
+   * route under `/marketing-ops/event-platform`. Held back as a whole, the
+   * same way Finance MIS is: the port lands screen by screen, and what must
+   * stay preview-only is the app's presence, not one route inside it. Its own
+   * backend roles (`eventplatform`, `eventplatform-shop`) still decide who
+   * sees what once this is on. See docs/ported-apps/event-platform.md.
+   */
+  | "eventPlatform"
+  /**
+   * Sales → CadO2, the whole quote tool: its rail group (My Quotes, My
+   * Approvals, Admin), every route under `/sales/cado2`, and its backend
+   * calls. Held back as a whole until every screen is in place. CadO2's own
+   * `/me` roles still decide who sees which item once this is on. See
+   * docs/ported-apps/cado2.md.
+   */
+  | "cado2"
+  /**
+   * The whole Knowledge Base perspective — waffle tile, rail, and the
+   * `/knowledge-base` route, currently just Today I Learned. Waiting on
+   * til-backend's first real Choreo deployment and the Google Chat App's
+   * Space/Dialog registration (outside this codebase) before going live.
+   */
+  | "til";
 
 /**
  * Whether a preview feature should be shown.

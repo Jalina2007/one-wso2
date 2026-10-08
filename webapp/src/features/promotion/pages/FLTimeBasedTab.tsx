@@ -21,14 +21,16 @@
 // plain card list, matching the Lead Portal's own row style rather than
 // CustomTable (this is the one FL tab source itself didn't build on that
 // component).
-import { Box, Chip, Grid, IconButton, Skeleton, Tooltip, Typography } from "@wso2/oxygen-ui";
-import { ArrowRightIcon, InboxIcon, RefreshCwIcon, TriangleAlertIcon } from "@wso2/oxygen-ui-icons-react";
+import { Box, Chip, Grid, Skeleton, Typography } from "@wso2/oxygen-ui";
 import { humanizeHttpError } from "@api/http";
 import { useActivePromotionCycle } from "../api/usePromotionCycle";
 import { usePromotionRequests } from "../api/usePromotionRequests";
+import JobBandTransitionChips from "../components/JobBandTransitionChips";
 import PromotionDeadlineBanner from "../components/PromotionDeadlineBanner";
 import PromotionEmptyState from "../components/PromotionEmptyState";
 import PromotionTableHeader from "../components/PromotionTableHeader";
+import { recommendationChipColor } from "../util/promotionStatus";
+import type { RecommendationStatus } from "../api/types";
 
 const COLUMNS = [
   { title: "Employee Email", size: 3, align: "left" as const },
@@ -38,11 +40,10 @@ const COLUMNS = [
   { title: "Promote to", size: 2, align: "right" as const },
 ];
 
-function recommendationStatusChip(status: string) {
-  if (status === "REQUESTED") return { label: "Pending", bg: "#172B4D" };
-  if (status === "SUBMITTED") return { label: "Submitted", bg: "#76BA1B" };
-  return { label: status, bg: "grey.500" };
-}
+const LEAD_STATUS_LABEL: Partial<Record<RecommendationStatus, string>> = {
+  REQUESTED: "Pending",
+  SUBMITTED: "Submitted",
+};
 
 export default function FLTimeBasedTab() {
   const cycle = useActivePromotionCycle();
@@ -62,32 +63,22 @@ export default function FLTimeBasedTab() {
         </PromotionDeadlineBanner>
       )}
 
-      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1.5 }}>
-        <Tooltip title="Refresh">
-          <IconButton size="small" onClick={() => void requests.refetch()}>
-            <RefreshCwIcon size={16} />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
       {cycle.isPending || (requests.isPending && Boolean(cycle.cycle)) ? (
         <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 1 }} />
       ) : cycle.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load the promotion cycle. ${humanizeHttpError(cycle.error)}`}
         />
       ) : !cycle.cycle ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no active promotion cycles" />
+        <PromotionEmptyState message="There are no active promotion cycles" />
       ) : requests.isError ? (
         <PromotionEmptyState
-          icon={<TriangleAlertIcon size={28} />}
           tone="error"
           message={`Unable to load promotion requests. ${humanizeHttpError(requests.error)}`}
         />
       ) : rows.length === 0 ? (
-        <PromotionEmptyState icon={<InboxIcon size={28} />} message="There are no time based promotion requests" />
+        <PromotionEmptyState message="There are no time based promotion requests" />
       ) : (
         <>
           <PromotionTableHeader columns={COLUMNS} />
@@ -98,21 +89,19 @@ export default function FLTimeBasedTab() {
             >
               <Grid container spacing={2} sx={{ width: "100%", alignItems: "center" }}>
                 <Grid size={3}>
-                  <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{request.employeeEmail}</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{request.employeeEmail}</Typography>
                 </Grid>
                 <Grid size={2}>
                   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                    {request.recommendations.map((rec) => {
-                      const chip = recommendationStatusChip(rec.recommendationStatus);
-                      return (
-                        <Chip
-                          key={rec.recommendationID}
-                          label={chip.label}
-                          size="small"
-                          sx={{ bgcolor: chip.bg, color: "white" }}
-                        />
-                      );
-                    })}
+                    {request.recommendations.map((rec) => (
+                      <Chip
+                        key={rec.recommendationID}
+                        label={LEAD_STATUS_LABEL[rec.recommendationStatus] ?? rec.recommendationStatus}
+                        size="small"
+                        variant="outlined"
+                        color={recommendationChipColor(rec.recommendationStatus)}
+                      />
+                    ))}
                   </Box>
                 </Grid>
                 <Grid size={3}>
@@ -123,12 +112,10 @@ export default function FLTimeBasedTab() {
                   </Box>
                 </Grid>
                 <Grid size={2}>
-                  <Typography sx={{ fontSize: 14 }}>{request.team}</Typography>
+                  <Typography variant="body2">{request.team}</Typography>
                 </Grid>
-                <Grid size={2} sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 0.5 }}>
-                  <Chip label={`JB ${request.currentJobBand}`} size="small" variant="outlined" />
-                  <ArrowRightIcon size={16} />
-                  <Chip label={`JB ${request.nextJobBand}`} size="small" variant="outlined" />
+                <Grid size={2} sx={{ display: "flex", justifyContent: "flex-end" }}>
+                  <JobBandTransitionChips currentJobBand={request.currentJobBand} nextJobBand={request.nextJobBand} />
                 </Grid>
               </Grid>
             </Box>

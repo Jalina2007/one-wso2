@@ -16,8 +16,9 @@
 
 import { useState } from "react";
 import { useIsMutating } from "@tanstack/react-query";
-import { Alert, Box, Skeleton, Snackbar } from "@wso2/oxygen-ui";
+import { Alert, Box, Skeleton } from "@wso2/oxygen-ui";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
+import { useNotifications } from "@context/notifications/NotificationsContext";
 import { useAsgardeoUser } from "@hooks/useAsgardeoUser";
 import { useBankingEmployee } from "@features/my/api/useBankingEmployee";
 import { isBankingBackendConfigured, useBankAccounts } from "@features/my/api/useBankAccounts";
@@ -56,22 +57,16 @@ export default function MyAccountsTab() {
   // request was still in flight — closing the dialog doesn't cancel it.
   const submitting = useIsMutating({ mutationKey: ["create-bank-account-request"] }) > 0;
   const [editingType, setEditingType] = useState<AccountType | null>(null);
-  const [snack, setSnack] = useState<{ open: boolean; severity: "success" | "error"; message: string }>(
-    { open: false, severity: "success", message: "" },
-  );
+  const { showSuccess } = useNotifications();
 
   function handleSubmitted() {
-    // Still set here: the dialog reports success before anything clears it.
+    // Still read here: the dialog reports success before anything clears it.
     const submittedType = editingType;
     setEditingType(null);
     // No explicit refetch here: useCreateBankAccountRequest's own onSuccess
     // already invalidates this same query, which refetches it.
     // The source app's own wording, naming the Account Type in lower case.
-    setSnack({
-      open: true,
-      severity: "success",
-      message: `Successfully requested the ${submittedType?.toLowerCase()} bank account change!`,
-    });
+    showSuccess(`Successfully requested the ${submittedType?.toLowerCase()} bank account change!`);
   }
 
   if (!configured) return <BankingNotConfigured />;
@@ -143,16 +138,6 @@ export default function MyAccountsTab() {
 
   return (
     <Box>
-      <Snackbar
-        open={snack.open}
-        autoHideDuration={4000}
-        onClose={() => setSnack((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-      >
-        <Alert severity={snack.severity} onClose={() => setSnack((s) => ({ ...s, open: false }))}>
-          {snack.message}
-        </Alert>
-      </Snackbar>
       <Box
         sx={{
           display: "grid",

@@ -14,28 +14,30 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { DataGrid, Tooltip } from "@wso2/oxygen-ui";
+import { DataGrid } from "@wso2/oxygen-ui";
 
 // Ports source's own CustomTable toolbar (Columns/Filter/Export, plus
 // sorting and per-type filter editors it hand-rolls elsewhere) as MUI X
-// DataGrid's built-in equivalents — see docs/ported-apps/promotion-app.md's
-// own deviation entry. Same pattern as PAR's ParGridToolbarWithExport.
+// DataGrid's built-in equivalents. Same pattern as PAR's
+// ParGridToolbarWithExport.
 // Every Functional Lead Portal grid gets Export (unlike PAR's default,
 // withheld pattern): source itself offers export on all four of its own
 // tabs here, unconditionally.
+//
+// Columns/Filters render the same icon+label button Density/Export already
+// use (both render DataGrid's own `baseButton` slot, a plain Button, not an
+// icon-only one) — wrapping them in a bare `ToolbarButton` instead is
+// icon-only and reads as a different, less finished control sitting next
+// to the other two.
 export function PromotionGridToolbar() {
   return (
     <DataGrid.Toolbar>
-      <Tooltip title="Columns">
-        <DataGrid.ColumnsPanelTrigger render={<DataGrid.ToolbarButton aria-label="Columns" />}>
-          <DataGrid.GridColumnIcon fontSize="small" />
-        </DataGrid.ColumnsPanelTrigger>
-      </Tooltip>
-      <Tooltip title="Filters">
-        <DataGrid.FilterPanelTrigger render={<DataGrid.ToolbarButton aria-label="Filters" />}>
-          <DataGrid.GridFilterListIcon fontSize="small" />
-        </DataGrid.FilterPanelTrigger>
-      </Tooltip>
+      <DataGrid.ColumnsPanelTrigger size="small" startIcon={<DataGrid.GridColumnIcon fontSize="small" />}>
+        Columns
+      </DataGrid.ColumnsPanelTrigger>
+      <DataGrid.FilterPanelTrigger size="small" startIcon={<DataGrid.GridFilterListIcon fontSize="small" />}>
+        Filters
+      </DataGrid.FilterPanelTrigger>
       <DataGrid.GridToolbarDensitySelector />
       <DataGrid.GridToolbarExport />
     </DataGrid.Toolbar>

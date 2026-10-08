@@ -14,19 +14,25 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Alert, AlertTitle, Avatar, Box, Chip, Stack, Typography } from "@wso2/oxygen-ui";
+import { Alert, AlertTitle, Avatar, Box, Chip, Divider, Skeleton, Stack, Typography } from "@wso2/oxygen-ui";
+import { humanizeHttpError } from "@api/http";
 import type { PromotionRequestFull } from "../api/types";
 import { decodePromotionText } from "../util/promotionRichText";
-import { recommendationStatusLabel, recommendationColor } from "../util/promotionStatus";
+import { recommendationChipColor } from "../util/promotionStatus";
+import { usePromotionEmployeeInfo } from "../api/usePromotionEmployeeInfo";
+import { usePromotionHistory } from "../api/usePromotionHistory";
 import PromotionRichTextContent from "./PromotionRichTextContent";
+import PromotionTimeline from "./PromotionTimeline";
 
-// Ports source's own component/tables/row.tsx expand panel — an employee
-// avatar, a rejection-reason alert (only for a REJECTED/FL_REJECTED
-// request), and every lead recommendation on the request (statement +
-// additional comment, decoded/sanitized — see PromotionRichTextContent's
-// own comment on why source's read-side sanitization gap isn't reproduced).
+// Request detail panel: an employee avatar, a rejection-reason alert (only
+// for a REJECTED/FL_REJECTED request), every lead recommendation on the
+// request (statement + additional comment, decoded and sanitized), and the
+// employee's full promotion history, rendered with the same PromotionTimeline
+// that PromotionEmployeeHistoryDialog.tsx uses, fed by the same two hooks.
 export default function PromotionRequestDetailPanel({ request }: { request: PromotionRequestFull }) {
   const isRejected = request.status === "REJECTED" || request.status === "FL_REJECTED";
+  const info = usePromotionEmployeeInfo(request.employeeEmail);
+  const history = usePromotionHistory(request.employeeEmail, true);
 
   return (
     <Box sx={{ p: 2.5, display: "flex", gap: 3 }}>
@@ -42,9 +48,9 @@ export default function PromotionRequestDetailPanel({ request }: { request: Prom
       </Avatar>
 
       <Box sx={{ flex: 1, minWidth: 0, mt: isRejected ? 6 : 0 }}>
-        <Typography sx={{ fontWeight: 700, fontSize: 15, mb: 1 }}>Lead Recommendations</Typography>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>Lead Recommendations</Typography>
         {request.recommendations.length === 0 ? (
-          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+          <Typography variant="body2" color="text.secondary">
             There are no lead recommendations.
           </Typography>
         ) : (
@@ -52,17 +58,22 @@ export default function PromotionRequestDetailPanel({ request }: { request: Prom
             {request.recommendations.map((rec) => (
               <Box key={rec.recommendationID} sx={{ borderTop: 1, borderColor: "divider", pt: 1.5 }}>
                 <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
-                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>{rec.leadEmail}</Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{rec.leadEmail}</Typography>
+                  {/* Show the raw status, not recommendationStatusLabel's
+                      SUBMITTED→"APPROVED" remap. That remap applies only to the
+                      Lead Portal History tab. */}
                   <Chip
-                    label={recommendationStatusLabel(rec.recommendationStatus)}
+                    label={rec.recommendationStatus}
                     size="small"
-                    sx={{ bgcolor: recommendationColor(rec.recommendationStatus), color: "white", height: 20, fontSize: 10.5 }}
+                    variant="outlined"
+                    color={recommendationChipColor(rec.recommendationStatus)}
+                    sx={{ height: 20, fontSize: 10.5 }}
                   />
                 </Stack>
                 <PromotionRichTextContent content={decodePromotionText(rec.recommendationStatement)} />
                 {rec.recommendationAdditionalComment && (
                   <>
-                    <Typography sx={{ fontSize: 11.5, fontWeight: 600, color: "text.secondary", mt: 0.5 }}>
+                    <Typography variant="caption" sx={{ display: "block", fontWeight: 600, color: "text.secondary", mt: 0.5 }}>
                       Additional Comment
                     </Typography>
                     <PromotionRichTextContent content={decodePromotionText(rec.recommendationAdditionalComment)} />
@@ -72,6 +83,23 @@ export default function PromotionRequestDetailPanel({ request }: { request: Prom
             ))}
           </Stack>
         )}
+      </Box>
+
+      <Divider orientation="vertical" flexItem />
+
+      <Box sx={{ flex: 1, minWidth: 0, mt: isRejected ? 6 : 0 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>Promotion History</Typography>
+        <Box sx={{ maxHeight: 350, overflow: "auto" }}>
+          {info.isPending || history.isPending ? (
+            <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 1 }} />
+          ) : info.isError ? (
+            <Alert severity="error">{humanizeHttpError(info.error)}</Alert>
+          ) : history.isError ? (
+            <Alert severity="error">{humanizeHttpError(history.error)}</Alert>
+          ) : info.data ? (
+            <PromotionTimeline employeeInfo={info.data.employeeInfo} requests={history.data?.promotionRequests ?? []} />
+          ) : null}
+        </Box>
       </Box>
     </Box>
   );

@@ -24,7 +24,7 @@ import {
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { SearchIcon } from "@wso2/oxygen-ui-icons-react";
+import { MenuIcon, SearchIcon } from "@wso2/oxygen-ui-icons-react";
 import AppsGridIcon from "./AppsGridIcon";
 import { Link as RouterLink } from "react-router";
 import { landingPath } from "@config/landingConfig";
@@ -123,7 +123,14 @@ export default function TopBar({
 
   return (
     <Header>
-      <Header.Toggle collapsed={collapsed} onToggle={onToggleSidebar} />
+      {/* The hamburger in both states: Oxygen's default collapse icon carries a
+          left arrow, and in this corner that reads as Back. */}
+      <Header.Toggle
+        collapsed={collapsed}
+        onToggle={onToggleSidebar}
+        expandIcon={<MenuIcon size={20} />}
+        collapseIcon={<MenuIcon size={20} />}
+      />
 
       <Header.Brand sx={{ flexShrink: 0 }}>
         {/* The lockup is the way home, as it is in every other product.
@@ -191,7 +198,7 @@ export default function TopBar({
         role="button"
         tabIndex={0}
         onClick={onOpenAsk}
-        aria-label="Ask Novera or search"
+        aria-label="Ask Novera"
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -225,7 +232,7 @@ export default function TopBar({
             the palette states plainly that the assistant is still coming rather
             than implying it already answers. */}
         <Typography variant="body2" noWrap sx={{ display: { xs: "none", sm: "block" } }}>
-          Ask Novera or search…
+          Ask Novera
         </Typography>
         <Box
           sx={{

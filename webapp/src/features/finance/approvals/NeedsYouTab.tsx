@@ -166,9 +166,7 @@ export default function NeedsYouTab() {
   const identityLoading = expenseAppData.isLoading || opdUserInfo.isLoading;
   const queuesLoading = leadQueue.isLoading || financeQueue.isLoading || opdQueue.isLoading;
 
-  if (identityLoading) {
-    return <Skeleton variant="rectangular" height={320} sx={{ borderRadius: 1.5 }} />;
-  }
+  if (identityLoading) return null;
 
   // Opening an expense claim replaces this whole tab with the same review
   // screen Lead/Finance Approvals uses — the app's own decision, its own
@@ -279,6 +277,13 @@ export default function NeedsYouTab() {
         />
       </Stack>
 
+      {/* A Skeleton here, unlike `identityLoading` above: that one guards the
+          WHOLE tab, flipping between "tabs" and "nothing" as identity
+          resolves, so a skeleton there is one more thing to blink on the way
+          to a final answer. This one guards only the list rows below
+          still-mounted tabs and filters, whose shape never changes between a
+          fresh load and a filter change — so with nothing here, a page load
+          and "nothing is waiting on you" looked identical. */}
       {queuesLoading ? (
         <Skeleton variant="rectangular" height={220} sx={{ borderRadius: 1.5 }} />
       ) : total === 0 && failures.length === 0 ? (

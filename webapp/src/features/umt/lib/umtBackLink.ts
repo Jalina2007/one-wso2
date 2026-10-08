@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import { UMT_PATH, umtPaths } from "./umtPaths";
+
 // Location state a page passes when it links to an update, so the update
 // page's back arrow can return to it (with whatever that page needs to
 // restore) instead of the updates list.
@@ -22,14 +24,12 @@ export interface UmtBackLinkState {
   backState?: unknown;
 }
 
-export const UMT_UPDATES_LIST_PATH = "/umt/updates";
-
 // Only in-app UMT paths are honoured: location state can be set by anything
 // that navigates here, so it must not be able to point the arrow elsewhere.
 export function umtBackLink(state: unknown): UmtBackLinkState {
   if (state && typeof state === "object" && "backTo" in state) {
     const { backTo, backState } = state as { backTo: unknown; backState?: unknown };
-    if (typeof backTo === "string" && backTo.startsWith("/umt/")) return { backTo, backState };
+    if (typeof backTo === "string" && backTo.startsWith(`${UMT_PATH}/`)) return { backTo, backState };
   }
-  return { backTo: UMT_UPDATES_LIST_PATH };
+  return { backTo: umtPaths.updates };
 }

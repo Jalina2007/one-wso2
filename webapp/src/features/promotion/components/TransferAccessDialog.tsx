@@ -48,8 +48,8 @@ function TransferAccessDialogContent({ user, onClose }: { user: PromotionUser; o
     <>
       <DialogTitle>Transfer Access</DialogTitle>
       <DialogContent dividers>
-        <Typography sx={{ fontSize: 13, mb: 2 }}>From: {user.email}</Typography>
-        <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>To *</Typography>
+        <Typography variant="body2" sx={{ mb: 2 }}>From: {user.email}</Typography>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>To *</Typography>
         <Autocomplete
           size="small"
           options={(directory.data?.employees ?? []).filter((e) => e.workEmail !== user.email)}
@@ -60,12 +60,14 @@ function TransferAccessDialogContent({ user, onClose }: { user: PromotionUser; o
           renderInput={(params) => <TextField {...params} placeholder="Select a lead..." />}
         />
         <Box sx={{ mt: 1 }}>
-          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>To: {newEmail ?? "<Select User>"}</Typography>
+          <Typography variant="body2" color="text.secondary">To: {newEmail ?? "<Select User>"}</Typography>
         </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button
+          variant="contained"
+          color="primary"
           disabled={!newEmail || updateUser.isPending}
           onClick={() => {
             if (!newEmail) return;

@@ -20,29 +20,32 @@
 // Time Based Promotions, Individual Contributor Promotion, Withdrawal
 // Requests, User Management.
 import { Navigate, Outlet } from "react-router";
-import { ClipboardIcon, ClockIcon, RotateCwIcon, Undo2Icon, UserCogIcon, WrenchIcon } from "@wso2/oxygen-ui-icons-react";
-import PromotionPageShell from "../components/PromotionPageShell";
-import PromotionTabs, { type PromotionTabDef } from "../components/PromotionTabs";
+import { Box, Typography } from "@wso2/oxygen-ui";
+import RoutedTabs, { type RoutedTabDef } from "@components/routed-tabs/RoutedTabs";
 
 const BASE_PATH = "/people-ops/promotion/admin";
 
-const TABS: PromotionTabDef[] = [
-  { segment: "cycle", label: "Promotion Cycle", icon: <RotateCwIcon size={18} /> },
-  { segment: "time-based", label: "Time Based Promotions", icon: <ClockIcon size={18} /> },
-  { segment: "individual-contributor", label: "Individual Contributor Promotion", icon: <ClipboardIcon size={18} /> },
-  { segment: "withdrawal-requests", label: "Withdrawal Requests", icon: <Undo2Icon size={18} /> },
-  { segment: "users", label: "User Management", icon: <UserCogIcon size={18} /> },
+const TABS: RoutedTabDef[] = [
+  { segment: "cycle", label: "Promotion Cycle" },
+  { segment: "time-based", label: "Time Based Promotions" },
+  { segment: "individual-contributor", label: "Individual Contributor Promotion" },
+  { segment: "withdrawal-requests", label: "Withdrawal Requests" },
+  { segment: "users", label: "User Management" },
 ];
 
 export default function PromotionAdminPortalPage() {
   return (
-    <PromotionPageShell
-      icon={<WrenchIcon size={34} strokeWidth={1.5} />}
-      title="Admin Portal"
-      tabs={<PromotionTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Promotion admin portal" />}
-    >
+    <Box>
+      <Typography component="h1" variant="h5" sx={{ mb: 0.5 }}>
+        Admin Portal
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.25 }}>
+        Manage promotion cycles, time-based and individual contributor promotions, withdrawal requests, and
+        system users.
+      </Typography>
+      <RoutedTabs basePath={BASE_PATH} tabs={TABS} ariaLabel="Promotion admin portal" />
       <Outlet />
-    </PromotionPageShell>
+    </Box>
   );
 }
 

@@ -58,12 +58,14 @@ export default function RejectReasonDialog({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-        <Typography sx={{ fontSize: 12, color: "text.secondary", mt: 0.5 }}>{reason.length}/250</Typography>
+        <Typography variant="caption" sx={{ display: "block", color: "text.secondary", mt: 0.5 }}>
+          {reason.length}/250
+        </Typography>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose}>No</Button>
         <Button
-          color="secondary"
+          color="error"
           variant="contained"
           disabled={reason.trim() === ""}
           onClick={() => {

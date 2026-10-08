@@ -21,14 +21,13 @@
 // The department legend is single-select "isolate": clicking a department
 // hides everyone who isn't a member of it or a Chairman-path ancestor
 // leading to one (see OrgChartPage's visibleEmails) — clicking the same one
-// again clears the filter. A hard cut, not a dim — see
-// docs/ported-apps/org-chart.md §3.
+// again clears the filter. A hard cut, not a dim.
 //
 // The company filter is a plain dropdown over the same visibleEmails
 // mechanism, combined with the department filter by AND rather than
 // replacing it — picking both isolates people matching both at once.
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -97,6 +96,15 @@ export default function OrgChartSidebar({
   onReset,
 }: OrgChartSidebarProps) {
   const [query, setQuery] = useState("");
+  // Whether the dropdown should show at all — decoupled from `query` itself
+  // so clicking away dismisses it (standard search-dropdown behaviour,
+  // matching browser address bars/MUI's own Autocomplete) without losing
+  // what was typed: refocusing the input re-opens it against the same text.
+  const [isFocused, setIsFocused] = useState(false);
+  // Wraps the input AND the dropdown, so the input's own onBlur can tell a
+  // Tab into a result (focus staying inside this box) apart from focus
+  // actually leaving the widget (see the onBlur handler below).
+  const searchBoxRef = useRef<HTMLDivElement>(null);
 
   const matches = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
@@ -134,19 +142,43 @@ export default function OrgChartSidebar({
         </Box>
       </Stack>
 
-      <Box sx={{ position: "relative" }}>
+      <Box
+        ref={searchBoxRef}
+        sx={{ position: "relative" }}
+        // On the container, not just the input: React's onBlur tracks the
+        // native focusout event, which bubbles, so this also catches focus
+        // leaving a ListItemButton — needed because once Tab has moved focus
+        // past the input and into the results, further Tabs (between
+        // results, or off the far end) never blur the input again. Only
+        // relatedTarget outside this whole container counts as "left the
+        // widget"; moving from the input onto a result, or from one result
+        // to the next, stays inside it and keeps the dropdown open.
+        onBlur={(event) => {
+          if (searchBoxRef.current?.contains(event.relatedTarget as Node | null)) return;
+          setIsFocused(false);
+        }}
+      >
         <TextField
           fullWidth
           size="small"
           placeholder="Find a person by name or email…"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => setIsFocused(true)}
           slotProps={{
             input: { startAdornment: <SearchIcon size={16} style={{ marginRight: 8, opacity: 0.5 }} /> },
           }}
         />
-        {query.trim() !== "" && (
+        {query.trim() !== "" && isFocused && (
           <Box
+            // Clicking a result would otherwise blur the input a tick before
+            // its own onClick fires (mousedown shifts focus, and that blur
+            // flips isFocused to false and unmounts this Box before the
+            // click ever reaches ListItemButton) — preventDefault on
+            // mousedown keeps focus on the input instead, so the dropdown
+            // stays mounted through the click. Clicking OUTSIDE this Box
+            // entirely still blurs the input normally and closes it.
+            onMouseDown={(event) => event.preventDefault()}
             sx={{
               position: "absolute",
               top: "calc(100% + 4px)",
@@ -155,7 +187,14 @@ export default function OrgChartSidebar({
               zIndex: 20,
               maxHeight: 320,
               overflowY: "auto",
-              bgcolor: "background.paper",
+              // Not background.paper: the Acrylic theme's own paper token is
+              // a translucent surface by design (#ffffffc5/#000000c5 —
+              // ~77% opacity, see @wso2/oxygen-ui's AcrylicBaseTheme), which
+              // reads as a visible bug on a floating overlay stacked on top
+              // of the row list — you can see the rows through it. `default`
+              // is the theme's own fully-opaque token in both light and dark,
+              // so this stays theme-driven rather than a hardcoded color.
+              bgcolor: "background.default",
               border: 1,
               borderColor: "divider",
               borderRadius: 1,

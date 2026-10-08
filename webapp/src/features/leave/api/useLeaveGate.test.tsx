@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { ME_APPS } from "@constants/meApps";
 
@@ -22,7 +22,9 @@ import { ME_APPS } from "@constants/meApps";
 // AND loading; a DISABLED query is pending but not loading, because it never
 // fetches. The gate has to read the second one, or a caller that switched it
 // off would be told forever that it is mid-flight.
-const userInfo: { data?: unknown; isPending?: boolean; isLoading?: boolean } = {};
+const userInfo: { data?: unknown; isPending?: boolean; isLoading?: boolean; errorUpdateCount: number } = {
+  errorUpdateCount: 0,
+};
 vi.mock("./useLeaveData", () => ({ useLeaveUserInfo: () => userInfo }));
 
 const { useLeaveGate } = await import("./useLeaveGate");
@@ -235,5 +237,24 @@ describe("while identity is still resolving", () => {
     const gate = renderHook(() => useLeaveGate()).result.current;
     expect(gate.isResolving).toBe(true);
     expect(gate.canSee("leave-reports")).toBe(false);
+  });
+});
+
+// A query with no data goes back to pending on every refetch. Reading that as
+// "resolving" after /user-info had failed made LeavePage swap its routes for a
+// skeleton, and the remounted routes refetched the failed query — a loop at the
+// speed of the error response.
+describe("after /user-info has failed", () => {
+  afterEach(() => {
+    userInfo.errorUpdateCount = 0;
+  });
+
+  it("is not reported as resolving while it is fetched again", () => {
+    userInfo.data = undefined;
+    userInfo.isPending = true;
+    userInfo.isLoading = true;
+    userInfo.errorUpdateCount = 1;
+    const gate = renderHook(() => useLeaveGate()).result.current;
+    expect(gate.isResolving).toBe(false);
   });
 });

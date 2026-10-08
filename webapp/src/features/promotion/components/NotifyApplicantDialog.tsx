@@ -62,7 +62,7 @@ export default function NotifyApplicantDialog({
       <DialogActions>
         <Button onClick={handleClose}>No</Button>
         <Button
-          color="secondary"
+          color="primary"
           variant="contained"
           disabled={!canConfirm}
           onClick={() => {
