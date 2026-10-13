@@ -131,6 +131,10 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
 
   const isInFlight = status.data === "QUEUED" || status.data === "PROCESSING";
   const isCompleted = status.data === "COMPLETED";
+  // Instructions Only skips Analyze: its Proceed submits the empty PR
+  // analysis, which the backend completes straight away, then promotes to
+  // PRAnalyzed.
+  const isInstructionsOnly = updateType === "instructionsOnlyUpdate";
 
   // Disable inputs from the moment Analyze is clicked (the mutation's own
   // isPending), not just once the server confirms QUEUED. No separate "awaiting confirmation" grace flag
@@ -140,6 +144,9 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
   // mutation fires on success is guaranteed to refetch an already-QUEUED
   // status — isInFlight picks it up immediately, no race to bridge.
   const isBusy = isInFlight || startAnalysis.isPending;
+  // Proceed reruns the PR analysis on the backend for Instructions Only, so
+  // the inputs and Analyze stay locked until it settles too.
+  const isLocked = isBusy || proceed.isPending;
 
   if (!isDevelopment && !isPrAnalyzed) {
     return <Alert severity="info">PR Analysis can only be done in Development.</Alert>;
@@ -193,15 +200,16 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
 
   async function handleAnalyze() {
     try {
-      // Only General Update collects manual files/bundle info, and Instructions
-      // Only collects neither — send empty arrays rather than whatever is left
-      // over in state from a previously-selected update type.
+      // Only General Update collects manual files/bundle info — send empty
+      // arrays rather than whatever is left over in state from a
+      // previously-selected update type. Instructions Only never gets here:
+      // it has no Analyze, only Proceed.
       await startAnalysis.mutateAsync({
         updateId: id,
-        pullRequests: updateType === "instructionsOnlyUpdate" ? [] : pullRequests,
+        pullRequests,
         additionalFileOperations: updateType === "generalUpdate" ? manualFiles : [],
         bundlesInfoChanges: updateType === "generalUpdate" ? bundlesInfoChanges : [],
-        isInstructionsOnly: updateType === "instructionsOnlyUpdate",
+        isInstructionsOnly: false,
         isContainerizedUpdate: updateType === "containerizedProductUpdate",
       });
       setHasNewInputs(false);
@@ -225,7 +233,7 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
   );
 
   function handleProceedClick() {
-    if (hasAddedOrModifiedFiles) {
+    if (hasAddedOrModifiedFiles && !isInstructionsOnly) {
       setIsProceedWarningOpen(true);
       return;
     }
@@ -235,7 +243,7 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
   async function handleProceed() {
     setIsProceedWarningOpen(false);
     try {
-      await proceed.mutateAsync();
+      await proceed.mutateAsync({ isInstructionsOnly });
       showSuccess(`Update ${id} advanced to PRAnalyzed.`);
     } catch (error) {
       if (error instanceof UmtPartialProceedError) {
@@ -252,13 +260,18 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
   const analyzeDisabled = isPrAnalyzeDisabled({
     status: status.data,
     hasNewInputsSinceLastAnalysis: hasNewInputs,
-    updateType,
     pullRequestCount: pullRequests.length,
     // Same guard as the submitted payload: manual files only count for
     // General Update, so leftover files from a prior type selection can't
     // make this look non-empty for a type that won't actually send them.
     manualFileCount: updateType === "generalUpdate" ? manualFiles.length : 0,
   });
+
+  const proceedButton = (
+    <Button variant="contained" disabled={isBusy} loading={proceed.isPending} onClick={handleProceedClick}>
+      Proceed
+    </Button>
+  );
 
   return (
     // Everything here, results included, is disabled once PRAnalyzed: inert
@@ -273,7 +286,7 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
             setUpdateType(e.target.value as UmtUpdateType);
             markDirty();
           }}
-          sx={{ opacity: isBusy ? 0.5 : 1, pointerEvents: isBusy ? "none" : "auto" }}
+          sx={{ opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? "none" : "auto" }}
         >
           <FormControlLabel value="generalUpdate" control={<Radio />} label="General Update" />
           <FormControlLabel value="instructionsOnlyUpdate" control={<Radio />} label="Instructions Only Update" />
@@ -285,8 +298,8 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
         </RadioGroup>
         <Divider sx={{ mt: 2 }} />
 
-        {updateType !== "instructionsOnlyUpdate" && (
-          <Box sx={{ opacity: isBusy ? 0.5 : 1, pointerEvents: isBusy ? "none" : "auto" }}>
+        {!isInstructionsOnly && (
+          <Box sx={{ opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? "none" : "auto" }}>
             <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 2 }}>
               <Typography variant="h6">Pull Requests</Typography>
               <IconButton aria-label="Add pull request" size="small" onClick={() => setIsPrDialogOpen(true)}>
@@ -363,7 +376,7 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
             <Divider sx={{ my: 2 }} />
             <UmtAddManualFilesSection
               updateId={id}
-              disabled={isBusy}
+              disabled={isLocked}
               files={shownManualFiles}
               onFilesChange={setManualFiles}
               bundlesInfoChanges={shownBundlesInfoChanges}
@@ -375,7 +388,7 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
 
         <Stack direction="row" spacing={2} sx={{ alignItems: "center", justifyContent: "flex-end", mt: 3 }}>
           {isBusy && <CircularProgress size={22} />}
-          {updateType !== "instructionsOnlyUpdate" && (
+          {!isInstructionsOnly && (
             <Stack sx={{ flex: 1, minWidth: 0 }}>
               {startAnalysis.isPending ? (
                 <Typography variant="body2" color="text.primary">
@@ -390,25 +403,29 @@ export default function UmtPrAnalysisStep({ id, update }: { id: string; update: 
               )}
             </Stack>
           )}
-          <Button
-            variant="contained"
-            disabled={analyzeDisabled || isPrAnalyzed}
-            loading={startAnalysis.isPending}
-            onClick={handleAnalyzeClick}
-          >
-            Analyze
-          </Button>
+          {isInstructionsOnly ? (
+            isDevelopment && proceedButton
+          ) : (
+            <Button
+              variant="contained"
+              disabled={analyzeDisabled || isPrAnalyzed || proceed.isPending}
+              loading={startAnalysis.isPending}
+              onClick={handleAnalyzeClick}
+            >
+              Analyze
+            </Button>
+          )}
         </Stack>
         <Divider sx={{ mt: 3 }} />
       </Box>
 
-      {isCompleted && pullRequestAnalysis.data && <UmtPrAnalysisResults result={pullRequestAnalysis.data} />}
+      {isCompleted && !isInstructionsOnly && pullRequestAnalysis.data && (
+        <UmtPrAnalysisResults result={pullRequestAnalysis.data} />
+      )}
 
-      {isDevelopment && isCompleted && (
+      {isDevelopment && isCompleted && !isInstructionsOnly && (
         <Stack direction="row" sx={{ justifyContent: "flex-end" }}>
-          <Button variant="contained" loading={proceed.isPending} onClick={handleProceedClick}>
-            Proceed
-          </Button>
+          {proceedButton}
         </Stack>
       )}
 

@@ -18,11 +18,12 @@
 // in Development, and locked above the product analysis once PRAnalyzed.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { UmtUpdateSummary } from "../../../api/umtUpdates";
 
 const state = vi.hoisted(() => ({
   status: "COMPLETED" as string | undefined,
+  proceedMutateAsync: vi.fn(async () => undefined),
 }));
 
 vi.mock("../../../api/useUmtUpdateViewData", () => ({
@@ -47,7 +48,7 @@ vi.mock("../../../api/useUmtPrAnalysis", () => ({
   UmtPartialProceedError: class extends Error {},
   useUmtPrAnalysisStatus: () => ({ data: state.status }),
   useUmtStartPullRequestAnalysis: () => ({ isPending: false, mutateAsync: vi.fn() }),
-  useUmtProceedFromPrAnalysis: () => ({ isPending: false, mutateAsync: vi.fn() }),
+  useUmtProceedFromPrAnalysis: () => ({ isPending: false, mutateAsync: state.proceedMutateAsync }),
   useUmtUploadPullRequestAnalysisFile: () => ({ isPending: false, mutateAsync: vi.fn() }),
 }));
 
@@ -70,6 +71,7 @@ describe("UmtPrAnalysisStep", () => {
   beforeEach(() => {
     localStorage.clear();
     state.status = "COMPLETED";
+    state.proceedMutateAsync.mockClear();
   });
 
   it("shows the inputs, results and Proceed in Development once the analysis is completed", () => {
@@ -132,5 +134,27 @@ describe("UmtPrAnalysisStep", () => {
 
     expect(screen.getByText("PR Analysis can only be done in Development.")).toBeInTheDocument();
     expect(screen.queryByText("Update Type")).not.toBeInTheDocument();
+  });
+
+  it("proceeds an Instructions Only update straight away, without Analyze, results or the files warning", () => {
+    renderStep("Development");
+
+    fireEvent.click(screen.getByLabelText("Instructions Only Update"));
+
+    expect(screen.queryByRole("button", { name: "Analyze" })).toBeNull();
+    expect(screen.queryByText("PR analysis results")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Proceed" }));
+
+    expect(screen.queryByText("Added and Modified Files")).toBeNull();
+    expect(state.proceedMutateAsync).toHaveBeenCalledWith({ isInstructionsOnly: true });
+  });
+
+  it("shows no Analyze, Proceed or results for an Instructions Only update in PRAnalyzed", () => {
+    renderStep("PRAnalyzed", { isInstructionsOnly: true });
+
+    expect(screen.queryByRole("button", { name: "Analyze" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Proceed" })).toBeNull();
+    expect(screen.queryByText("PR analysis results")).toBeNull();
   });
 });
