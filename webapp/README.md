@@ -66,7 +66,7 @@ env vars use the `ONE_WSO2_` prefix (`vite.config.ts`).
 | `ONE_WSO2_ASGARDEO_MYACCOUNT_URL` | optional; defaults to the auth base URL with `api.` swapped for `myaccount.` | |
 | `ONE_WSO2_THEME` | `wso2` (default), `acrylicOrange`, `acrylicPurple`, `classic`, `highContrast`, `paleIndigo`, `paleGray` | `wso2` |
 | `ONE_WSO2_IDLE_AUTO_SIGN_OUT` | optional; `true` signs out 30 minutes after inactivity instead of waiting at the idle prompt | `false` |
-| `ONE_WSO2_PREVIEW_FEATURES` | features built but not released; absent or `false` hides them | `{ <feature>: true }` |
+| `ONE_WSO2_PREVIEW_FEATURES` | features built but not released; absent or `false` hides them | `{ infra: false }` |
 
 ### Feature backends
 

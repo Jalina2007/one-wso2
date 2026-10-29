@@ -24,7 +24,7 @@
  * branching the build or holding work out of `main`.
  *
  * ```js
- * ONE_WSO2_PREVIEW_FEATURES: { <feature>: true },
+ * ONE_WSO2_PREVIEW_FEATURES: { infra: true },
  * ```
  *
  * ## Absent means off
