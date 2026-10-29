@@ -14,16 +14,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { HouseIcon } from "@wso2/oxygen-ui-icons-react";
 
 // When the rail asks UMT for the caller's roles. UMT's rows live inside
-// Engineering behind the `umt` flag, so its /update/user-info is asked only
-// while Engineering is open and the `umt` flag is on — never with UMT
-// switched off, and never from another perspective.
+// Engineering, so its /update/user-info is asked only while Engineering is
+// open — never from another perspective.
 
 const asked = { enabled: [] as boolean[] };
 vi.mock("@features/umt/api/useUmtGate", async (importOriginal) => ({
@@ -131,11 +130,6 @@ function withQueries() {
 
 const { usePerspectiveVisibility } = await import("@components/side-rail/usePerspectiveVisibility");
 
-const originalConfig = window.config;
-function withFlags(flags: { umt?: boolean }) {
-  window.config = { ...(originalConfig ?? {}), ONE_WSO2_PREVIEW_FEATURES: flags } as Window["config"];
-}
-
 /** Whether rendering the rail asked UMT for the caller's roles. */
 function asksUmt(): boolean {
   asked.enabled = [];
@@ -146,23 +140,13 @@ function asksUmt(): boolean {
 beforeEach(() => {
   active.key = "engineering";
 });
-afterEach(() => {
-  window.config = originalConfig;
-});
 
 describe("the rail asking UMT for roles", () => {
-  it("asks on Engineering when the umt flag is on", () => {
-    withFlags({ umt: true });
+  it("asks on Engineering", () => {
     expect(asksUmt()).toBe(true);
   });
 
-  it("asks nothing with the umt flag off", () => {
-    withFlags({ umt: false });
-    expect(asksUmt()).toBe(false);
-  });
-
   it("asks nothing from another perspective", () => {
-    withFlags({ umt: true });
     active.key = "finance";
     expect(asksUmt()).toBe(false);
   });

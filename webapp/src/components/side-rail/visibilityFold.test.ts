@@ -322,26 +322,29 @@ describe("claimsForPerspective", () => {
     }
   });
 
-  it("covers infra and shipped Engineering with UMT when those flags are on, and promotion regardless", async () => {
+  // UMT's rows sit in Engineering, so UMT's gate must be in play there or
+  // every UMT row is hidden.
+  it("covers Engineering with UMT, which is not a perspective of its own", () => {
+    expect(PERSPECTIVES.map((perspective) => perspective.key)).not.toContain("umt");
+    const engineering = PERSPECTIVES.find((perspective) => perspective.key === "engineering");
+    expect(sectionIdsIn(engineering?.sections ?? []).has("umt-products")).toBe(true);
+    expect(claimsForPerspective("engineering")).toEqual(expect.arrayContaining(["engineering", "umt"]));
+  });
+
+  it("covers infra when its flag is on, and promotion regardless", async () => {
     const previous = window.config;
     vi.resetModules();
     window.config = {
       ...(previous ?? {}),
-      ONE_WSO2_PREVIEW_FEATURES: { infra: true, umt: true },
+      ONE_WSO2_PREVIEW_FEATURES: { infra: true },
     } as Window["config"];
     const { PERSPECTIVES: flagged } = await import("@constants/perspectives");
     const fold = await import("./visibilityFold");
     const keys = flagged.map((perspective) => perspective.key);
     expect(keys).toEqual(expect.arrayContaining(["infra", "engineering"]));
-    expect(keys).not.toContain("umt");
     const people = flagged.find((perspective) => perspective.key === "people");
     expect(fold.sectionIdsIn(people?.sections ?? []).has("promotion-lead-portal")).toBe(true);
     expect(fold.claimsForPerspective("people")).toContain("promotion");
-    // UMT's admin row sits in Engineering now, so UMT's gate must be in play
-    // there or Product Management falls through to "visible to everyone".
-    const engineering = flagged.find((perspective) => perspective.key === "engineering");
-    expect(fold.sectionIdsIn(engineering?.sections ?? []).has("umt-products")).toBe(true);
-    expect(fold.claimsForPerspective("engineering")).toEqual(expect.arrayContaining(["engineering", "umt"]));
 
     const names = [
       "par",

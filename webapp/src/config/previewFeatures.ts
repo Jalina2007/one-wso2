@@ -24,7 +24,7 @@
  * branching the build or holding work out of `main`.
  *
  * ```js
- * ONE_WSO2_PREVIEW_FEATURES: { umt: true },
+ * ONE_WSO2_PREVIEW_FEATURES: { <feature>: true },
  * ```
  *
  * ## Absent means off
@@ -54,14 +54,6 @@
  * rather than a feature that is silently never enabled anywhere.
  */
 export type PreviewFeature =
-  /**
-   * Engineering → UMT, the whole app — its rail group and every route under
-   * `/engineering/umt`. Engineering itself is shipped; this flag only hides
-   * UMT. Held back as a whole inside Engineering.
-   * `useUmtGate`'s own role check against the UMT backend is unrelated and
-   * keeps working the same regardless of this flag.
-   */
-  | "umt"
   /* The whole Infra Portal perspective. Still being ported, so the waffle
    * tile, landing option, and `/infra` route stay hidden until this is on.
    */

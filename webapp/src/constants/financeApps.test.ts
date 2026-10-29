@@ -19,7 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * `umt`/`infra` elsewhere still gate on `window.config`, so tests across this
+ * `infra` elsewhere still gates on `window.config`, so tests across this
  * area import fresh per state rather than at the top of the file. Nothing
  * left in this particular registry reads the flag anymore, but the helper
  * costs nothing to keep.

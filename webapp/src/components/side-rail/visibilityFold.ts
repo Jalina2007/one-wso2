@@ -242,11 +242,7 @@ export function claimsForPerspective(perspectiveKey: string): AdapterName[] {
   if (perspectiveKey === "sales" && isPreviewEnabled("cado2")) names.push("cado2");
   if (perspectiveKey === "people" || perspectiveKey === "me") names.push("promotion");
   if (perspectiveKey === "security") names.push("security");
-  if (perspectiveKey === "engineering") names.push("engineering");
-  // UMT's rows exist only while its preview flag is on, same as CadO2.
-  // Asking its /update/user-info when they are absent holds the Engineering
-  // landing on a backend that has nothing to show.
-  if (perspectiveKey === "engineering" && isPreviewEnabled("umt")) names.push("umt");
+  if (perspectiveKey === "engineering") names.push("engineering", "umt");
   names.push("subscriptions");
   return names;
 }

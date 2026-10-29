@@ -799,8 +799,7 @@ export const PERSPECTIVES: readonly PerspectiveDef[] = [
   // the perspective the way MIS is inside Finance — its own registry
   // (downloadStatsApps.ts), one rail row, screens in a tab bar — because its
   // Admin screen is gated by the Download Stats API's own user-info, not by
-  // `requires`. UMT is the second app, and only while its own preview flag
-  // is on. Engineering itself is shipped.
+  // `requires`. UMT is the second app. Engineering itself is shipped.
   {
     key: "engineering",
     label: "Engineering",
@@ -810,7 +809,7 @@ export const PERSPECTIVES: readonly PerspectiveDef[] = [
     forwardsToFirstItem: true,
     sections: [
       ...appsToSections(DOWNLOAD_STATS_APPS),
-      ...(isPreviewEnabled("umt") ? [UMT_SECTION] : []),
+      UMT_SECTION,
     ],
   },
   // Held behind a preview flag, whole perspective and all, until it's ready

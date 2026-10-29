@@ -185,11 +185,11 @@ describe("UMT in the launcher", () => {
   // tile of its own; it is reached through Engineering's. Loaded fresh per
   // state, same as financeApps.test.ts, since the registry is a module-level
   // constant derived from `window.config`.
-  async function renderWithFlags(preview: { umt?: boolean }) {
+  async function renderWithNoFlags() {
     vi.resetModules();
     window.config = {
       ...(window.config ?? {}),
-      ONE_WSO2_PREVIEW_FEATURES: preview,
+      ONE_WSO2_PREVIEW_FEATURES: {},
     } as Window["config"];
     const { default: FreshWaffleOverlay } = await import("@components/waffle/WaffleOverlay");
     const anchor = document.createElement("button");
@@ -201,14 +201,8 @@ describe("UMT in the launcher", () => {
     );
   }
 
-  it("shows the Engineering tile and no UMT tile when the umt flag is on", async () => {
-    await renderWithFlags({ umt: true });
-    expect(screen.getByRole("button", { name: "Switch to Engineering" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /UMT/ })).toBeNull();
-  });
-
   it("shows the Engineering tile with no preview flags set", async () => {
-    await renderWithFlags({});
+    await renderWithNoFlags();
     expect(screen.getByRole("button", { name: "Switch to Engineering" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /UMT/ })).toBeNull();
   });

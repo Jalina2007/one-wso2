@@ -31,7 +31,7 @@ import type { UmtUserInfo } from "./umtTypes";
 //
 // The key includes the Asgardeo subject because switching accounts in the same
 // tab must not reuse the previous person's authorization decision. `enabled`
-// also lets callers avoid hitting UMT until Engineering is open with UMT switched on.
+// also lets callers avoid hitting UMT until Engineering is open.
 //
 // Five minutes matches the other service-owned identity queries: role changes
 // are uncommon, while a remount still corrects a stale decision promptly.
