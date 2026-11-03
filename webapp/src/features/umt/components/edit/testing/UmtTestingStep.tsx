@@ -23,6 +23,7 @@ import {
   FormControl,
   FormControlLabel,
   FormLabel,
+  Link,
   Paper,
   Radio,
   RadioGroup,
@@ -211,11 +212,19 @@ export default function UmtTestingStep({ id, update }: { id: string; update: Umt
           const currentResult = draft?.result ?? row.manualTestResult ?? "";
           const currentComment = draft?.comment ?? row.manualTestComment ?? "";
           const groupLabelId = `manual-test-result-${key}`;
+          const productLabel = `${row.productName ?? "N/A"} - ${row.baseVersion ?? "N/A"}`;
+          const buildUrl = row.buildUrlWithBuildId?.trim();
           return (
             <Paper key={key} variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1.5}>
                 <Typography variant="h6">
-                  {row.productName ?? "N/A"} - {row.baseVersion ?? "N/A"}
+                  {buildUrl ? (
+                    <Link href={buildUrl} target="_blank" rel="noopener noreferrer" underline="hover">
+                      {productLabel}
+                    </Link>
+                  ) : (
+                    productLabel
+                  )}
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
                   <Typography variant="body2" color="text.secondary">
