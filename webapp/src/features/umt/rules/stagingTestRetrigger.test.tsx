@@ -226,7 +226,7 @@ describe("the product heading on the Testing step", () => {
     state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: "https://jenkins.example.com/job/wso2si/12/" }];
     renderStep();
 
-    const link = await screen.findByRole("link", { name: "wso2si - 4.3.1" });
+    const link = await screen.findByRole("link", { name: "wso2si - 4.3.1 (staging build, opens in a new tab)" });
     expect(link).toHaveAttribute("href", "https://jenkins.example.com/job/wso2si/12/");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -234,6 +234,14 @@ describe("the product heading on the Testing step", () => {
 
   it("is plain text when the build URL is blank", async () => {
     state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: " " }];
+    renderStep();
+
+    await screen.findByText("wso2si - 4.3.1");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("is plain text when the build URL is not http or https", async () => {
+    state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: "javascript:alert(1)" }];
     renderStep();
 
     await screen.findByText("wso2si - 4.3.1");

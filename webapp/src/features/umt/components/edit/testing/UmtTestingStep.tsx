@@ -213,13 +213,20 @@ export default function UmtTestingStep({ id, update }: { id: string; update: Umt
           const currentComment = draft?.comment ?? row.manualTestComment ?? "";
           const groupLabelId = `manual-test-result-${key}`;
           const productLabel = `${row.productName ?? "N/A"} - ${row.baseVersion ?? "N/A"}`;
-          const buildUrl = row.buildUrlWithBuildId?.trim();
+          const rawBuildUrl = row.buildUrlWithBuildId?.trim();
+          const buildUrl = rawBuildUrl && /^https?:\/\//i.test(rawBuildUrl) ? rawBuildUrl : undefined;
           return (
             <Paper key={key} variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1.5}>
                 <Typography variant="h6">
                   {buildUrl ? (
-                    <Link href={buildUrl} target="_blank" rel="noopener noreferrer" underline="hover">
+                    <Link
+                      href={buildUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      underline="hover"
+                      aria-label={`${productLabel} (staging build, opens in a new tab)`}
+                    >
                       {productLabel}
                     </Link>
                   ) : (
