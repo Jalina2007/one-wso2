@@ -56,6 +56,19 @@ interface Draft {
   comment: string;
 }
 
+// The build URL to link to, or undefined when it is blank, does not parse, or
+// is not http(s) — the heading then stays plain text.
+function linkableBuildUrl(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  try {
+    const { protocol } = new URL(trimmed);
+    return protocol === "http:" || protocol === "https:" ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function emptyStateMessage(lifecycleState: UmtLifecycleState | undefined): { severity: "info" | "error"; text: string } {
   switch (lifecycleState) {
     case "TestingEnvironmentRequested":
@@ -213,8 +226,7 @@ export default function UmtTestingStep({ id, update }: { id: string; update: Umt
           const currentComment = draft?.comment ?? row.manualTestComment ?? "";
           const groupLabelId = `manual-test-result-${key}`;
           const productLabel = `${row.productName ?? "N/A"} - ${row.baseVersion ?? "N/A"}`;
-          const rawBuildUrl = row.buildUrlWithBuildId?.trim();
-          const buildUrl = rawBuildUrl && /^https?:\/\//i.test(rawBuildUrl) ? rawBuildUrl : undefined;
+          const buildUrl = linkableBuildUrl(row.buildUrlWithBuildId);
           return (
             <Paper key={key} variant="outlined" sx={{ p: 2 }}>
               <Stack spacing={1.5}>

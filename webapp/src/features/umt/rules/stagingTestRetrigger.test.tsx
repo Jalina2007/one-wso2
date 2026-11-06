@@ -247,6 +247,14 @@ describe("the product heading on the Testing step", () => {
     await screen.findByText("wso2si - 4.3.1");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
+
+  it("is plain text when the build URL does not parse", async () => {
+    state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: "https://jenkins.example.com:bad-port/job/12/" }];
+    renderStep();
+
+    await screen.findByText("wso2si - 4.3.1");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
 });
 
 describe("which automated results can be retriggered", () => {
