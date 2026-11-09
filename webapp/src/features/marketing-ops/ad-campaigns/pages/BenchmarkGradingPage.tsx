@@ -558,26 +558,26 @@ function CampaignsView({
         </Typography>
       ) : (
         <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, maxHeight: 560, overflow: "auto" }}>
-          <Table size="small" stickyHeader sx={{ tableLayout: "fixed", minWidth: 1200 }}>
+          <Table size="small" stickyHeader sx={{ minWidth: 1500 }}>
             <TableHead>
               <TableRow sx={{ bgcolor: "background.default" }}>
                 <SortHeader k="name" label="Campaign" {...sortProps} />
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: 44 }}>Pf</TableCell>
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: 88 }}>Owner</TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Pf</TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Owner</TableCell>
                 <SortHeader k="spend" label="Spend" align="right" {...sortProps} />
                 <SortHeader k="impressions" label="Impr" align="right" {...sortProps} />
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 60 }}>Clicks</TableCell>
+                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Clicks</TableCell>
                 <SortHeader k="ctr" label="CTR" align="right" {...sortProps} />
                 <SortHeader k="cpc" label="CPC" align="right" {...sortProps} />
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: 90 }}>Judged on</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 68 }}>Actual</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 68 }}>Bench</TableCell>
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: 72 }}>Cost on</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 68 }}>Actual</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 68 }}>Bench</TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Judged on</TableCell>
+                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Actual</TableCell>
+                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Bench</TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Cost on</TableCell>
+                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Actual</TableCell>
+                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Bench</TableCell>
                 <SortHeader k="index" label="Index" align="right" {...sortProps} />
                 <SortHeader k="grade" label="Result" {...sortProps} />
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: "16%" }}>Why</TableCell>
+                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", minWidth: 300 }}>Why</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -615,14 +615,14 @@ function CampaignsView({
 
                 return (
                   <TableRow key={l.id} hover>
-                    <TableCell sx={{ fontSize: 12 }}>
+                    <TableCell sx={{ fontSize: 12, minWidth: 220 }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                         <Box
                           component="span"
                           sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: l.is_live ? GRADE_HEX["At benchmark"] : "divider", flexShrink: 0 }}
                         />
                         <Tooltip title={l.name}>
-                          <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200, display: "block" }}>
+                          <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260, display: "block" }}>
                             {l.name}
                           </Box>
                         </Tooltip>
@@ -645,7 +645,7 @@ function CampaignsView({
                         {l.platform === "google" ? "Ggl" : "LI"}
                       </Box>
                     </TableCell>
-                    <TableCell sx={{ fontSize: 11.5, color: "text.secondary", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <TableCell sx={{ fontSize: 11.5, color: "text.secondary", whiteSpace: "nowrap" }}>
                       {l.owner ?? "—"}
                     </TableCell>
                     <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{fmtMoney(l.spend)}</TableCell>
