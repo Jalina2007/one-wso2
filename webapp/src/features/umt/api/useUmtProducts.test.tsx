@@ -68,6 +68,18 @@ describe("useUmtBaseProducts", () => {
 
     expect(authedGet).toHaveBeenCalledWith(umtServiceUrls.baseProducts, "token");
   });
+
+  it("fetches the catalog again when the page opens again, even with a cached copy", async () => {
+    // The app turns automatic refetching off; this override must win over it.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnMount: false } } });
+    const first = renderHook(() => useUmtBaseProducts(), { wrapper: wrapper(client) });
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    first.unmount();
+
+    renderHook(() => useUmtBaseProducts(), { wrapper: wrapper(client) });
+
+    await waitFor(() => expect(authedGet).toHaveBeenCalledTimes(2));
+  });
 });
 
 describe("useUmtCreateProduct", () => {
