@@ -59,6 +59,10 @@ import type {
   RoiOptions,
   RoiReport,
 } from "../ad-campaigns/analytics/adAnalyticsTypes";
+import type {
+  BenchmarkGradingReport,
+  BenchmarkGradingRequest,
+} from "../ad-campaigns/benchmark-grading/benchmarkGradingTypes";
 
 // Campaign ROI is the ad-spend ↔ Salesforce join keyed on utm_campaign. Google
 // ads carry that value in their destination URL; LinkedIn ads don't expose one,
@@ -217,6 +221,18 @@ export function useLinkedInRoiReport(platform: AdPlatform, window: DateWindow) {
     { config: linkedInRoiConfig(window) },
     platform === "linkedin" && windowReady(window),
     (r) => throwIfReportFailed(r, url, "Report generation failed"),
+  );
+}
+
+// POST /benchmark-grading/run — raw campaign lines for the benchmark grading
+// page. Grading is computed entirely client-side from the returned lines; nothing
+// is stored. The same POST-as-read pattern as the analytics siblings above.
+export function useBenchmarkGrading(window: DateWindow) {
+  return usePostReport<BenchmarkGradingRequest, BenchmarkGradingReport>(
+    ["marketing-ops", "ad-analytics", "benchmark-grading", window],
+    marketingOpsServiceUrls.benchmarkGradingRun,
+    { window },
+    windowReady(window),
   );
 }
 

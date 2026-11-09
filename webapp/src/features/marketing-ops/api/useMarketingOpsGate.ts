@@ -61,6 +61,7 @@ const ITEM_CAPABILITY: Record<
   // Phase 2
   "mops-ad-analytics": "adcampaigns",
   "mops-campaign-tracker": "adcampaigns",
+  "mops-benchmark-grading": "adcampaigns",
   // Phase 3
   "mops-email-create": "emailworkbench",
   "mops-email-history": "emailworkbench",
