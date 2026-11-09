@@ -47,16 +47,15 @@ export function useUmtBaseProducts() {
   return foldIdentityError(query, subState, retryIdentity);
 }
 
+// Only queues the product for onboarding. The base product row is written
+// later, when the scheduled onboarding job adds the product, so the catalog is
+// not refetched here: it would come back unchanged.
 export function useUmtCreateProduct() {
   const getAccessToken = useAccessToken();
-  const queryClient = useQueryClient();
 
   return useMutation<void, Error, UmtCreateProductRequest>({
     mutationFn: async (request) => {
       await authedPost<void>(umtServiceUrls.createBaseProduct, await getAccessToken(), request);
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: [BASE_PRODUCTS_QUERY_KEY] });
     },
   });
 }
