@@ -95,7 +95,7 @@ const LBM_COST_UNIT: Record<typeof LBM_OBJECTIVES[number], string> = {
   "Brand Awareness": "CPM ($)",
 };
 
-function LbmTable({ bm }: Pick<UseBenchmarkTablesResult, "setLbmCell"> & { bm: UseBenchmarkTablesResult }) {
+function LbmTable({ bm }: { bm: UseBenchmarkTablesResult }) {
   return (
     <Box sx={{ overflowX: "auto" }}>
       <Box
