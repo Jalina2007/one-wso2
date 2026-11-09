@@ -63,7 +63,6 @@ import {
 import { BuOwnersPanel } from "../campaign-tracker/components/BuOwnersPanel";
 import { BudgetSyncPanel } from "../campaign-tracker/components/BudgetSyncPanel";
 import { BudgetSyncPacingPanel } from "../campaign-tracker/components/BudgetSyncPacingPanel";
-import { isPreviewEnabled } from "@config/previewFeatures";
 import { AD_PLATFORMS, AdPlatform, registerFlag } from "../campaign-tracker/campaignTrackerTypes";
 import type { CampaignRegisterRow, WeeklyLogRow, BudgetPacingRow } from "../campaign-tracker/campaignTrackerTypes";
 import {
@@ -88,11 +87,9 @@ import {
 
 type Tab = "Pacing" | "Register" | "Weekly Log" | "Budget Pacing" | "BU Owners" | "Budget Sync";
 
-const pacingEnabled = isPreviewEnabled("campaignTrackerPacing");
-
 const TRACKER_LOADING_MESSAGES = ["Loading campaigns…", "Loading change history…", "Loading budget pacing…", "Almost there…"] as const;
 
-const ALL_TABS: { label: Tab; icon: React.ReactNode }[] = [
+const TABS: { label: Tab; icon: React.ReactNode }[] = [
   { label: "Pacing", icon: <Gauge size={16} /> },
   { label: "Register", icon: <List size={16} /> },
   { label: "Weekly Log", icon: <NotebookPen size={16} /> },
@@ -100,8 +97,6 @@ const ALL_TABS: { label: Tab; icon: React.ReactNode }[] = [
   { label: "BU Owners", icon: <Users size={16} /> },
   { label: "Budget Sync", icon: <WalletCards size={16} /> },
 ];
-
-const TABS = ALL_TABS.filter((t) => t.label !== "Pacing" || pacingEnabled);
 
 // Segmented platform switch — same ToggleChip primitive as the sibling
 // Analytics tab's platform selector.
@@ -238,7 +233,7 @@ function mergePlatformSlice<T extends { platform: AdPlatform }>(all: T[], platfo
 }
 
 export default function CampaignTrackerPage() {
-  const [activeTab, setActiveTab] = useState<Tab>(pacingEnabled ? "Pacing" : "Register");
+  const [activeTab, setActiveTab] = useState<Tab>("Pacing");
   // Pacing, BU Owners and Budget Sync fetch their own data, so the Register/
   // Weekly Log/Budget Pacing chrome above the tab bar (platform toggle,
   // filters, stat strip, tracker loading/error) doesn't apply to them.
