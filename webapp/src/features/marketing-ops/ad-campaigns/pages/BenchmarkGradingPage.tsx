@@ -16,205 +16,183 @@
 
 // Ad Campaigns → Benchmark Grading.
 //
-// Structure matches the HTML pacing dashboard's `benchView()` function exactly:
-//   • 6 summary cards (Spend graded, At benchmark, % of spend, % of campaigns, CTR, CPC)
-//   • Stacked spend bar with inline segment labels
-//   • Platform toggle: Both platforms / LinkedIn only / Google only
-//   • Cohort filter: All ad sets / Launched in period / Carried over / No launch date
-//   • `.tgl` bar: grade letter toggles (A/B/C/D/F + Ungraded) + search input
-//   • By budget line cross-table (clickable rows filter the campaign table)
-//   • 17-column campaign table: Campaign, Pf, Owner, Spend, Impr, Clicks, CTR, CPC,
-//     Judged on, Actual, Bench, Cost on, Actual, Bench, Index, Result, Why
+// Every campaign scored on one conversion metric and one cost metric against
+// WSO2's benchmarks (rules in benchmarkGradingLogic.ts). The page:
+//   • Controls — period, basis (live/all), platform, cohort, benchmark editor
+//   • Summary — spend graded, spend at benchmark, % of spend / campaigns, CTR, CPC
+//   • Spend against benchmark — spend by grade
+//   • By budget line — click a row to filter the campaigns table
+//   • Campaigns — grade-letter filter + search over the graded campaigns
 //
-// Grading thresholds (benchmark-grading spec 2026.10, §7):
-//   index = √(conversionRatio × costRatio), each ratio capped 0.1×–4×
-//   At benchmark ≥ 0.80 · Optimize ≥ 0.80 (but cost lags) · Below < 0.80
-//   Letter grades: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D < 0.50 (no Close band, no F)
+// Built from the same pieces as Analytics and Campaign Tracker (FieldLabel,
+// ToggleChip, StatCard, SectionTitle, TintChip) so the three screens match.
 
-import { useMemo, useState } from "react";
-import { BenchmarkEditorPanel } from "../benchmark-grading/BenchmarkEditorPanel";
-import { useBenchmarkTables } from "../benchmark-grading/useBenchmarkTables";
+import { useMemo, useState, type ReactNode } from "react";
 import {
-  alpha,
   Alert,
   Box,
-  CircularProgress,
   IconButton,
+  InputAdornment,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
+  TableSortLabel,
+  TextField,
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { RefreshCw } from "@wso2/oxygen-ui-icons-react";
+import { RefreshCw, SearchIcon } from "@wso2/oxygen-ui-icons-react";
 import { describeError } from "@api/errors";
 import { MARKETING_OPS_EYEBROW } from "@constants/marketingOpsApps";
 import MarketingOpsShell from "../../components/MarketingOpsShell";
-import { ToggleChip } from "../analytics/components/AnalyticsPrimitives";
+import { FieldLabel, ReportLoading, SectionTitle, StatCard, ToggleChip } from "../analytics/components/AnalyticsPrimitives";
 import DateRangePicker from "../analytics/components/DateRangePicker";
+import { NUMERIC, TintChip } from "../campaign-tracker/components/campaignTrackerPrimitives";
+import { RowCount } from "../campaign-tracker/components/FilterControls";
+import { useTonePalette } from "../campaign-tracker/useBudgetSyncColors";
+import { BenchmarkEditorPanel } from "../benchmark-grading/BenchmarkEditorPanel";
+import { useBenchmarkTables } from "../benchmark-grading/useBenchmarkTables";
 import { useBenchmarkGrading } from "../../api/useAdAnalytics";
 import {
-  gradeAllWith,
   buildBoardRows,
-  summarize,
+  fmtIndex,
   fmtMoney,
   fmtPct,
-  fmtIndex,
-  GRADE_HEX,
+  gradeAllWith,
+  summarize,
 } from "../benchmark-grading/benchmarkGradingLogic";
 import type {
-  DateWindow,
-  GradedCampaignLine,
   BenchmarkBoardRow,
   BenchmarkGrade,
+  DateWindow,
+  GradedCampaignLine,
   LetterGrade,
 } from "../benchmark-grading/benchmarkGradingTypes";
 
-// ─── Color helpers ────────────────────────────────────────────────────────────
+// ─── Types and constants ─────────────────────────────────────────────────────
 
-const LETTER_COLOR: Record<LetterGrade, string> = {
-  A: GRADE_HEX["At benchmark"],
-  B: GRADE_HEX["At benchmark"],
-  C: GRADE_HEX["Below"],
-  D: GRADE_HEX["Below"],
-  "": GRADE_HEX["Too little data"],
-};
+type PlatformFilter = "both" | "linkedin" | "google";
+type CohortFilter = "all" | "launched" | "carriedover" | "nodate";
+type LetterKey = LetterGrade | "ungraded";
+type SortKey = "name" | "spend" | "index" | "grade" | "impressions" | "ctr" | "cpc";
+type GradeColors = Record<BenchmarkGrade, string>;
 
-// ─── Summary cards (.fig style from HTML) ────────────────────────────────────
+const DEFAULT_WINDOW: DateWindow = { mode: "preset", preset: "1m" };
+const ALL_LETTERS: LetterGrade[] = ["A", "B", "C", "D"];
+const ALL_LETTER_KEYS: LetterKey[] = [...ALL_LETTERS, "ungraded"];
+const GRADES: BenchmarkGrade[] = ["At benchmark", "Optimize", "Below", "Too little data"];
+const GRADE_ORDER: Record<BenchmarkGrade, number> = { "At benchmark": 0, Optimize: 1, Below: 2, "Too little data": 3 };
+const LOADING_MESSAGES = ["Loading campaigns…"] as const;
+const TARGET_SHARE = 0.8;
 
-function FigCard({
-  label,
-  value,
-  sub,
-  color,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  color?: string;
-}) {
+// Grade colours from the active theme, so they hold in light and dark mode.
+function useGradeColors(): GradeColors {
+  const tones = useTonePalette();
+  return useMemo(
+    () => ({ "At benchmark": tones.green, Optimize: tones.purple, Below: tones.red, "Too little data": tones.slate }),
+    [tones],
+  );
+}
+
+// Which letter toggle a campaign sits under. "Ungraded" is exactly the "Too little
+// data" band. A lead-gen campaign with zero form opens is Below with no index (spec
+// §6), so it has no letter; it files under D, the bottom of the Below band, so the
+// filter agrees with the totals that count it as Below.
+function letterKey(l: GradedCampaignLine): LetterKey {
+  if (l.grade === "Too little data") return "ungraded";
+  return l.letter || "D";
+}
+
+// ─── Layout pieces ───────────────────────────────────────────────────────────
+
+function ControlGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Box
-      sx={{
-        px: "14px",
-        py: "12px",
-        pb: "13px",
-        bgcolor: "background.paper",
-        minWidth: 140,
-      }}
-    >
-      <Box sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.11em", textTransform: "uppercase", color: "text.secondary", mb: 0.4, fontFamily: "inherit" }}>
-        {label}
-      </Box>
-      <Box
-        sx={{
-          fontSize: 23,
-          fontWeight: 500,
-          letterSpacing: "-0.03em",
-          lineHeight: 1,
-          color: color ?? "text.primary",
-          fontVariantNumeric: "tabular-nums",
-          fontFamily: "monospace",
-        }}
-      >
-        {value}
-      </Box>
-      {sub && (
-        <Box sx={{ fontSize: 10.5, color: "text.disabled", mt: 0.4, fontFamily: "inherit" }}>{sub}</Box>
-      )}
+    <Box>
+      <FieldLabel>{label}</FieldLabel>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>{children}</Box>
     </Box>
   );
 }
 
-// ─── Stacked spend bar (matches HTML `seg()` helper) ─────────────────────────
+function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+  return (
+    <Box component="section">
+      <SectionTitle>{title}</SectionTitle>
+      {hint && <Typography sx={{ fontSize: 12.5, color: "text.secondary", mt: -1, mb: 1.5 }}>{hint}</Typography>}
+      {children}
+    </Box>
+  );
+}
 
-function StackedSpendBar({ graded }: { graded: GradedCampaignLine[] }) {
-  const s = summarize(graded);
-  if (s.spendTotal <= 0) return null;
+const BORDERED = { border: 1, borderColor: "divider", borderRadius: 1.5, overflow: "hidden" } as const;
 
-  const seg = (spend: number, grade: BenchmarkGrade) => {
-    if (spend <= 0) return null;
-    const frac = spend / s.spendTotal;
-    const widthPct = frac * 100;
-    const label = grade;
-    const inner =
-      frac > 0.13
-        ? `${(frac * 100).toFixed(0)}% · ${fmtMoney(spend)}`
-        : frac > 0.055
-        ? `${(frac * 100).toFixed(0)}%`
-        : "";
-    return (
-      <Tooltip key={grade} title={`${label}: ${fmtMoney(spend)}`}>
-        <Box
-          sx={{
-            width: `${widthPct}%`,
-            height: "100%",
-            bgcolor: GRADE_HEX[grade],
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            px: 0.5,
-            overflow: "hidden",
-          }}
+function RefreshButton({ onClick, refreshing }: { onClick: () => void; refreshing: boolean }) {
+  return (
+    <Tooltip title="Refresh — fetch the latest data">
+      <span>
+        <IconButton
+          onClick={onClick}
+          disabled={refreshing}
+          size="small"
+          aria-label="Refresh"
+          sx={{ color: "primary.main", border: 1, borderColor: "divider", borderRadius: 1, "&:hover": { borderColor: "primary.main" } }}
         >
-          {inner && (
-            <Box
-              sx={{
-                fontSize: "0.68rem",
-                fontWeight: 600,
-                color: "rgba(255,255,255,0.9)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                fontFamily: "inherit",
-              }}
-            >
-              {inner}
-            </Box>
-          )}
-        </Box>
-      </Tooltip>
-    );
+          <Box
+            component="span"
+            sx={{
+              display: "inline-flex",
+              ...(refreshing && { animation: "benchmarkGradingSpin 0.8s linear infinite", "@keyframes benchmarkGradingSpin": { to: { transform: "rotate(360deg)" } } }),
+            }}
+          >
+            <RefreshCw size={17} />
+          </Box>
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+}
+
+// ─── Spend against benchmark ─────────────────────────────────────────────────
+
+function SpendBar({ graded, colors }: { graded: GradedCampaignLine[]; colors: GradeColors }) {
+  const s = summarize(graded);
+  if (s.spendTotal <= 0) {
+    return <Typography sx={{ fontSize: 13, color: "text.disabled", p: 2 }}>No spend in this view.</Typography>;
+  }
+  const spendBy: Record<BenchmarkGrade, number> = {
+    "At benchmark": s.spendGood,
+    Optimize: s.spendOpt,
+    Below: s.spendBelow,
+    "Too little data": s.spendNone,
   };
 
-  const TONES: { grade: BenchmarkGrade; spend: number; label: string }[] = [
-    { grade: "At benchmark", spend: s.spendGood, label: "At benchmark" },
-    { grade: "Optimize", spend: s.spendOpt, label: "Optimize" },
-    { grade: "Below", spend: s.spendBelow, label: "Below" },
-    { grade: "Too little data", spend: s.spendNone, label: "Too little data" },
-  ];
-
   return (
-    <Box sx={{ mt: 2 }}>
-      <Box
-        sx={{
-          display: "flex",
-          height: 38,
-          border: "1px solid",
-          borderColor: "divider",
-          overflow: "hidden",
-          borderRadius: "4px",
-        }}
-      >
-        {TONES.map((t) => seg(t.spend, t.grade))}
+    <Box sx={{ p: 2 }}>
+      <Box sx={{ display: "flex", height: 28, borderRadius: 1, overflow: "hidden", bgcolor: "action.hover" }}>
+        {GRADES.filter((g) => spendBy[g] > 0).map((g) => {
+          const frac = spendBy[g] / s.spendTotal;
+          return (
+            <Tooltip key={g} title={`${g}: ${fmtMoney(spendBy[g])} (${fmtPct(frac, 0)})`}>
+              <Box sx={{ width: `${frac * 100}%`, bgcolor: colors[g], display: "flex", alignItems: "center", px: 1, overflow: "hidden" }}>
+                {frac > 0.08 && (
+                  <Typography sx={{ fontSize: 11.5, fontWeight: 700, color: "common.white", whiteSpace: "nowrap", ...NUMERIC }}>
+                    {fmtPct(frac, 0)}
+                  </Typography>
+                )}
+              </Box>
+            </Tooltip>
+          );
+        })}
       </Box>
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: "10px 16px", mt: 0.75 }}>
-        {TONES.map((t) => (
-          <Box key={t.grade} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Box
-              sx={{
-                width: 11,
-                height: 11,
-                borderRadius: "2px",
-                bgcolor: GRADE_HEX[t.grade],
-                flexShrink: 0,
-              }}
-            />
-            <Box sx={{ fontSize: "0.7rem", color: "text.secondary", fontFamily: "inherit" }}>
-              {t.label}
-            </Box>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: "8px 20px", mt: 1.5 }}>
+        {GRADES.map((g) => (
+          <Box key={g} sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: colors[g] }} />
+            <Typography sx={{ fontSize: 12.5, color: "text.secondary" }}>
+              {g} <Box component="span" sx={{ color: "text.primary", fontWeight: 600, ...NUMERIC }}>{fmtMoney(spendBy[g])}</Box>
+            </Typography>
           </Box>
         ))}
       </Box>
@@ -222,156 +200,73 @@ function StackedSpendBar({ graded }: { graded: GradedCampaignLine[] }) {
   );
 }
 
-// ─── Grade letter toggles (.tgl bar) ─────────────────────────────────────────
+// ─── By budget line ──────────────────────────────────────────────────────────
 
-const ALL_LETTERS: LetterGrade[] = ["A", "B", "C", "D"];
-
-// Which letter toggle a campaign sits under. "Ungraded" is exactly the "Too little
-// data" band. A lead-gen campaign with zero form opens is Below with no index (spec
-// §6), so it has no letter; it files under D, the bottom of the Below band, so the
-// filter agrees with the totals that count it as Below.
-function letterKey(l: GradedCampaignLine): LetterGrade | "ungraded" {
-  if (l.grade === "Too little data") return "ungraded";
-  return l.letter || "D";
-}
-
-function LetterToggle({
-  letterOrUngraded,
-  active,
-  count,
-  onClick,
-}: {
-  letterOrUngraded: LetterGrade | "ungraded";
-  active: boolean;
-  count: number;
-  onClick: () => void;
-}) {
-  const color =
-    letterOrUngraded === "ungraded"
-      ? GRADE_HEX["Too little data"]
-      : LETTER_COLOR[letterOrUngraded as LetterGrade];
-  const label = letterOrUngraded === "ungraded" ? "Ungraded" : letterOrUngraded;
-
-  return (
-    <Box
-      component="button"
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      sx={{
-        px: 1,
-        py: 0.4,
-        border: "1.5px solid",
-        borderColor: active ? color : "divider",
-        borderRadius: 1,
-        fontFamily: "inherit",
-        fontSize: 12,
-        fontWeight: 700,
-        bgcolor: active ? color : "transparent",
-        cursor: "pointer",
-        color: active ? "#fff" : color,
-        opacity: active ? 1 : 0.45,
-        textDecoration: active ? "none" : "line-through",
-        transition: "opacity 0.1s",
-        "&:hover": { opacity: 1 },
-      }}
-    >
-      {label}
-      <Box component="span" sx={{ fontWeight: 400, fontSize: 11, ml: 0.4, opacity: active ? 0.75 : 1 }}>({count})</Box>
-    </Box>
-  );
-}
-
-// ─── Platform + cohort filter types (used in state only) ─────────────────────
-
-type PlatformFilter = "both" | "linkedin" | "google";
-type CohortFilter = "all" | "launched" | "carriedover" | "nodate";
-
-// ─── Grade chip — matches HTML `.tag` class: tinted bg + combined grade·letter ──
-
-function GradeChip({ grade, letter }: { grade: BenchmarkGrade; letter: LetterGrade }) {
-  const label = letter ? `${grade} · ${letter}` : grade;
-  return (
-    <Box
-      component="span"
-      sx={{
-        display: "inline-block",
-        px: 0.75,
-        py: 0.2,
-        borderRadius: "4px",
-        fontSize: 11,
-        fontWeight: 700,
-        bgcolor: alpha(GRADE_HEX[grade], 0.12),
-        color: GRADE_HEX[grade],
-        whiteSpace: "nowrap",
-        fontFamily: "inherit",
-      }}
-    >
-      {label}
-    </Box>
-  );
-}
-
-// ─── Summary board (by budget line, matches HTML bmboard) ─────────────────────
-
-function BoardView({
+function BoardTable({
   rows,
-  onSelectOwner,
   selectedOwner,
+  onSelectOwner,
+  colors,
 }: {
   rows: BenchmarkBoardRow[];
-  onSelectOwner: (owner: string | null) => void;
   selectedOwner: string | null;
+  onSelectOwner: (owner: string) => void;
+  colors: GradeColors;
 }) {
   if (rows.length === 0) {
     return (
-      <Typography sx={{ fontSize: "0.78rem", color: "text.secondary", py: 2 }}>
+      <Typography sx={{ fontSize: 13, color: "text.disabled", textAlign: "center", py: 3 }}>
         No campaigns match these filters — change the platform, cohort or basis above.
       </Typography>
     );
   }
+  const shareColor = (v: number | null) => (v === null ? "text.disabled" : v >= TARGET_SHARE ? colors["At benchmark"] : colors.Below);
 
   return (
-    <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
-      <Table size="small" sx={{ tableLayout: "fixed" }}>
+    <Box sx={{ ...BORDERED, overflowX: "auto" }}>
+      <Table size="small" sx={{ minWidth: 640 }}>
         <TableHead>
-          <TableRow sx={{ bgcolor: "background.default" }}>
-            <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: "28%" }}>Budget line</TableCell>
-            <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 90 }}>Spend</TableCell>
-            <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 76, color: GRADE_HEX["At benchmark"] }}>At benchmark</TableCell>
-            <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 55, color: GRADE_HEX["Below"] }}>Below</TableCell>
-            <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 72 }}>% of spend</TableCell>
-            <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 90 }}>% of campaigns</TableCell>
+          <TableRow>
+            <TableCell>Budget line</TableCell>
+            <TableCell align="right">Campaigns</TableCell>
+            <TableCell align="right">Spend</TableCell>
+            <TableCell align="right">At benchmark</TableCell>
+            <TableCell align="right">Below</TableCell>
+            <TableCell align="right">% of spend</TableCell>
+            <TableCell align="right">% of campaigns</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {rows.map((row) => {
-            const isSelected = selectedOwner === row.label;
+            const selected = selectedOwner === row.label;
             return (
               <TableRow
                 key={row.label}
                 hover
-                selected={isSelected}
-                onClick={() => onSelectOwner(isSelected ? null : row.label)}
-                sx={{ cursor: "pointer", "&.Mui-selected": { bgcolor: "action.selected" } }}
+                selected={selected}
+                tabIndex={0}
+                onClick={() => onSelectOwner(row.label)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSelectOwner(row.label);
+                  }
+                }}
+                sx={{ cursor: "pointer", "&:last-child td": { border: 0 } }}
               >
-                <TableCell sx={{ fontSize: 12, fontWeight: isSelected ? 700 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {row.label}
-                  <Box component="span" sx={{ ml: 1, fontSize: 10, color: "text.disabled" }}>
-                    {row.n}
-                  </Box>
-                </TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{fmtMoney(row.spend)}</TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: row.n_at_benchmark > 0 ? GRADE_HEX["At benchmark"] : "text.disabled" }}>
+                <TableCell sx={{ fontWeight: selected ? 700 : 500 }}>{row.label}</TableCell>
+                <TableCell align="right" sx={NUMERIC}>{row.n}</TableCell>
+                <TableCell align="right" sx={NUMERIC}>{fmtMoney(row.spend)}</TableCell>
+                <TableCell align="right" sx={{ ...NUMERIC, color: row.n_at_benchmark > 0 ? colors["At benchmark"] : "text.disabled", fontWeight: 600 }}>
                   {row.n_at_benchmark}
                 </TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: row.n_below > 0 ? GRADE_HEX["Below"] : "text.disabled" }}>
+                <TableCell align="right" sx={{ ...NUMERIC, color: row.n_below > 0 ? colors.Below : "text.disabled", fontWeight: 600 }}>
                   {row.n_below}
                 </TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>
+                <TableCell align="right" sx={{ ...NUMERIC, color: shareColor(row.pct_spend), fontWeight: 600 }}>
                   {row.pct_spend !== null ? fmtPct(row.pct_spend) : "—"}
                 </TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>
+                <TableCell align="right" sx={{ ...NUMERIC, color: shareColor(row.pct_camp), fontWeight: 600 }}>
                   {row.pct_camp !== null ? fmtPct(row.pct_camp) : "—"}
                 </TableCell>
               </TableRow>
@@ -379,20 +274,11 @@ function BoardView({
           })}
         </TableBody>
       </Table>
-    </TableContainer>
+    </Box>
   );
 }
 
-// ─── Campaigns table (17 columns matching HTML benchtbl) ──────────────────────
-
-type SortKey = "name" | "spend" | "index" | "grade" | "impressions" | "ctr" | "cpc";
-
-const GRADE_ORDER: Record<BenchmarkGrade, number> = {
-  "At benchmark": 0,
-  Optimize: 1,
-  Below: 2,
-  "Too little data": 3,
-};
+// ─── Campaigns ───────────────────────────────────────────────────────────────
 
 function SortHeader({
   k,
@@ -406,356 +292,271 @@ function SortHeader({
   label: string;
   align?: "left" | "right";
   sortKey: SortKey;
-  sortDir: 1 | -1;
+  sortDir: "asc" | "desc";
   onSort: (k: SortKey) => void;
 }) {
   const active = sortKey === k;
   return (
-    <TableCell
-      align={align}
-      onClick={() => onSort(k)}
-      sx={{
-        cursor: "pointer",
-        fontSize: 11.5,
-        fontWeight: 700,
-        userSelect: "none",
-        color: active ? "primary.main" : "text.primary",
-        whiteSpace: "nowrap",
-        "&:hover": { color: "primary.main" },
-      }}
-    >
-      {label}{active ? (sortDir > 0 ? " ▲" : " ▼") : ""}
+    <TableCell align={align} sortDirection={active ? sortDir : false} sx={{ whiteSpace: "nowrap" }}>
+      <TableSortLabel active={active} direction={active ? sortDir : "asc"} onClick={() => onSort(k)}>
+        {label}
+      </TableSortLabel>
     </TableCell>
   );
 }
 
-function CampaignsView({
+// The actual conversion and cost values a campaign was judged on, derived from
+// the raw line using the metric names the grading picked.
+function actuals(l: GradedCampaignLine): { conv: number | null; cost: number | null } {
+  const ctr = l.impressions > 0 ? l.clicks / l.impressions : null;
+  let conv: number | null = null;
+  if (l.conversion_metric_name === "CTR") conv = ctr;
+  else if (l.conversion_metric_name === "Form completion") conv = (l.form_opens ?? 0) > 0 ? (l.leads ?? 0) / l.form_opens! : null;
+  else if (l.conversion_metric_name === "Open rate") conv = (l.sends ?? 0) > 0 ? (l.message_opens ?? 0) / l.sends! : null;
+
+  let cost: number | null = null;
+  if (l.cost_metric_name === "CPC") cost = l.clicks > 0 ? l.spend / l.clicks : null;
+  else if (l.cost_metric_name === "CPL") cost = (l.leads ?? 0) > 0 ? l.spend / l.leads! : null;
+  else if (l.cost_metric_name === "CPM") cost = l.impressions > 0 ? (l.spend / l.impressions) * 1000 : null;
+  else if (l.cost_metric_name === "Cost per click") cost = (l.message_clicks ?? 0) > 0 ? l.spend / l.message_clicks! : null;
+  return { conv, cost };
+}
+
+function CampaignsTable({
   rows,
   ownerFilter,
+  onClearOwner,
   letterFilter,
   setLetterFilter,
   query,
   setQuery,
+  colors,
 }: {
   rows: GradedCampaignLine[];
   ownerFilter: string | null;
-  letterFilter: Set<LetterGrade | "ungraded">;
-  setLetterFilter: (s: Set<LetterGrade | "ungraded">) => void;
+  onClearOwner: () => void;
+  letterFilter: Set<LetterKey>;
+  setLetterFilter: (s: Set<LetterKey>) => void;
   query: string;
   setQuery: (v: string) => void;
+  colors: GradeColors;
 }) {
+  const tones = useTonePalette();
   const [sortKey, setSortKey] = useState<SortKey>("grade");
-  const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir((d) => (d === 1 ? -1 : 1));
-    else { setSortKey(key); setSortDir(1); }
-  }
+  const onSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir("asc");
+    }
+  };
 
-  // Letter counts over all rows (not just filtered) for toggle display
   const letterCounts = useMemo(() => {
-    const c: Record<LetterGrade | "ungraded", number> = { A: 0, B: 0, C: 0, D: 0, "": 0, ungraded: 0 };
+    const c: Record<LetterKey, number> = { A: 0, B: 0, C: 0, D: 0, "": 0, ungraded: 0 };
     for (const r of rows) c[letterKey(r)]++;
     return c;
   }, [rows]);
 
-  function toggleLetter(key: LetterGrade | "ungraded") {
+  const toggleLetter = (k: LetterKey) => {
     const next = new Set(letterFilter);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    if (next.has(k)) next.delete(k);
+    else next.add(k);
     setLetterFilter(next);
-  }
+  };
 
   const filtered = useMemo(() => {
-    let r = rows;
-    if (ownerFilter) r = r.filter((l) => (l.owner ?? "Unknown") === ownerFilter);
-    if (query) r = r.filter((l) => l.name.toLowerCase().includes(query.toLowerCase()));
-    r = r.filter((l) => letterFilter.has(letterKey(l)));
+    const q = query.trim().toLowerCase();
+    const r = rows.filter(
+      (l) =>
+        (!ownerFilter || (l.owner ?? "Unknown") === ownerFilter) &&
+        (!q || l.name.toLowerCase().includes(q)) &&
+        letterFilter.has(letterKey(l)),
+    );
+    const dir = sortDir === "asc" ? 1 : -1;
+    const val = (l: GradedCampaignLine): number | string => {
+      switch (sortKey) {
+        case "grade": return GRADE_ORDER[l.grade];
+        case "ctr": return l.impressions > 0 ? l.clicks / l.impressions : -1;
+        case "cpc": return l.clicks > 0 ? l.spend / l.clicks : Infinity;
+        case "index": return l.index ?? -1;
+        case "spend": return l.spend;
+        case "impressions": return l.impressions;
+        default: return l.name;
+      }
+    };
     return [...r].sort((a, b) => {
-      let x: number | string;
-      let y: number | string;
-      if (sortKey === "grade") { x = GRADE_ORDER[a.grade]; y = GRADE_ORDER[b.grade]; }
-      else if (sortKey === "ctr") { x = a.impressions > 0 ? a.clicks / a.impressions : -1; y = b.impressions > 0 ? b.clicks / b.impressions : -1; }
-      else if (sortKey === "cpc") { x = a.clicks > 0 ? a.spend / a.clicks : 1e9; y = b.clicks > 0 ? b.spend / b.clicks : 1e9; }
-      else if (sortKey === "index") { x = a.index ?? -1; y = b.index ?? -1; }
-      else if (sortKey === "spend") { x = a.spend; y = b.spend; }
-      else if (sortKey === "impressions") { x = a.impressions; y = b.impressions; }
-      else { x = a.name; y = b.name; }
-      if (typeof x === "string") return x.localeCompare(y as string) * sortDir;
-      return ((x as number) - (y as number)) * sortDir;
+      const x = val(a);
+      const y = val(b);
+      if (typeof x === "string") return x.localeCompare(y as string) * dir;
+      return (x - (y as number)) * dir;
     });
   }, [rows, ownerFilter, query, letterFilter, sortKey, sortDir]);
 
-  const totalSpend = filtered.reduce((a, l) => a + l.spend, 0);
-  const sortProps = { sortKey, sortDir, onSort: toggleSort };
+  const sortProps = { sortKey, sortDir, onSort };
 
   return (
     <Box>
-      {/* .tgl bar: grade letter toggles + search, all in one row — matches HTML .tgl */}
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2, flexWrap: "wrap", bgcolor: "action.hover", borderBottom: "1px solid", borderColor: "divider", px: "15px", py: "10px" }}>
-        {ALL_LETTERS.map((l) => (
-          <LetterToggle
-            key={l}
-            letterOrUngraded={l}
-            active={letterFilter.has(l)}
-            count={letterCounts[l]}
-            onClick={() => toggleLetter(l)}
+      <Box sx={{ display: "flex", alignItems: "flex-end", gap: 3, rowGap: 2, flexWrap: "wrap", mb: 2 }}>
+        <ControlGroup label="Grade">
+          {ALL_LETTER_KEYS.map((k) => (
+            <ToggleChip
+              key={k}
+              label={`${k === "ungraded" ? "Ungraded" : k} (${letterCounts[k]})`}
+              active={letterFilter.has(k)}
+              onClick={() => toggleLetter(k)}
+            />
+          ))}
+          <ToggleChip
+            label={letterFilter.size === ALL_LETTER_KEYS.length ? "None" : "All"}
+            active={false}
+            onClick={() => setLetterFilter(letterFilter.size === ALL_LETTER_KEYS.length ? new Set() : new Set(ALL_LETTER_KEYS))}
           />
-        ))}
-        <LetterToggle
-          letterOrUngraded="ungraded"
-          active={letterFilter.has("ungraded")}
-          count={letterCounts.ungraded}
-          onClick={() => toggleLetter("ungraded")}
-        />
-        <Box
-          component="button"
-          type="button"
-          onClick={() => setLetterFilter(new Set<LetterGrade | "ungraded">([...ALL_LETTERS, "ungraded"]))}
-          sx={{ px: 1, py: 0.3, border: "1px solid", borderColor: "divider", borderRadius: 1, fontFamily: "inherit", fontSize: 11, color: "text.secondary", cursor: "pointer", bgcolor: "transparent", "&:hover": { borderColor: "text.secondary" } }}
-        >
-          All
-        </Box>
-        <Box
-          component="button"
-          type="button"
-          onClick={() => setLetterFilter(new Set())}
-          sx={{ px: 1, py: 0.3, border: "1px solid", borderColor: "divider", borderRadius: 1, fontFamily: "inherit", fontSize: 11, color: "text.secondary", cursor: "pointer", bgcolor: "transparent", "&:hover": { borderColor: "text.secondary" } }}
-        >
-          None
-        </Box>
-        <Box
-          component="input"
-          type="text"
-          placeholder="find a campaign…"
+        </ControlGroup>
+        {ownerFilter && (
+          <ControlGroup label="Budget line">
+            <ToggleChip label={`${ownerFilter} ✕`} active onClick={onClearOwner} />
+          </ControlGroup>
+        )}
+        <TextField
+          size="small"
+          placeholder="Find a campaign"
           value={query}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-          sx={{
-            px: 1.25,
-            py: 0.55,
-            border: "1px solid",
-            borderColor: "divider",
-            borderRadius: 1,
-            fontSize: 12,
-            fontFamily: "inherit",
-            bgcolor: "background.default",
-            color: "text.primary",
-            outline: "none",
-            "&:focus": { borderColor: "primary.main" },
-            minWidth: 180,
-            ml: 0.5,
+          onChange={(e) => setQuery(e.target.value)}
+          sx={{ minWidth: 240 }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon size={16} />
+                </InputAdornment>
+              ),
+            },
+            htmlInput: { "aria-label": "Find a campaign" },
           }}
         />
-        <Box sx={{ ml: "auto", fontSize: 11, fontFamily: "monospace", color: "text.disabled" }}>
-          {filtered.length} shown · {fmtMoney(totalSpend)}
+        <Box sx={{ ml: "auto" }}>
+          <RowCount shown={filtered.length} total={rows.length} singular="campaign" />
         </Box>
       </Box>
 
       {filtered.length === 0 ? (
-        <Typography sx={{ fontSize: "0.78rem", color: "text.secondary", py: 2 }}>
-          No campaigns match the current filters.
-        </Typography>
+        <Typography sx={{ fontSize: 13, color: "text.disabled", textAlign: "center", py: 3 }}>No campaigns match these filters</Typography>
       ) : (
-        <TableContainer sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, maxHeight: 560, overflow: "auto" }}>
-          <Table size="small" stickyHeader sx={{ minWidth: 1500 }}>
-            <TableHead>
-              <TableRow sx={{ bgcolor: "background.default" }}>
-                <SortHeader k="name" label="Campaign" {...sortProps} />
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Pf</TableCell>
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Owner</TableCell>
-                <SortHeader k="spend" label="Spend" align="right" {...sortProps} />
-                <SortHeader k="impressions" label="Impr" align="right" {...sortProps} />
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Clicks</TableCell>
-                <SortHeader k="ctr" label="CTR" align="right" {...sortProps} />
-                <SortHeader k="cpc" label="CPC" align="right" {...sortProps} />
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Judged on</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Actual</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Bench</TableCell>
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Cost on</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Actual</TableCell>
-                <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Bench</TableCell>
-                <SortHeader k="index" label="Index" align="right" {...sortProps} />
-                <SortHeader k="grade" label="Result" {...sortProps} />
-                <TableCell sx={{ fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap", minWidth: 300 }}>Why</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filtered.map((l) => {
-                const ctr = l.impressions > 0 ? l.clicks / l.impressions : null;
-                const cpc = l.clicks > 0 ? l.spend / l.clicks : null;
-
-                const fmtConv = (v: number | null) => {
-                  if (v === null) return "—";
-                  if (l.conversion_metric_name === "CTR") return fmtPct(v, 2);
-                  return fmtPct(v, 1);
-                };
-                const fmtConvBench = (v: number | null) =>
-                  v !== null ? fmtPct(v, l.conversion_metric_name === "CTR" ? 2 : 1) : "—";
-                const fmtCostVal = (v: number | null) =>
-                  v === null ? "—" : l.cost_metric_name === "CPL" ? fmtMoney(v) : `$${v.toFixed(2)}`;
-
-                let actualConv: number | null = null;
-                if (l.conversion_metric_name === "CTR") actualConv = ctr;
-                else if (l.conversion_metric_name === "Form completion") {
-                  const fo = l.form_opens ?? 0;
-                  actualConv = fo > 0 ? (l.leads ?? 0) / fo : null;
-                } else if (l.conversion_metric_name === "Open rate") {
-                  const snd = l.sends ?? 0;
-                  actualConv = snd > 0 ? (l.message_opens ?? 0) / snd : null;
-                }
-
-                let actualCost: number | null = null;
-                if (l.cost_metric_name === "CPC") actualCost = cpc;
-                else if (l.cost_metric_name === "CPL") actualCost = (l.leads ?? 0) > 0 ? l.spend / l.leads! : null;
-                else if (l.cost_metric_name === "CPM") actualCost = l.impressions > 0 ? (l.spend / l.impressions) * 1000 : null;
-                else if (l.cost_metric_name === "Cost per click") actualCost = (l.message_clicks ?? 0) > 0 ? l.spend / l.message_clicks! : null;
-
-                const gradeHex = GRADE_HEX[l.grade];
-
-                return (
-                  <TableRow key={l.id} hover>
-                    <TableCell sx={{ fontSize: 12, minWidth: 220 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                        <Box
-                          component="span"
-                          sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: l.is_live ? GRADE_HEX["At benchmark"] : "divider", flexShrink: 0 }}
-                        />
-                        <Tooltip title={l.name}>
-                          <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260, display: "block" }}>
-                            {l.name}
-                          </Box>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Box
-                        component="span"
-                        sx={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          px: 0.6,
-                          py: 0.2,
-                          borderRadius: "3px",
-                          bgcolor: l.platform === "google" ? "action.selected" : alpha("#185FA5", 0.12),
-                          color: l.platform === "google" ? "text.secondary" : "#185FA5",
-                          display: "inline-block",
-                        }}
-                      >
-                        {l.platform === "google" ? "Ggl" : "LI"}
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={{ fontSize: 11.5, color: "text.secondary", whiteSpace: "nowrap" }}>
-                      {l.owner ?? "—"}
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{fmtMoney(l.spend)}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{l.impressions.toLocaleString()}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{l.clicks.toLocaleString()}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{ctr !== null ? fmtPct(ctr, 2) : "—"}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{cpc !== null ? `$${cpc.toFixed(2)}` : "—"}</TableCell>
-                    <TableCell sx={{ fontSize: 11.5, color: "text.secondary", whiteSpace: "nowrap" }}>{l.conversion_metric_name || "—"}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{fmtConv(actualConv)}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: "text.secondary" }}>{fmtConvBench(l.conversion_benchmark)}</TableCell>
-                    <TableCell sx={{ fontSize: 11.5, color: "text.secondary", whiteSpace: "nowrap" }}>{l.cost_metric_name || "—"}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace" }}>{fmtCostVal(actualCost)}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: "text.secondary" }}>{fmtCostVal(l.cost_benchmark)}</TableCell>
-                    <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color: gradeHex }}>
-                      {fmtIndex(l.index)}
-                    </TableCell>
-                    <TableCell>
-                      <GradeChip grade={l.grade} letter={l.letter} />
-                    </TableCell>
-                    <TableCell sx={{ fontSize: 11, color: "text.secondary", lineHeight: 1.45 }}>{l.why}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <Box sx={BORDERED}>
+          <Box sx={{ overflow: "auto", maxHeight: 640 }}>
+            <Table size="small" stickyHeader sx={{ minWidth: 1500 }}>
+              <TableHead>
+                <TableRow>
+                  <SortHeader k="name" label="Campaign" {...sortProps} />
+                  <TableCell>Platform</TableCell>
+                  <TableCell>Owner</TableCell>
+                  <SortHeader k="spend" label="Spend" align="right" {...sortProps} />
+                  <SortHeader k="impressions" label="Impressions" align="right" {...sortProps} />
+                  <TableCell align="right">Clicks</TableCell>
+                  <SortHeader k="ctr" label="CTR" align="right" {...sortProps} />
+                  <SortHeader k="cpc" label="CPC" align="right" {...sortProps} />
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>Judged on</TableCell>
+                  <TableCell align="right">Actual</TableCell>
+                  <TableCell align="right">Benchmark</TableCell>
+                  <TableCell sx={{ whiteSpace: "nowrap" }}>Cost on</TableCell>
+                  <TableCell align="right">Actual</TableCell>
+                  <TableCell align="right">Benchmark</TableCell>
+                  <SortHeader k="index" label="Index" align="right" {...sortProps} />
+                  <SortHeader k="grade" label="Result" {...sortProps} />
+                  <TableCell sx={{ minWidth: 300 }}>Why</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filtered.map((l) => {
+                  const ctr = l.impressions > 0 ? l.clicks / l.impressions : null;
+                  const cpc = l.clicks > 0 ? l.spend / l.clicks : null;
+                  const { conv, cost } = actuals(l);
+                  const convDp = l.conversion_metric_name === "CTR" ? 2 : 1;
+                  const fmtConv = (v: number | null) => (v === null ? "—" : fmtPct(v, convDp));
+                  const fmtCost = (v: number | null) => (v === null ? "—" : l.cost_metric_name === "CPL" ? fmtMoney(v) : `$${v.toFixed(2)}`);
+                  const isGoogle = l.platform === "google";
+                  return (
+                    <TableRow key={l.id} hover>
+                      <TableCell sx={{ minWidth: 220 }}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Tooltip title={l.is_live ? "Live" : "Paused or ended"}>
+                            <Box component="span" sx={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, bgcolor: l.is_live ? colors["At benchmark"] : "divider" }} />
+                          </Tooltip>
+                          <Tooltip title={l.name}>
+                            <Box component="span" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 260, display: "block", fontWeight: 500 }}>
+                              {l.name}
+                            </Box>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <TintChip label={isGoogle ? "Google" : "LinkedIn"} color={isGoogle ? tones.slate : tones.purple} />
+                      </TableCell>
+                      <TableCell sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>{l.owner ?? "—"}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{fmtMoney(l.spend)}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{l.impressions.toLocaleString()}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{l.clicks.toLocaleString()}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{ctr !== null ? fmtPct(ctr, 2) : "—"}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{cpc !== null ? `$${cpc.toFixed(2)}` : "—"}</TableCell>
+                      <TableCell sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>{l.conversion_metric_name || "—"}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{fmtConv(conv)}</TableCell>
+                      <TableCell align="right" sx={{ ...NUMERIC, color: "text.secondary" }}>{fmtConv(l.conversion_benchmark)}</TableCell>
+                      <TableCell sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>{l.cost_metric_name || "—"}</TableCell>
+                      <TableCell align="right" sx={NUMERIC}>{fmtCost(cost)}</TableCell>
+                      <TableCell align="right" sx={{ ...NUMERIC, color: "text.secondary" }}>{fmtCost(l.cost_benchmark)}</TableCell>
+                      <TableCell align="right" sx={{ ...NUMERIC, fontWeight: 700, color: colors[l.grade] }}>{fmtIndex(l.index)}</TableCell>
+                      <TableCell>
+                        <TintChip label={l.letter ? `${l.grade} · ${l.letter}` : l.grade} color={colors[l.grade]} />
+                      </TableCell>
+                      <TableCell sx={{ fontSize: 12.5, color: "text.secondary", lineHeight: 1.45 }}>{l.why}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </Box>
+        </Box>
       )}
     </Box>
   );
 }
 
-// ─── Panel wrapper — matches HTML .panel + .ph ────────────────────────────────
-
-function Panel({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <Box sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", mb: "18px" }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "12px", flexWrap: "wrap", px: "15px", py: "11px", borderBottom: "1px solid", borderColor: "divider" }}>
-        <Box sx={{ fontFamily: "inherit", fontSize: 13, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "text.primary" }}>
-          {title}
-        </Box>
-        {hint && <Box sx={{ fontFamily: "monospace", fontSize: 10.5, color: "text.disabled" }}>{hint}</Box>}
-      </Box>
-      {children}
-    </Box>
-  );
-}
-
-// Generic tgl button — pressed = ink (text.primary), matches HTML .tgl button[aria-pressed=true]
-function TglBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <Box
-      component="button"
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      sx={{
-        fontFamily: "monospace",
-        fontSize: 11,
-        px: "9px",
-        py: "4px",
-        border: "1px solid",
-        borderColor: active ? "text.primary" : "divider",
-        borderRadius: "2px",
-        bgcolor: active ? "text.primary" : "background.paper",
-        color: active ? "background.paper" : "text.secondary",
-        cursor: "pointer",
-        "&:hover": { borderColor: "text.primary", color: "text.primary" },
-      }}
-    >
-      {children}
-    </Box>
-  );
-}
-
-// ─── How grading works content ────────────────────────────────────────────────
+// ─── How grading works ───────────────────────────────────────────────────────
 
 function GradingExplainer() {
   return (
-    <Box sx={{ p: "12px 15px", fontSize: "12.8px", lineHeight: 1.65, color: "text.secondary" }}>
-      <Box sx={{ fontWeight: 700, color: "text.primary", mb: 0.75 }}>Every campaign is scored on one conversion metric and one cost metric.</Box>
+    <Box sx={{ ...BORDERED, p: 2, fontSize: 13, lineHeight: 1.65, color: "text.secondary" }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 700, color: "text.primary", mb: 0.75 }}>
+        Every campaign is scored on one conversion metric and one cost metric.
+      </Typography>
       <Box component="ul" sx={{ pl: 2.5, m: 0, mb: 1.5 }}>
-        <li><strong>LinkedIn lead generation</strong> — form completion rate against CPL (DemandSense 2026).</li>
+        <li><strong>LinkedIn lead generation</strong> — form completion rate against CPL.</li>
         <li><strong>LinkedIn website visits, engagement, brand awareness</strong> — CTR against CPC (brand awareness uses CPM).</li>
-        <li><strong>LinkedIn Sponsored Messaging</strong> — open rate against cost per click. Needs ≥ 200 sends.</li>
-        <li><strong>Google</strong> — CTR + CPC against WSO2's region-specific benchmarks, derived from the campaign name prefix.</li>
+        <li><strong>LinkedIn Sponsored Messaging</strong> — open rate against cost per click. Needs at least 200 sends.</li>
+        <li><strong>Google</strong> — CTR against CPC, using WSO2's regional benchmarks from the campaign name prefix.</li>
       </Box>
-      <Box>
-        Index = √(actual ÷ benchmark for conversion × benchmark ÷ actual for cost), each ratio capped 0.1×–4×.{" "}
-        <strong>At benchmark ≥ 0.80 · Below &lt; 0.80.</strong>{" "}
-        <strong>Optimize</strong> = index ≥ 0.80 but cost above the benchmark — counts as At benchmark in all totals.{" "}
-        Letter grades: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D &lt; 0.50.{" "}
-        Shares of spend and campaigns leave out campaigns with too little data to grade.{" "}
-        Below 1,000 impressions (or 200 sends for Sponsored Messaging) a campaign is not graded.
-      </Box>
+      <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+        Index = √(actual ÷ benchmark for conversion × benchmark ÷ actual for cost), each ratio capped at 0.1×–4×.{" "}
+        <strong>At benchmark</strong> is an index of 0.80 or more; <strong>Optimize</strong> is the same but with cost above
+        the benchmark, and counts as at benchmark in every total. Letters: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D below.
+        Campaigns under 1,000 impressions (or 200 sends) aren't graded, and are left out of both shares.
+      </Typography>
     </Box>
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
-
-const DEFAULT_WINDOW: DateWindow = { mode: "preset", preset: "1m" };
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function BenchmarkGradingPage() {
+  const colors = useGradeColors();
   const [window, setWindow] = useState<DateWindow>(DEFAULT_WINDOW);
   const [selectedOwner, setSelectedOwner] = useState<string | null>(null);
   const [liveOnly, setLiveOnly] = useState(true);
   const [platformFilter, setPlatformFilter] = useState<PlatformFilter>("both");
   const [cohortFilter, setCohortFilter] = useState<CohortFilter>("all");
-  const [letterFilter, setLetterFilter] = useState<Set<LetterGrade | "ungraded">>(
-    new Set<LetterGrade | "ungraded">([...ALL_LETTERS, "ungraded"])
-  );
+  const [letterFilter, setLetterFilter] = useState<Set<LetterKey>>(() => new Set(ALL_LETTER_KEYS));
   const [campQuery, setCampQuery] = useState("");
   const [showBmEditor, setShowBmEditor] = useState(false);
 
@@ -767,16 +568,11 @@ export default function BenchmarkGradingPage() {
     [queryResult.data, bm.tables],
   );
 
-  // Apply live/paused filter
-  const liveFiltered = useMemo(
-    () => (liveOnly ? allGraded.filter((l) => l.is_live) : allGraded),
-    [allGraded, liveOnly],
-  );
+  const liveFiltered = useMemo(() => (liveOnly ? allGraded.filter((l) => l.is_live) : allGraded), [allGraded, liveOnly]);
 
-  // Window date bounds for cohort filter
   const windowStart = queryResult.data?.window_start ?? null;
 
-  // Cohort counts (over liveFiltered)
+  // Cohort counts are over the live-filtered set, before the platform/cohort filter.
   const cohortCounts = useMemo<Record<CohortFilter, number>>(() => {
     let launched = 0, carriedover = 0, nodate = 0;
     for (const l of liveFiltered) {
@@ -787,21 +583,17 @@ export default function BenchmarkGradingPage() {
     return { all: liveFiltered.length, launched, carriedover, nodate };
   }, [liveFiltered, windowStart]);
 
-  // Apply platform + cohort filters
-  const graded = useMemo(() => {
-    return liveFiltered.filter((l) => {
-      if (platformFilter === "linkedin" && l.platform !== "linkedin") return false;
-      if (platformFilter === "google" && l.platform !== "google") return false;
-      if (cohortFilter === "launched") {
-        if (!l.started_at || (windowStart && l.started_at < windowStart)) return false;
-      } else if (cohortFilter === "carriedover") {
-        if (!l.started_at || (windowStart && l.started_at >= windowStart)) return false;
-      } else if (cohortFilter === "nodate") {
-        if (l.started_at) return false;
-      }
-      return true;
-    });
-  }, [liveFiltered, platformFilter, cohortFilter, windowStart]);
+  const graded = useMemo(
+    () =>
+      liveFiltered.filter((l) => {
+        if (platformFilter !== "both" && l.platform !== platformFilter) return false;
+        if (cohortFilter === "launched") return !!l.started_at && !(windowStart && l.started_at < windowStart);
+        if (cohortFilter === "carriedover") return !!l.started_at && !(windowStart && l.started_at >= windowStart);
+        if (cohortFilter === "nodate") return !l.started_at;
+        return true;
+      }),
+    [liveFiltered, platformFilter, cohortFilter, windowStart],
+  );
 
   const summary = useMemo(() => summarize(graded), [graded]);
   const boardRows = useMemo(() => buildBoardRows(graded), [graded]);
@@ -809,19 +601,7 @@ export default function BenchmarkGradingPage() {
   const activeOwner = selectedOwner !== null && boardRows.some((r) => r.label === selectedOwner) ? selectedOwner : null;
 
   const error = queryResult.error ? describeError(queryResult.error) : null;
-
-  const spendShareColor =
-    summary.spendShare !== null
-      ? summary.spendShare >= 0.8
-        ? GRADE_HEX["At benchmark"]
-        : GRADE_HEX["Below"]
-      : undefined;
-  const campShareColor =
-    summary.campShare !== null
-      ? summary.campShare >= 0.8
-        ? GRADE_HEX["At benchmark"]
-        : GRADE_HEX["Below"]
-      : undefined;
+  const shareAccent = (v: number | null) => (v === null ? undefined : v >= TARGET_SHARE ? colors["At benchmark"] : colors.Below);
 
   return (
     <MarketingOpsShell
@@ -829,95 +609,45 @@ export default function BenchmarkGradingPage() {
       title="Benchmark Grading"
       subtitle="Every campaign scored on conversion and cost against WSO2's internal benchmarks."
     >
-      {/* Controls */}
       <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1.5, p: 2.5, mb: 3 }}>
-        <Box sx={{ display: "flex", alignItems: "flex-end", gap: 3, flexWrap: "wrap" }}>
+        <Box sx={{ display: "flex", alignItems: "flex-end", gap: 3, rowGap: 2, flexWrap: "wrap" }}>
           <DateRangePicker window={window} onChange={setWindow} />
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-            <Box sx={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.secondary", fontFamily: "inherit" }}>
-              Basis
-            </Box>
-            <Box sx={{ display: "flex", gap: 0.5 }}>
-              <ToggleChip label="Live only" active={liveOnly} onClick={() => setLiveOnly(true)} />
-              <ToggleChip label="All campaigns" active={!liveOnly} onClick={() => setLiveOnly(false)} />
-            </Box>
-          </Box>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
-            <Box sx={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.secondary", fontFamily: "inherit" }}>
-              Benchmarks
-            </Box>
-            <Box
-              component="button"
-              type="button"
+          <ControlGroup label="Basis">
+            <ToggleChip label="Live only" active={liveOnly} onClick={() => setLiveOnly(true)} />
+            <ToggleChip label="All campaigns" active={!liveOnly} onClick={() => setLiveOnly(false)} />
+          </ControlGroup>
+          <ControlGroup label="Platform">
+            <ToggleChip label="Both" active={platformFilter === "both"} onClick={() => setPlatformFilter("both")} />
+            <ToggleChip label="LinkedIn" active={platformFilter === "linkedin"} onClick={() => setPlatformFilter("linkedin")} />
+            <ToggleChip label="Google" active={platformFilter === "google"} onClick={() => setPlatformFilter("google")} />
+          </ControlGroup>
+          <ControlGroup label="Launched">
+            <ToggleChip label={`Any (${cohortCounts.all})`} active={cohortFilter === "all"} onClick={() => setCohortFilter("all")} />
+            <ToggleChip label={`In period (${cohortCounts.launched})`} active={cohortFilter === "launched"} onClick={() => setCohortFilter("launched")} />
+            <ToggleChip label={`Carried over (${cohortCounts.carriedover})`} active={cohortFilter === "carriedover"} onClick={() => setCohortFilter("carriedover")} />
+            <ToggleChip label={`No date (${cohortCounts.nodate})`} active={cohortFilter === "nodate"} onClick={() => setCohortFilter("nodate")} />
+          </ControlGroup>
+          <ControlGroup label="Benchmarks">
+            <ToggleChip
+              label={bm.isModified ? "Edit benchmarks (edited)" : "Edit benchmarks"}
+              active={showBmEditor}
               onClick={() => setShowBmEditor((v) => !v)}
-              sx={{
-                px: "12px",
-                py: "6px",
-                border: "1.5px solid",
-                borderColor: showBmEditor ? "primary.main" : "divider",
-                borderRadius: "6px",
-                fontSize: 12.5,
-                fontFamily: "inherit",
-                cursor: "pointer",
-                bgcolor: showBmEditor ? "primary.main" : "background.paper",
-                color: showBmEditor ? "#fff" : "text.primary",
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                "&:hover": { borderColor: "primary.main", bgcolor: showBmEditor ? "primary.dark" : "action.hover" },
-              }}
-            >
-              Edit benchmarks
-              {bm.isModified && (
-                <Box component="span" sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: showBmEditor ? "rgba(255,255,255,0.8)" : "warning.main", display: "inline-block", flexShrink: 0 }} />
-              )}
-            </Box>
-          </Box>
-          <Box sx={{ flex: 1, display: "flex", justifyContent: "flex-end", alignItems: "flex-end", gap: 1 }}>
-            {queryResult.isFetching && <CircularProgress size={16} />}
-            <Tooltip title="Refresh — fetch the latest data">
-              <span>
-                <IconButton
-                  onClick={() => void queryResult.refetch()}
-                  disabled={queryResult.isFetching}
-                  size="small"
-                  sx={{ color: "primary.main", border: 1, borderColor: "divider", borderRadius: 1, "&:hover": { borderColor: "primary.main" } }}
-                >
-                  <Box
-                    component="span"
-                    sx={{
-                      display: "inline-flex",
-                      ...(queryResult.isFetching && {
-                        animation: "benchmarkGradingSpin 0.8s linear infinite",
-                        "@keyframes benchmarkGradingSpin": { to: { transform: "rotate(360deg)" } },
-                      }),
-                    }}
-                  >
-                    <RefreshCw size={16} />
-                  </Box>
-                </IconButton>
-              </span>
-            </Tooltip>
+            />
+          </ControlGroup>
+          <Box sx={{ flex: 1, display: "flex", justifyContent: "flex-end" }}>
+            <RefreshButton onClick={() => void queryResult.refetch()} refreshing={queryResult.isFetching} />
           </Box>
         </Box>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2, fontSize: "0.76rem" }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
           Couldn't load benchmark data: {error}
         </Alert>
       )}
 
-      {queryResult.isFetching && graded.length === 0 && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 3 }}>
-          <CircularProgress size={16} />
-          <Typography sx={{ fontSize: "0.78rem", color: "text.secondary" }}>Loading…</Typography>
-        </Box>
-      )}
-
       {queryResult.data && queryResult.data.warnings?.length > 0 && (
-        <Alert severity="warning" sx={{ mb: 2, fontSize: "0.76rem" }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
           Some data is missing from this view:
           <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
             {queryResult.data.warnings.map((w) => <li key={w}>{w}</li>)}
@@ -925,83 +655,63 @@ export default function BenchmarkGradingPage() {
         </Alert>
       )}
 
+      {queryResult.isFetching && !queryResult.data && <ReportLoading messages={LOADING_MESSAGES} />}
+
+      {showBmEditor && (
+        <Section title="Benchmark values" hint={bm.isModified ? "Edited — reset to restore the defaults." : "Defaults: LinkedIn regional figures by objective, WSO2 Google Search benchmarks, DemandSense 2026 for Sponsored Messaging."}>
+          <Box sx={BORDERED}>
+            <BenchmarkEditorPanel bm={bm} />
+          </Box>
+        </Section>
+      )}
+
       {queryResult.data && (
         <>
-          {/* .figs — 6 stat cards, grid with 1px gaps (HTML .figs pattern) */}
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1px", bgcolor: "divider", mb: "18px" }}>
-            <FigCard label="Spend graded" value={fmtMoney(summary.spendGradeable)} sub={`${summary.nGradeable} of ${summary.total} campaigns`} />
-            <FigCard label="At benchmark" value={fmtMoney(summary.spendMet)} sub={`${summary.nMet} campaigns`} color={GRADE_HEX["At benchmark"]} />
-            <FigCard label="% of spend" value={summary.spendShare !== null ? fmtPct(summary.spendShare) : "—"} sub="target is 80%" color={spendShareColor} />
-            <FigCard label="% of campaigns" value={summary.campShare !== null ? fmtPct(summary.campShare) : "—"} sub="target is 80%" color={campShareColor} />
-            <FigCard label="CTR" value={summary.ctr !== null ? fmtPct(summary.ctr, 2) : "—"} />
-            <FigCard label="CPC" value={summary.cpc !== null ? `$${summary.cpc.toFixed(2)}` : "—"} />
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 1.5 }}>
+            <StatCard label="Spend graded" value={fmtMoney(summary.spendGradeable)} />
+            <StatCard label="Spend at benchmark" value={fmtMoney(summary.spendMet)} accent={colors["At benchmark"]} />
+            <StatCard label="% of spend" value={summary.spendShare !== null ? fmtPct(summary.spendShare) : "—"} accent={shareAccent(summary.spendShare)} />
+            <StatCard label="% of campaigns" value={summary.campShare !== null ? fmtPct(summary.campShare) : "—"} accent={shareAccent(summary.campShare)} />
+            <StatCard label="CTR" value={summary.ctr !== null ? fmtPct(summary.ctr, 2) : "—"} />
+            <StatCard label="CPC" value={summary.cpc !== null ? `$${summary.cpc.toFixed(2)}` : "—"} />
           </Box>
+          <Typography sx={{ fontSize: 12.5, color: "text.secondary", mt: 1 }}>
+            {summary.nGradeable} of {summary.total} campaigns had enough data to grade · target is 80% of spend and of campaigns at benchmark.
+          </Typography>
 
-          {/* Panel: Spend against benchmark — platform+cohort tgl bar + 38px stacked bar */}
-          <Panel title="Spend against benchmark" hint="every dollar in this view">
-            {/* .tgl bar: platform | separator | cohort | count */}
-            <Box sx={{ display: "flex", gap: "7px", alignItems: "center", flexWrap: "wrap", px: "15px", py: "10px", borderBottom: "1px solid", borderColor: "divider", bgcolor: "action.hover" }}>
-              <TglBtn active={platformFilter === "both"} onClick={() => setPlatformFilter("both")}>Both platforms</TglBtn>
-              <TglBtn active={platformFilter === "linkedin"} onClick={() => setPlatformFilter("linkedin")}>LinkedIn only</TglBtn>
-              <TglBtn active={platformFilter === "google"} onClick={() => setPlatformFilter("google")}>Google only</TglBtn>
-              <Box sx={{ width: "1px", height: "18px", bgcolor: "divider", mx: "4px" }} />
-              <TglBtn active={cohortFilter === "all"} onClick={() => setCohortFilter("all")}>All ad sets ({cohortCounts.all})</TglBtn>
-              <TglBtn active={cohortFilter === "launched"} onClick={() => setCohortFilter("launched")}>Launched in period ({cohortCounts.launched})</TglBtn>
-              <TglBtn active={cohortFilter === "carriedover"} onClick={() => setCohortFilter("carriedover")}>Carried over ({cohortCounts.carriedover})</TglBtn>
-              <TglBtn active={cohortFilter === "nodate"} onClick={() => setCohortFilter("nodate")}>No launch date ({cohortCounts.nodate})</TglBtn>
-              <Box sx={{ ml: "auto", fontFamily: "monospace", fontSize: 11, color: "text.disabled" }}>
-                {summary.total} campaigns · {fmtMoney(summary.spendTotal)}
-              </Box>
+          <Section title="Spend against benchmark">
+            <Box sx={BORDERED}>
+              <SpendBar graded={graded} colors={colors} />
             </Box>
-            <Box sx={{ p: "14px 15px 16px" }}>
-              <StackedSpendBar graded={graded} />
-            </Box>
-          </Panel>
+          </Section>
 
-          {/* Panel: By budget line */}
-          <Panel title="By budget line" hint="click a row to filter the campaigns table">
-            <BoardView
+          <Section title="By budget line" hint="Click a row to filter the campaigns below.">
+            <BoardTable
               rows={boardRows}
-              onSelectOwner={(owner) => setSelectedOwner((prev) => prev === owner ? null : owner)}
               selectedOwner={activeOwner}
+              onSelectOwner={(owner) => setSelectedOwner((prev) => (prev === owner ? null : owner))}
+              colors={colors}
             />
-          </Panel>
+          </Section>
 
-          {/* Panel: Campaigns */}
-          <Panel
-            title="Campaigns"
-            hint={`${graded.length} campaign${graded.length !== 1 ? "s" : ""} · click a header to sort`}
-          >
-            <CampaignsView
+          <Section title="Campaigns">
+            <CampaignsTable
               rows={graded}
               ownerFilter={activeOwner}
+              onClearOwner={() => setSelectedOwner(null)}
               letterFilter={letterFilter}
               setLetterFilter={setLetterFilter}
               query={campQuery}
               setQuery={setCampQuery}
+              colors={colors}
             />
-          </Panel>
+          </Section>
 
-          {/* Panel: How grading works */}
-          <Panel title="How grading works">
+          <Section title="How grading works">
             <GradingExplainer />
-          </Panel>
-
-          {/* Panel: Edit benchmarks (shown when toggled) */}
-          {showBmEditor && (
-            <Panel
-              title="Benchmark values"
-              hint={bm.isModified ? "modified — reset to restore defaults" : "defaults from DemandSense 2026"}
-            >
-              <BenchmarkEditorPanel bm={bm} />
-            </Panel>
-          )}
+          </Section>
         </>
       )}
-
-      <Typography sx={{ fontSize: 11, color: "text.disabled", mt: 2 }}>
-        Benchmarks: LinkedIn — DemandSense 2026 regional figures by objective. Google — WSO2 internal benchmarks by region. Grading is computed client-side; data refreshes with the period selector.
-      </Typography>
     </MarketingOpsShell>
   );
 }

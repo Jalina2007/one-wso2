@@ -19,7 +19,8 @@
 // Changes take effect immediately — the grading reruns on the next render.
 
 import { useState } from "react";
-import { Box, Tooltip } from "@wso2/oxygen-ui";
+import { Box, Button, Tooltip, Typography } from "@wso2/oxygen-ui";
+import { FieldLabel } from "../analytics/components/AnalyticsPrimitives";
 import type { UseBenchmarkTablesResult } from "./useBenchmarkTables";
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
@@ -55,14 +56,15 @@ function BmInput({
       onBlur={() => setText(null)}
       sx={{
         width: "100%",
-        px: "5px",
-        py: "3px",
-        border: "1px solid",
+        px: 0.75,
+        py: 0.5,
+        border: 1,
         borderColor: "divider",
-        borderRadius: "2px",
-        fontSize: 11,
-        fontFamily: "monospace",
-        bgcolor: "background.default",
+        borderRadius: 1,
+        fontSize: 12.5,
+        fontFamily: "inherit",
+        fontVariantNumeric: "tabular-nums",
+        bgcolor: "background.paper",
         color: "text.primary",
         textAlign: "right",
         outline: "none",
@@ -77,8 +79,8 @@ function BmInput({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <Box sx={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "text.secondary", mt: 2.5, mb: 1 }}>
-      {children}
+    <Box sx={{ mt: 3 }}>
+      <FieldLabel>{children}</FieldLabel>
     </Box>
   );
 }
@@ -242,39 +244,15 @@ function SmRow({ bm }: { bm: UseBenchmarkTablesResult }) {
 
 export function BenchmarkEditorPanel({ bm }: { bm: UseBenchmarkTablesResult }) {
   return (
-    <Box sx={{ p: "14px 15px 20px" }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-        <Box sx={{ fontSize: 12, color: "text.secondary", lineHeight: 1.5 }}>
-          Edit any cell to override the default benchmark for grading. Changes are saved locally in your browser and take effect immediately.
-          {bm.isModified && (
-            <Box component="span" sx={{ ml: 1, color: "warning.main", fontWeight: 600 }}>
-              (modified)
-            </Box>
-          )}
-        </Box>
+    <Box sx={{ p: 2 }}>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
+        <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+          Edit any cell to change the benchmark used for grading. Edits are saved in your browser and apply immediately.
+        </Typography>
         {bm.isModified && (
-          <Box
-            component="button"
-            type="button"
-            onClick={bm.reset}
-            sx={{
-              ml: 2,
-              flexShrink: 0,
-              px: "10px",
-              py: "5px",
-              border: "1px solid",
-              borderColor: "divider",
-              borderRadius: "3px",
-              fontSize: 11,
-              fontFamily: "inherit",
-              cursor: "pointer",
-              bgcolor: "transparent",
-              color: "text.secondary",
-              "&:hover": { borderColor: "text.primary", color: "text.primary" },
-            }}
-          >
+          <Button size="small" variant="outlined" onClick={bm.reset} sx={{ textTransform: "none", flexShrink: 0 }}>
             Reset to defaults
-          </Box>
+          </Button>
         )}
       </Box>
 

@@ -445,11 +445,3 @@ export function fmtPct(n: number, decimals = 1): string {
 export function fmtIndex(n: number | null): string {
   return n !== null ? n.toFixed(2) : "—";
 }
-
-// Fixed hex colors for grades — matches the HTML dashboard palette exactly.
-export const GRADE_HEX: Record<BenchmarkGrade, string> = {
-  "At benchmark": "#0E7C6B",
-  Optimize: "#5B4BC4",
-  Below: "#C0392B",
-  "Too little data": "#9AA5B1",
-};
