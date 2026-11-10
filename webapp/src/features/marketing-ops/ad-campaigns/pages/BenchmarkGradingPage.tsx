@@ -525,7 +525,7 @@ function CampaignsTable({
 
 // ─── How grading works ───────────────────────────────────────────────────────
 
-function GradingExplainer() {
+function GradingExplainer({ minSends }: { minSends: number }) {
   return (
     <Box sx={{ ...BORDERED, p: 2, fontSize: 13, lineHeight: 1.65, color: "text.secondary" }}>
       <Typography sx={{ fontSize: 13, fontWeight: 700, color: "text.primary", mb: 0.75 }}>
@@ -534,14 +534,14 @@ function GradingExplainer() {
       <Box component="ul" sx={{ pl: 2.5, m: 0, mb: 1.5 }}>
         <li><strong>LinkedIn lead generation</strong> — form completion rate against CPL.</li>
         <li><strong>LinkedIn website visits, engagement, brand awareness</strong> — CTR against CPC (brand awareness uses CPM).</li>
-        <li><strong>LinkedIn Sponsored Messaging</strong> — open rate against cost per click. Needs at least 200 sends.</li>
+        <li><strong>LinkedIn Sponsored Messaging</strong> — open rate against cost per click. Needs at least {minSends.toLocaleString()} sends.</li>
         <li><strong>Google</strong> — CTR against CPC, using WSO2's regional benchmarks from the campaign name prefix.</li>
       </Box>
       <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
         Index = √(actual ÷ benchmark for conversion × benchmark ÷ actual for cost), each ratio capped at 0.1×–4×.{" "}
         <strong>At benchmark</strong> is an index of 0.80 or more; <strong>Optimize</strong> is the same but with cost above
         the benchmark, and counts as at benchmark in every total. Letters: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D below.
-        Campaigns under 1,000 impressions (or 200 sends) aren't graded, and are left out of both shares.
+        Campaigns under 1,000 impressions (or {minSends.toLocaleString()} sends) aren't graded, and are left out of both shares.
       </Typography>
     </Box>
   );
@@ -708,7 +708,7 @@ export default function BenchmarkGradingPage() {
           </Section>
 
           <Section title="How grading works">
-            <GradingExplainer />
+            <GradingExplainer minSends={bm.tables.sm.minSends} />
           </Section>
         </>
       )}
