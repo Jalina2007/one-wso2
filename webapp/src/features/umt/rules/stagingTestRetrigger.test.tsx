@@ -232,29 +232,16 @@ describe("the product heading on the Testing step", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
-  it("is plain text when the build URL is blank", async () => {
-    state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: " " }];
-    renderStep();
+  it.each([undefined, null, " ", "javascript:alert(1)", "https://jenkins.example.com:bad-port/job/12/"])(
+    "is plain text when the build URL is %j",
+    async (buildUrlWithBuildId) => {
+      state.records = [{ ...SUCCEEDED, buildUrlWithBuildId }];
+      renderStep();
 
-    await screen.findByText("wso2si - 4.3.1");
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  });
-
-  it("is plain text when the build URL is not http or https", async () => {
-    state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: "javascript:alert(1)" }];
-    renderStep();
-
-    await screen.findByText("wso2si - 4.3.1");
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  });
-
-  it("is plain text when the build URL does not parse", async () => {
-    state.records = [{ ...SUCCEEDED, buildUrlWithBuildId: "https://jenkins.example.com:bad-port/job/12/" }];
-    renderStep();
-
-    await screen.findByText("wso2si - 4.3.1");
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  });
+      await screen.findByText("wso2si - 4.3.1");
+      expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    },
+  );
 });
 
 describe("which automated results can be retriggered", () => {
