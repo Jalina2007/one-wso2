@@ -18,33 +18,41 @@
 // Values are persisted to localStorage via useBenchmarkTables.
 // Changes take effect immediately — the grading reruns on the next render.
 
+import { useState } from "react";
 import { Box, Tooltip } from "@wso2/oxygen-ui";
 import type { UseBenchmarkTablesResult } from "./useBenchmarkTables";
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
+// Every benchmark must be positive (a zero conversion benchmark would divide by
+// zero in the grade). While focused, the typed text is kept locally so partial
+// input like "0." can be typed; only a valid positive number is passed up.
 function BmInput({
   value,
   onChange,
+  label,
   step = 0.01,
-  min = 0,
 }: {
   value: number;
   onChange: (v: number) => void;
+  label: string;
   step?: number;
-  min?: number;
 }) {
+  const [text, setText] = useState<string | null>(null);
   return (
     <Box
       component="input"
       type="number"
-      value={value}
+      aria-label={label}
+      value={text ?? String(value)}
       step={step}
-      min={min}
+      min={0}
       onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+        setText(e.target.value);
         const v = parseFloat(e.target.value);
-        if (!isNaN(v) && v >= min) onChange(v);
+        if (Number.isFinite(v) && v > 0) onChange(v);
       }}
+      onBlur={() => setText(null)}
       sx={{
         width: "100%",
         px: "5px",
@@ -142,6 +150,7 @@ function LbmTable({ bm }: { bm: UseBenchmarkTablesResult }) {
                     <BmInput
                       value={entry.m}
                       step={0.01}
+                      label={`${obj}, ${region}: ${obj === "Lead Generation" ? "form completion" : "CTR"} %`}
                       onChange={(v) => bm.setLbmCell(obj, region, "m", v)}
                     />
                   </Box>,
@@ -149,6 +158,7 @@ function LbmTable({ bm }: { bm: UseBenchmarkTablesResult }) {
                     <BmInput
                       value={entry.c}
                       step={0.01}
+                      label={`${obj}, ${region}: ${LBM_COST_UNIT[obj]}`}
                       onChange={(v) => bm.setLbmCell(obj, region, "c", v)}
                     />
                   </Box>,
@@ -165,6 +175,9 @@ function LbmTable({ bm }: { bm: UseBenchmarkTablesResult }) {
 // ─── Google benchmark table (GBM) ────────────────────────────────────────────
 
 const GBM_REGIONS = ["US", "EU", "UK", "ANZ", "India", "APAC ex-India / SEA", "Middle East", "Africa", "LATAM"] as const;
+
+// GBM stores CTR as a fraction (0.036); the editor shows and takes a percentage (3.6).
+const toPct = (fraction: number) => +(fraction * 100).toFixed(4);
 
 function GbmTable({ bm }: { bm: UseBenchmarkTablesResult }) {
   return (
@@ -186,10 +199,10 @@ function GbmTable({ bm }: { bm: UseBenchmarkTablesResult }) {
                   {region}
                 </Box>
                 <Box component="td" sx={{ px: "3px", py: "3px", verticalAlign: "middle" }}>
-                  <BmInput value={row[0]} step={0.001} onChange={(v) => bm.setGbmCell(region, 0, v)} />
+                  <BmInput value={toPct(row[0])} step={0.01} label={`Google ${region}: CTR %`} onChange={(v) => bm.setGbmCell(region, 0, v / 100)} />
                 </Box>
                 <Box component="td" sx={{ px: "3px", py: "3px", verticalAlign: "middle" }}>
-                  <BmInput value={row[1]} step={0.01} onChange={(v) => bm.setGbmCell(region, 1, v)} />
+                  <BmInput value={row[1]} step={0.01} label={`Google ${region}: CPC $`} onChange={(v) => bm.setGbmCell(region, 1, v)} />
                 </Box>
               </Box>
             );
@@ -217,7 +230,7 @@ function SmRow({ bm }: { bm: UseBenchmarkTablesResult }) {
             <Box sx={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "text.secondary" }}>{label}</Box>
           </Tooltip>
           <Box sx={{ width: 100 }}>
-            <BmInput value={bm.tables.sm[key]} step={step} onChange={(v) => bm.setSmField(key, v)} />
+            <BmInput value={bm.tables.sm[key]} step={step} label={`Sponsored Messaging: ${label}`} onChange={(v) => bm.setSmField(key, v)} />
           </Box>
         </Box>
       ))}

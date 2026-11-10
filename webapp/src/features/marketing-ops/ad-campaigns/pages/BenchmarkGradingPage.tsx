@@ -26,10 +26,10 @@
 //   • 17-column campaign table: Campaign, Pf, Owner, Spend, Impr, Clicks, CTR, CPC,
 //     Judged on, Actual, Bench, Cost on, Actual, Bench, Index, Result, Why
 //
-// Grading thresholds (HTML dashboard spec 2026.10):
+// Grading thresholds (benchmark-grading spec 2026.10, §7):
 //   index = √(conversionRatio × costRatio), each ratio capped 0.1×–4×
-//   At benchmark ≥ 1.05 · Optimize ≥ 1.05 (but cost lags) · Close ≥ 0.80 · Below < 0.80
-//   Letter grades: A ≥ 1.30 · B ≥ 1.05 · C ≥ 0.80 · D ≥ 0.50 · F < 0.50
+//   At benchmark ≥ 0.80 · Optimize ≥ 0.80 (but cost lags) · Below < 0.80
+//   Letter grades: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D < 0.50 (no Close band, no F)
 
 import { useMemo, useState } from "react";
 import { BenchmarkEditorPanel } from "../benchmark-grading/BenchmarkEditorPanel";
@@ -78,9 +78,8 @@ import type {
 const LETTER_COLOR: Record<LetterGrade, string> = {
   A: GRADE_HEX["At benchmark"],
   B: GRADE_HEX["At benchmark"],
-  C: GRADE_HEX["Close"],
+  C: GRADE_HEX["Below"],
   D: GRADE_HEX["Below"],
-  F: GRADE_HEX["Below"],
   "": GRADE_HEX["Too little data"],
 };
 
@@ -140,7 +139,7 @@ function StackedSpendBar({ graded }: { graded: GradedCampaignLine[] }) {
     if (spend <= 0) return null;
     const frac = spend / s.spendTotal;
     const widthPct = frac * 100;
-    const label = grade === "At benchmark" ? "At benchmark" : grade === "Optimize" ? "Optimize" : grade === "Close" ? "Close" : grade === "Below" ? "Below" : "Too little data";
+    const label = grade;
     const inner =
       frac > 0.13
         ? `${(frac * 100).toFixed(0)}% · ${fmtMoney(spend)}`
@@ -183,7 +182,6 @@ function StackedSpendBar({ graded }: { graded: GradedCampaignLine[] }) {
   const TONES: { grade: BenchmarkGrade; spend: number; label: string }[] = [
     { grade: "At benchmark", spend: s.spendGood, label: "At benchmark" },
     { grade: "Optimize", spend: s.spendOpt, label: "Optimize" },
-    { grade: "Close", spend: s.spendClose, label: "Close" },
     { grade: "Below", spend: s.spendBelow, label: "Below" },
     { grade: "Too little data", spend: s.spendNone, label: "Too little data" },
   ];
@@ -226,7 +224,16 @@ function StackedSpendBar({ graded }: { graded: GradedCampaignLine[] }) {
 
 // ─── Grade letter toggles (.tgl bar) ─────────────────────────────────────────
 
-const ALL_LETTERS: LetterGrade[] = ["A", "B", "C", "D", "F"];
+const ALL_LETTERS: LetterGrade[] = ["A", "B", "C", "D"];
+
+// Which letter toggle a campaign sits under. "Ungraded" is exactly the "Too little
+// data" band. A lead-gen campaign with zero form opens is Below with no index (spec
+// §6), so it has no letter; it files under D, the bottom of the Below band, so the
+// filter agrees with the totals that count it as Below.
+function letterKey(l: GradedCampaignLine): LetterGrade | "ungraded" {
+  if (l.grade === "Too little data") return "ungraded";
+  return l.letter || "D";
+}
 
 function LetterToggle({
   letterOrUngraded,
@@ -319,7 +326,7 @@ function BoardView({
   if (rows.length === 0) {
     return (
       <Typography sx={{ fontSize: "0.78rem", color: "text.secondary", py: 2 }}>
-        No campaigns to show for this period.
+        No campaigns match these filters — change the platform, cohort or basis above.
       </Typography>
     );
   }
@@ -332,7 +339,6 @@ function BoardView({
             <TableCell sx={{ fontSize: 11.5, fontWeight: 700, width: "28%" }}>Budget line</TableCell>
             <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 90 }}>Spend</TableCell>
             <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 76, color: GRADE_HEX["At benchmark"] }}>At benchmark</TableCell>
-            <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 55, color: GRADE_HEX["Close"] }}>Close</TableCell>
             <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 55, color: GRADE_HEX["Below"] }}>Below</TableCell>
             <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 72 }}>% of spend</TableCell>
             <TableCell align="right" sx={{ fontSize: 11.5, fontWeight: 700, width: 90 }}>% of campaigns</TableCell>
@@ -359,9 +365,6 @@ function BoardView({
                 <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: row.n_at_benchmark > 0 ? GRADE_HEX["At benchmark"] : "text.disabled" }}>
                   {row.n_at_benchmark}
                 </TableCell>
-                <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: row.n_close > 0 ? GRADE_HEX["Close"] : "text.disabled" }}>
-                  {row.n_close}
-                </TableCell>
                 <TableCell align="right" sx={{ fontSize: 12, fontFamily: "monospace", color: row.n_below > 0 ? GRADE_HEX["Below"] : "text.disabled" }}>
                   {row.n_below}
                 </TableCell>
@@ -387,9 +390,8 @@ type SortKey = "name" | "spend" | "index" | "grade" | "impressions" | "ctr" | "c
 const GRADE_ORDER: Record<BenchmarkGrade, number> = {
   "At benchmark": 0,
   Optimize: 1,
-  Close: 2,
-  Below: 3,
-  "Too little data": 4,
+  Below: 2,
+  "Too little data": 3,
 };
 
 function SortHeader({
@@ -452,11 +454,8 @@ function CampaignsView({
 
   // Letter counts over all rows (not just filtered) for toggle display
   const letterCounts = useMemo(() => {
-    const c: Record<LetterGrade | "ungraded", number> = { A: 0, B: 0, C: 0, D: 0, F: 0, "": 0, ungraded: 0 };
-    for (const r of rows) {
-      const k: LetterGrade | "ungraded" = r.letter || "ungraded";
-      if (k in c) c[k as keyof typeof c]++;
-    }
+    const c: Record<LetterGrade | "ungraded", number> = { A: 0, B: 0, C: 0, D: 0, "": 0, ungraded: 0 };
+    for (const r of rows) c[letterKey(r)]++;
     return c;
   }, [rows]);
 
@@ -471,7 +470,7 @@ function CampaignsView({
     let r = rows;
     if (ownerFilter) r = r.filter((l) => (l.owner ?? "Unknown") === ownerFilter);
     if (query) r = r.filter((l) => l.name.toLowerCase().includes(query.toLowerCase()));
-    r = r.filter((l) => letterFilter.has(l.letter || "ungraded"));
+    r = r.filter((l) => letterFilter.has(letterKey(l)));
     return [...r].sort((a, b) => {
       let x: number | string;
       let y: number | string;
@@ -734,9 +733,10 @@ function GradingExplainer() {
       </Box>
       <Box>
         Index = √(actual ÷ benchmark for conversion × benchmark ÷ actual for cost), each ratio capped 0.1×–4×.{" "}
-        <strong>At benchmark ≥ 1.05 · Close ≥ 0.80 · Below &lt; 0.80.</strong>{" "}
-        <strong>Optimize</strong> = index ≥ 1.05 on conversion but cost above the benchmark — counts as At benchmark in all totals.{" "}
-        Letter grades: A ≥ 1.30 · B ≥ 1.05 · C ≥ 0.80 · D ≥ 0.50 · F &lt; 0.50. No E.{" "}
+        <strong>At benchmark ≥ 0.80 · Below &lt; 0.80.</strong>{" "}
+        <strong>Optimize</strong> = index ≥ 0.80 but cost above the benchmark — counts as At benchmark in all totals.{" "}
+        Letter grades: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D &lt; 0.50.{" "}
+        Shares of spend and campaigns leave out campaigns with too little data to grade.{" "}
         Below 1,000 impressions (or 200 sends for Sponsored Messaging) a campaign is not graded.
       </Box>
     </Box>
@@ -805,6 +805,8 @@ export default function BenchmarkGradingPage() {
 
   const summary = useMemo(() => summarize(graded), [graded]);
   const boardRows = useMemo(() => buildBoardRows(graded), [graded]);
+  // A selection whose row has gone (another filter removed it) no longer applies.
+  const activeOwner = selectedOwner !== null && boardRows.some((r) => r.label === selectedOwner) ? selectedOwner : null;
 
   const error = queryResult.error ? describeError(queryResult.error) : null;
 
@@ -923,17 +925,11 @@ export default function BenchmarkGradingPage() {
         </Alert>
       )}
 
-      {queryResult.data && !queryResult.isFetching && graded.length === 0 && (
-        <Typography sx={{ fontSize: "0.78rem", color: "text.secondary", py: 3, textAlign: "center" }}>
-          No campaigns for this period{liveOnly ? " — try “All campaigns” to include paused ones" : ""}.
-        </Typography>
-      )}
-
-      {graded.length > 0 && (
+      {queryResult.data && (
         <>
           {/* .figs — 6 stat cards, grid with 1px gaps (HTML .figs pattern) */}
           <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1px", bgcolor: "divider", mb: "18px" }}>
-            <FigCard label="Spend graded" value={fmtMoney(summary.spendTotal - summary.spendNone)} sub={`${summary.nGradeable} of ${summary.total} campaigns`} />
+            <FigCard label="Spend graded" value={fmtMoney(summary.spendGradeable)} sub={`${summary.nGradeable} of ${summary.total} campaigns`} />
             <FigCard label="At benchmark" value={fmtMoney(summary.spendMet)} sub={`${summary.nMet} campaigns`} color={GRADE_HEX["At benchmark"]} />
             <FigCard label="% of spend" value={summary.spendShare !== null ? fmtPct(summary.spendShare) : "—"} sub="target is 80%" color={spendShareColor} />
             <FigCard label="% of campaigns" value={summary.campShare !== null ? fmtPct(summary.campShare) : "—"} sub="target is 80%" color={campShareColor} />
@@ -967,7 +963,7 @@ export default function BenchmarkGradingPage() {
             <BoardView
               rows={boardRows}
               onSelectOwner={(owner) => setSelectedOwner((prev) => prev === owner ? null : owner)}
-              selectedOwner={selectedOwner}
+              selectedOwner={activeOwner}
             />
           </Panel>
 
@@ -978,7 +974,7 @@ export default function BenchmarkGradingPage() {
           >
             <CampaignsView
               rows={graded}
-              ownerFilter={selectedOwner}
+              ownerFilter={activeOwner}
               letterFilter={letterFilter}
               setLetterFilter={setLetterFilter}
               query={campQuery}

@@ -108,16 +108,18 @@ export interface BenchmarkGradingRequest {
 
 // ─── Computed grade (client-side) ────────────────────────────────────────────
 
-// Grade bands derived from the composite index (matches HTML dashboard spec):
-//   At benchmark  ≥ 1.05 (conversion and cost both at or above benchmark)
-//   Optimize      ≥ 1.05 on conversion but cost ratio < 1 (conversion clears, cost lags)
-//   Close         ≥ 0.80 and < 1.05
-//   Below         < 0.80
-//   Too little data  insufficient volume
-export type BenchmarkGrade = "At benchmark" | "Optimize" | "Close" | "Below" | "Too little data";
+// Grade bands derived from the composite index (benchmark-grading spec 2026.10, §7):
+//   At benchmark     index ≥ 0.80
+//   Optimize         index ≥ 0.80 but the cost ratio is below 1 — counts as meeting
+//                    the benchmark in every total; a flag for attention, not a failure
+//   Below            index < 0.80, or nothing converting (lead gen with zero form opens)
+//   Too little data  under the volume floor, or a metric the grade needs isn't reported
+// There is no Close band; the spec merged it into At benchmark.
+export type BenchmarkGrade = "At benchmark" | "Optimize" | "Below" | "Too little data";
 
-// Letter grades derived from the same index (A ≥ 1.30 · B ≥ 1.05 · C ≥ 0.80 · D ≥ 0.50 · F < 0.50).
-export type LetterGrade = "A" | "B" | "C" | "D" | "F" | "";
+// Letter grades from the same index: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D < 0.50.
+// Contiguous, no F. Empty when there is no index.
+export type LetterGrade = "A" | "B" | "C" | "D" | "";
 
 // A fully graded campaign line — the raw line plus all computed grading fields.
 export interface GradedCampaignLine extends BenchmarkCampaignLine {
@@ -149,19 +151,18 @@ export interface GradedCampaignLine extends BenchmarkCampaignLine {
 
 // Aggregated grade distribution for one "budget line" (usually an owner/BU label).
 // This is the data for the bmboard-style summary table (matches HTML `bmboard` columns).
-// Note: n_at_benchmark includes both "At benchmark" and "Optimize" grades (the HTML
-// boards both together as "At benchmark"); Close and Below are tracked separately.
+// n_at_benchmark includes both "At benchmark" and "Optimize" (both meet the benchmark).
+// Shares leave "Too little data" campaigns out of numerator and denominator (spec §8).
 export interface BenchmarkBoardRow {
   label: string; // owner / BU
   spend: number;
   n: number; // total campaigns in this group
   n_gradeable: number; // campaigns with enough data to grade
   n_at_benchmark: number; // At benchmark + Optimize
-  n_close: number;
   n_below: number;
+  spend_gradeable: number; // spend of campaigns not in "Too little data"
   spend_at_benchmark: number; // At benchmark + Optimize spend
-  spend_close: number;
   spend_below: number;
-  pct_spend: number | null; // (spend_at_benchmark) / spend (all campaigns in group)
+  pct_spend: number | null; // spend_at_benchmark / spend_gradeable
   pct_camp: number | null; // n_at_benchmark / n_gradeable
 }

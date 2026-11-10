@@ -16,8 +16,9 @@
 
 // Ad Campaigns → Benchmark Grading — deterministic grading logic.
 //
-// Authoritative spec: grading-reference.py + benchmark-grading-spec.md (2026.10).
-// Verified to agree campaign-for-campaign with the Python reference implementation.
+// Authoritative spec: benchmark-grading-spec.md v2026.10 and its reference
+// implementation grading-reference.py. Grades must agree with the reference
+// campaign for campaign; the exceptions are noted where they occur.
 //
 // Grading methodology:
 //   Every campaign is scored on one conversion metric and one cost metric.
@@ -32,12 +33,11 @@
 //   Cost ratio       = benchmark ÷ actual  (above 1.0 = better)
 //   Both ratios are capped between 0.1× and 4×.
 //   Index = √(conversionRatio × costRatio)
-//     ≥ 1.05 → "At benchmark"  (or "Optimize" when the cost ratio is below 1)
-//     ≥ 0.80 → "Close"
+//     ≥ 0.80 → "At benchmark"  (or "Optimize" when the cost ratio is below 1)
 //     < 0.80 → "Below"
 //     Too little volume → "Too little data"
 //
-//   Letter grades: A ≥ 1.30 · B ≥ 1.05 · C ≥ 0.80 · D ≥ 0.50 · F < 0.50
+//   Letter grades: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D < 0.50 (no F)
 
 import type {
   BenchmarkBoardRow,
@@ -120,23 +120,8 @@ const REGION_TO_LBM: Record<RegionCode, string> = {
   ME: "MEA",
   Africa: "MEA",
   APAC: "SEA",
-  ANZ: "SEA",
-  // LATAM and GLOBAL have no matching region → will fall through to global blend
+  // Anything else (notably LATAM and GLOBAL) falls through to the global blend.
 };
-
-// Global blend for a LinkedIn benchmark section — the most forgiving figure from
-// any region: the lowest conversion requirement and the highest cost allowance.
-// A global campaign spans every market and should not be judged against an
-// average that no single-market campaign could meet.
-function globalBlend(section: string): { m: number; c: number } | null {
-  const r = LBM[section];
-  if (!r) return null;
-  const vals = Object.values(r);
-  return {
-    m: Math.min(...vals.map((v) => v.m)),
-    c: Math.max(...vals.map((v) => v.c)),
-  };
-}
 
 // Google Search benchmarks: region → [CTR, CPC_USD]
 const GBM: Record<string, [number, number]> = {
@@ -169,14 +154,6 @@ function googleRegion(name: string): string | null {
   return G_PREFIX[prefix] ?? null;
 }
 
-function googleGlobalBlend(): [number, number] {
-  const vals = Object.values(GBM);
-  return [
-    vals.reduce((a, v) => a + v[0], 0) / vals.length,
-    vals.reduce((a, v) => a + v[1], 0) / vals.length,
-  ];
-}
-
 // Sponsored Messaging benchmarks (DemandSense 2026)
 const SM = { openRate: 0.25, cpc: 10.0, minSends: 200 };
 
@@ -196,21 +173,18 @@ function cap(v: number): number {
   return Math.min(Math.max(v, 0.1), 4.0);
 }
 
-// HTML dashboard thresholds: At benchmark ≥ 1.05, Close ≥ 0.80, Below < 0.80.
-// "Optimize" is applied post-hoc when conversion clears 1.05 but cost ratio < 1.
+// Spec §7: At benchmark ≥ 0.80, otherwise Below. "Optimize" is applied after the
+// band, when the index clears 0.80 but the cost ratio is below 1.
 function gradeFromIndex(idx: number): BenchmarkGrade {
-  if (idx >= 1.05) return "At benchmark";
-  if (idx >= 0.8) return "Close";
-  return "Below";
+  return idx >= 0.8 ? "At benchmark" : "Below";
 }
 
-// HTML letter thresholds: A ≥ 1.30 · B ≥ 1.05 · C ≥ 0.80 · D ≥ 0.50 · F < 0.50
+// Spec §7: A ≥ 1.30 · B ≥ 0.80 · C ≥ 0.50 · D below. Contiguous, no F.
 function letterFromIndex(idx: number): LetterGrade {
   if (idx >= 1.3) return "A";
-  if (idx >= 1.05) return "B";
-  if (idx >= 0.8) return "C";
-  if (idx >= 0.5) return "D";
-  return "F";
+  if (idx >= 0.8) return "B";
+  if (idx >= 0.5) return "C";
+  return "D";
 }
 
 function pct(v: number, decimals = 1): string {
@@ -239,182 +213,8 @@ const BLANK_GRADE = {
   why: "",
 };
 
-export function gradeCampaign(line: BenchmarkCampaignLine): Omit<GradedCampaignLine, keyof BenchmarkCampaignLine> {
-  const { spend, impressions, clicks, platform, format, objective, region } = line;
-
-  // ── LinkedIn Sponsored Messaging ─────────────────────────────────────────
-  if (platform === "linkedin" && format === "Sponsored Messaging") {
-    const sends = line.sends ?? 0;
-    const msgOpens = line.message_opens ?? 0;
-    const msgClicks = line.message_clicks ?? 0;
-
-    if (sends < SM.minSends || spend <= 0) {
-      return { ...BLANK_GRADE, why: `Only ${sends.toLocaleString()} sends — not enough to judge.` };
-    }
-
-    const openRate = sends > 0 ? msgOpens / sends : null;
-    const cpc = msgClicks > 0 ? spend / msgClicks : null;
-
-    const r1 = openRate !== null ? cap(openRate / SM.openRate) : 1.0;
-    const r2 = cpc !== null ? cap(SM.cpc / cpc) : 1.0;
-    const idx = Math.sqrt(r1 * r2);
-
-    let grade = gradeFromIndex(idx);
-    if (grade === "At benchmark" && r2 < 1) grade = "Optimize";
-
-    let why = `Index ${idx.toFixed(2)} (Sponsored Messaging). Open rate ${openRate !== null ? pct(openRate, 1) : "—"} vs ${pct(SM.openRate, 0)}`;
-    if (cpc !== null) why += `. Cost per click ${usd2(cpc)} vs ${usd2(SM.cpc)}`;
-    why += `. ${sends.toLocaleString()} sends, ${msgOpens.toLocaleString()} opens.`;
-    if (grade === "Optimize") why += " Opening well above benchmark, but each click costs more than it should.";
-
-    return {
-      index: +idx.toFixed(2),
-      grade,
-      letter: letterFromIndex(idx),
-      benchmark_source: "Sponsored Messaging",
-      conversion_metric_name: "Open rate",
-      conversion_benchmark: SM.openRate,
-      cost_metric_name: "Cost per click",
-      cost_benchmark: SM.cpc,
-      why,
-    };
-  }
-
-  // ── Minimum volume check (all other formats) ──────────────────────────────
-  if (impressions < MIN_IMPRESSIONS || spend <= 0) {
-    return {
-      ...BLANK_GRADE,
-      why: `Only ${impressions.toLocaleString()} impressions — not enough to judge.`,
-    };
-  }
-
-  const ctr = impressions > 0 ? clicks / impressions : null;
-  const cpc = clicks > 0 ? spend / clicks : null;
-
-  // ── Google ────────────────────────────────────────────────────────────────
-  if (platform === "google") {
-    const googleKey = googleRegion(line.name);
-    const benchmarkSource = googleKey ?? "Global blend";
-    const [bc, bp] = googleKey && GBM[googleKey] ? GBM[googleKey] : googleGlobalBlend();
-
-    const r1 = ctr !== null ? cap(ctr / bc) : 0.1;
-    // null CPC (impressions but no clicks) is a genuine failure — penalise, not neutral
-    const r2 = cpc !== null ? cap(bp / cpc) : 0.1;
-    const idx = Math.sqrt(r1 * r2);
-
-    let grade = gradeFromIndex(idx);
-    if (grade === "At benchmark" && r2 < 1) grade = "Optimize";
-
-    let why = `Index ${idx.toFixed(2)} (${benchmarkSource}). CTR ${ctr !== null ? pct(ctr, 2) : "—"} vs ${pct(bc, 2)}. `;
-    why += cpc !== null ? `CPC ${usd2(cpc)} vs ${usd2(bp)}.` : `No clicks, so no CPC to compare against ${usd2(bp)}.`;
-    if (grade === "Optimize") why += " Converting well but the click price is above benchmark.";
-
-    return {
-      index: +idx.toFixed(2),
-      grade,
-      letter: letterFromIndex(idx),
-      benchmark_source: benchmarkSource,
-      conversion_metric_name: "CTR",
-      conversion_benchmark: bc,
-      cost_metric_name: "CPC",
-      cost_benchmark: bp,
-      why,
-    };
-  }
-
-  // ── LinkedIn (non-SM) ─────────────────────────────────────────────────────
-  const section = resolveObjective(objective);
-  if (!section) {
-    return {
-      ...BLANK_GRADE,
-      why: `No benchmark exists for the ${objective ?? "unknown"} objective.`,
-    };
-  }
-
-  const lbmRegion = region ? REGION_TO_LBM[region as RegionCode] : null;
-  const b =
-    lbmRegion && LBM[section]?.[lbmRegion] ? LBM[section][lbmRegion] : globalBlend(section);
-  if (!b) {
-    return { ...BLANK_GRADE, why: `Benchmark data unavailable for ${section}.` };
-  }
-
-  const benchmarkSource = lbmRegion && LBM[section]?.[lbmRegion] ? lbmRegion : "Global blend";
-  const isLeadGen = section === "Lead Generation";
-  const isBrandAwareness = section === "Brand Awareness";
-
-  // Brand Awareness uses CPM rather than CPC as the cost metric
-  const cpm = impressions > 0 ? (spend / impressions) * 1000 : null;
-
-  // Conversion metric
-  const formOpens = line.form_opens ?? 0;
-  const leads = line.leads ?? 0;
-  const formCompletionRate = isLeadGen ? (formOpens > 0 ? leads / formOpens : null) : null;
-
-  const mainMetricValue = isLeadGen ? formCompletionRate : ctr;
-  const mainMetricName = isLeadGen ? "Form completion" : "CTR";
-  const mainBenchmark = b.m / 100; // LBM stores percentages, convert to ratio
-
-  if (isLeadGen && mainMetricValue === null) {
-    return {
-      ...BLANK_GRADE,
-      grade: "Below",
-      letter: "",
-      benchmark_source: benchmarkSource,
-      conversion_metric_name: mainMetricName,
-      conversion_benchmark: mainBenchmark,
-      cost_metric_name: "CPL",
-      cost_benchmark: b.c,
-      why: "Nothing converting — no form opens recorded.",
-    };
-  }
-
-  // Cost metric
-  const costMetricName = isLeadGen ? "CPL" : isBrandAwareness ? "CPM" : "CPC";
-  const cpl = leads > 0 ? spend / leads : null;
-  const costMetricValue = isLeadGen ? cpl : isBrandAwareness ? cpm : cpc;
-  const costBenchmark = b.c;
-
-  const r1 = mainMetricValue !== null ? cap(mainMetricValue / mainBenchmark) : 0.1;
-  const r2 = costMetricValue !== null && costBenchmark ? cap(costBenchmark / costMetricValue) : 1.0;
-  const idx = Math.sqrt(r1 * r2);
-
-  let grade = gradeFromIndex(idx);
-  if (grade === "At benchmark" && r2 < 1) grade = "Optimize";
-
-  const fmtMain = (v: number) =>
-    isLeadGen ? pct(v, 1) : pct(v, 2);
-  const fmtCost = (v: number) =>
-    isLeadGen ? usd(v) : isBrandAwareness ? usd2(v) : usd2(v);
-
-  let why = `Index ${idx.toFixed(2)} (${benchmarkSource}). ${mainMetricName} ${mainMetricValue !== null ? fmtMain(mainMetricValue) : "—"} vs ${fmtMain(mainBenchmark)}`;
-  if (costMetricValue !== null) why += `. ${costMetricName} ${fmtCost(costMetricValue)} vs ${fmtCost(costBenchmark)}`;
-  why += ".";
-  if (grade === "Optimize" && mainMetricValue !== null) {
-    why += ` ${mainMetricName} is ${(mainMetricValue / mainBenchmark).toFixed(1)}× benchmark, which outweighs the ${(costMetricValue !== null && costBenchmark ? costMetricValue / costBenchmark : 1).toFixed(1)}× cost — worth optimising, not cutting.`;
-  } else if (grade === "Below") {
-    why += " Both conversion and cost are short of the bar.";
-  }
-
-  return {
-    index: +idx.toFixed(2),
-    grade,
-    letter: letterFromIndex(idx),
-    benchmark_source: benchmarkSource,
-    conversion_metric_name: mainMetricName,
-    conversion_benchmark: mainBenchmark,
-    cost_metric_name: costMetricName,
-    cost_benchmark: costBenchmark,
-    why,
-  };
-}
-
-// Apply gradeCampaign() to every line and return GradedCampaignLine[].
-export function gradeAll(lines: BenchmarkCampaignLine[]): GradedCampaignLine[] {
-  return lines.map((line) => ({ ...line, ...gradeCampaign(line) }));
-}
-
-// Grade a single campaign with explicit (possibly overridden) benchmark tables.
-// All logic is identical to gradeCampaign(); the only difference is table source.
+// Grade a single campaign against the given benchmark tables (the defaults, or
+// the user's in-browser edits from useBenchmarkTables).
 export function gradeCampaignWith(
   line: BenchmarkCampaignLine,
   tables: BenchmarkTables,
@@ -453,6 +253,7 @@ export function gradeCampaignWith(
   if (platform === "google") {
     const googleKey = googleRegion(line.name);
     const benchmarkSource = googleKey ?? "Global blend";
+    // Google's global blend is the mean of all regions (spec §5.4).
     const globalBlendGbm = (): [number, number] => {
       const vals = Object.values(gbm);
       return [vals.reduce((a, v) => a + v[0], 0) / vals.length, vals.reduce((a, v) => a + v[1], 0) / vals.length];
@@ -473,6 +274,10 @@ export function gradeCampaignWith(
   if (!section) return { ...BLANK_GRADE, why: `No benchmark exists for the ${objective ?? "unknown"} objective.` };
 
   const lbmRegion = region ? REGION_TO_LBM[region as RegionCode] : null;
+  // LinkedIn's global blend is the most forgiving figure from any region: the
+  // lowest conversion requirement and the highest cost allowance (spec §5.3). A
+  // global campaign spans every market, so it isn't judged against a bar no
+  // single-market campaign could meet.
   const globalBlendLbm = (sec: string): { m: number; c: number } | null => {
     const r = lbm[sec];
     if (!r) return null;
@@ -485,6 +290,11 @@ export function gradeCampaignWith(
   const isLeadGen = section === "Lead Generation";
   const isBrandAwareness = section === "Brand Awareness";
   const cpm = impressions > 0 ? (spend / impressions) * 1000 : null;
+  // null = the backend doesn't report form opens (not a measured zero). The spec's
+  // "nothing converting" rule assumes a measured count, so an unreported one can't
+  // be graded rather than counting as a failure.
+  if (isLeadGen && line.form_opens === null)
+    return { ...BLANK_GRADE, why: "Form opens aren't reported for this campaign, so form completion can't be measured." };
   const formOpens = line.form_opens ?? 0;
   const leads = line.leads ?? 0;
   const formCompletionRate = isLeadGen ? (formOpens > 0 ? leads / formOpens : null) : null;
@@ -506,8 +316,8 @@ export function gradeCampaignWith(
   let why = `Index ${idx.toFixed(2)} (${benchmarkSource}). ${mainMetricName} ${mainMetricValue !== null ? fmtMain(mainMetricValue) : "—"} vs ${fmtMain(mainBenchmark)}`;
   if (costMetricValue !== null) why += `. ${costMetricName} ${fmtCost(costMetricValue)} vs ${fmtCost(b.c)}`;
   why += ".";
-  if (grade === "Optimize" && mainMetricValue !== null) why += ` ${mainMetricName} is ${(mainMetricValue / mainBenchmark).toFixed(1)}× benchmark, which outweighs the ${costMetricValue !== null && b.c ? (costMetricValue / b.c).toFixed(1) : "1.0"}× cost — worth optimising, not cutting.`;
-  else if (grade === "Below") why += " Both conversion and cost are short of the bar.";
+  if (grade === "Optimize" && mainMetricValue !== null)
+    why += ` ${mainMetricName} is ${(mainMetricValue / mainBenchmark).toFixed(1)}× benchmark, which outweighs the ${costMetricValue !== null && b.c ? (costMetricValue / b.c).toFixed(1) : "1.0"}× cost — worth optimising, not cutting.`;
   return { index: +idx.toFixed(2), grade, letter: letterFromIndex(idx), benchmark_source: benchmarkSource, conversion_metric_name: mainMetricName, conversion_benchmark: mainBenchmark, cost_metric_name: costMetricName, cost_benchmark: b.c, why };
 }
 
@@ -516,24 +326,25 @@ export function gradeAllWith(lines: BenchmarkCampaignLine[], tables: BenchmarkTa
 }
 
 // Aggregate summary over a filtered set of graded lines (for summary cards + stacked bar).
+// Shares follow spec §8: "Too little data" campaigns are left out of both the
+// numerator and the denominator — an ungradeable campaign isn't a failing one.
 export interface BenchmarkSummary {
   total: number;
   nGood: number; // At benchmark
-  nOpt: number;  // Optimize
-  nClose: number;
+  nOpt: number; // Optimize
   nBelow: number;
   nNone: number; // Too little data
-  nMet: number;  // nGood + nOpt
-  nGradeable: number; // nGood + nOpt + nClose + nBelow
+  nMet: number; // nGood + nOpt
+  nGradeable: number; // nGood + nOpt + nBelow
   spendTotal: number;
   spendGood: number;
   spendOpt: number;
-  spendClose: number;
   spendBelow: number;
   spendNone: number;
-  spendMet: number;   // spendGood + spendOpt
-  spendShare: number | null; // spendMet / spendTotal (all spend, HTML formula)
-  campShare: number | null;  // nMet / nGradeable
+  spendMet: number; // spendGood + spendOpt
+  spendGradeable: number; // spendTotal - spendNone
+  spendShare: number | null; // spendMet / spendGradeable
+  campShare: number | null; // nMet / nGradeable
   impressions: number;
   clicks: number;
   ctr: number | null;
@@ -541,30 +352,30 @@ export interface BenchmarkSummary {
 }
 
 export function summarize(lines: GradedCampaignLine[]): BenchmarkSummary {
-  let nGood = 0, nOpt = 0, nClose = 0, nBelow = 0, nNone = 0;
-  let spendGood = 0, spendOpt = 0, spendClose = 0, spendBelow = 0, spendNone = 0;
+  let nGood = 0, nOpt = 0, nBelow = 0, nNone = 0;
+  let spendGood = 0, spendOpt = 0, spendBelow = 0, spendNone = 0;
   let spendTotal = 0, impressions = 0, clicks = 0;
 
   for (const l of lines) {
     spendTotal += l.spend;
     impressions += l.impressions;
     clicks += l.clicks;
-    if (l.grade === "At benchmark")       { nGood++;  spendGood  += l.spend; }
-    else if (l.grade === "Optimize")      { nOpt++;   spendOpt   += l.spend; }
-    else if (l.grade === "Close")         { nClose++; spendClose += l.spend; }
-    else if (l.grade === "Below")         { nBelow++; spendBelow += l.spend; }
-    else                                  { nNone++;  spendNone  += l.spend; }
+    if (l.grade === "At benchmark")  { nGood++;  spendGood  += l.spend; }
+    else if (l.grade === "Optimize") { nOpt++;   spendOpt   += l.spend; }
+    else if (l.grade === "Below")    { nBelow++; spendBelow += l.spend; }
+    else                             { nNone++;  spendNone  += l.spend; }
   }
 
   const nMet = nGood + nOpt;
   const spendMet = spendGood + spendOpt;
-  const nGradeable = nGood + nOpt + nClose + nBelow;
+  const nGradeable = nMet + nBelow;
+  const spendGradeable = spendMet + spendBelow;
 
   return {
     total: lines.length,
-    nGood, nOpt, nClose, nBelow, nNone, nMet, nGradeable,
-    spendTotal, spendGood, spendOpt, spendClose, spendBelow, spendNone, spendMet,
-    spendShare: spendTotal > 0 ? spendMet / spendTotal : null,
+    nGood, nOpt, nBelow, nNone, nMet, nGradeable,
+    spendTotal, spendGood, spendOpt, spendBelow, spendNone, spendMet, spendGradeable,
+    spendShare: spendGradeable > 0 ? spendMet / spendGradeable : null,
     campShare: nGradeable > 0 ? nMet / nGradeable : null,
     impressions,
     clicks,
@@ -576,49 +387,46 @@ export function summarize(lines: GradedCampaignLine[]): BenchmarkSummary {
 // ─── Summary board ────────────────────────────────────────────────────────────
 
 // Aggregate graded lines by their `owner` label into summary board rows, sorted
-// by total spend descending.
+// by total spend descending. Shares exclude "Too little data", as in summarize().
 export function buildBoardRows(graded: GradedCampaignLine[]): BenchmarkBoardRow[] {
   const map = new Map<string, BenchmarkBoardRow>();
 
   for (const l of graded) {
     const key = l.owner ?? "Unknown";
-    if (!map.has(key)) {
-      map.set(key, {
+    let row = map.get(key);
+    if (!row) {
+      row = {
         label: key,
         spend: 0,
         n: 0,
         n_gradeable: 0,
         n_at_benchmark: 0,
-        n_close: 0,
         n_below: 0,
+        spend_gradeable: 0,
         spend_at_benchmark: 0,
-        spend_close: 0,
         spend_below: 0,
         pct_spend: null,
         pct_camp: null,
-      });
+      };
+      map.set(key, row);
     }
-    const row = map.get(key)!;
     row.spend += l.spend;
     row.n += 1;
+    if (l.grade === "Too little data") continue;
 
-    if (l.grade !== "Too little data") {
-      row.n_gradeable += 1;
-      if (l.grade === "At benchmark" || l.grade === "Optimize") {
-        row.n_at_benchmark++;
-        row.spend_at_benchmark += l.spend;
-      } else if (l.grade === "Close") {
-        row.n_close++;
-        row.spend_close += l.spend;
-      } else if (l.grade === "Below") {
-        row.n_below++;
-        row.spend_below += l.spend;
-      }
+    row.n_gradeable += 1;
+    row.spend_gradeable += l.spend;
+    if (l.grade === "At benchmark" || l.grade === "Optimize") {
+      row.n_at_benchmark++;
+      row.spend_at_benchmark += l.spend;
+    } else {
+      row.n_below++;
+      row.spend_below += l.spend;
     }
   }
 
   for (const row of map.values()) {
-    row.pct_spend = row.spend > 0 ? row.spend_at_benchmark / row.spend : null;
+    row.pct_spend = row.spend_gradeable > 0 ? row.spend_at_benchmark / row.spend_gradeable : null;
     row.pct_camp = row.n_gradeable > 0 ? row.n_at_benchmark / row.n_gradeable : null;
   }
 
@@ -643,7 +451,6 @@ export function fmtIndex(n: number | null): string {
 export const GRADE_HEX: Record<BenchmarkGrade, string> = {
   "At benchmark": "#0E7C6B",
   Optimize: "#5B4BC4",
-  Close: "#B26A00",
   Below: "#C0392B",
   "Too little data": "#9AA5B1",
 };
