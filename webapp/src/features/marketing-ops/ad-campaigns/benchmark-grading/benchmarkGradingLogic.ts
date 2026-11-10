@@ -16,9 +16,8 @@
 
 // Ad Campaigns → Benchmark Grading — deterministic grading logic.
 //
-// Authoritative spec: benchmark-grading-spec.md v2026.10 and its reference
-// implementation grading-reference.py. Grades must agree with the reference
-// campaign for campaign; the exceptions are noted where they occur.
+// Rules follow benchmark-grading-spec.md v2026.10. Where this file departs from
+// the spec, the exception is noted where it occurs.
 //
 // Grading methodology:
 //   Every campaign is scored on one conversion metric and one cost metric.
