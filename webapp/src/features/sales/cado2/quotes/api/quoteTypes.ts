@@ -168,6 +168,8 @@ export interface OpportunityLineLoad {
   readonly category: string;
   readonly classification: string | null;
   readonly recurring: boolean;
+  /** The product's Quantity Unit Of Measure in Salesforce (D158); a formula line's comes from its version when saved (D83). */
+  readonly unitOfMeasure: string | null;
   /** Priced by an Admin's formula (D81): its Salesforce price is ignored. */
   readonly formula: boolean;
 }
@@ -233,6 +235,7 @@ export interface Product {
   /** The product's Salesforce description. */
   readonly description?: string | null;
   readonly family: string | null;
+  /** Salesforce's Quantity Unit Of Measure (D158), e.g. "Per core"; null when blank. */
   readonly unitOfMeasure: string | null;
   /** Product_Unit__c and product_Classification__c: the approval group inputs. */
   readonly productUnit: string | null;

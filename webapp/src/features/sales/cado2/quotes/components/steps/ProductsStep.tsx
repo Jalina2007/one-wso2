@@ -223,12 +223,13 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
   const supportIssues = supportProblems(values.lines, plans);
   const [premiumMenu, setPremiumMenu] = useState<{ anchor: HTMLElement; year: number } | null>(null);
   // A support product as a line in a year: quantity 1, priced from the book
-  // (its formula, if any; the unit of measure with %LIST_PRICE% filled in).
+  // (its formula, if any; the unit of measure its version's with %LIST_PRICE%
+  // filled in, else Salesforce's, D158).
   const supportLine = (productId: string, year: SectionYear): LineValue | null => {
     const p = supportProducts.data?.find((x) => x.id === productId);
     if (!p) return null;
     const f = formulas.data?.find((x) => x.productId === p.id && x.status === "ACTIVE");
-    return lineFromProduct(p, year, f ? unitOfMeasureFor(f.unitOfMeasure, p.pricebookEntries[0]?.unitPrice ?? "") : "");
+    return lineFromProduct(p, year, f ? unitOfMeasureFor(f.unitOfMeasure, p.pricebookEntries[0]?.unitPrice ?? "") : (p.unitOfMeasure ?? ""));
   };
   // Why a support product can't be added: not priced in the book, or its
   // classification isn't set up (as the product dialog says, D152).

@@ -154,7 +154,8 @@ export function lineFromSalesforce(l: OpportunityLineLoad): LineValue {
     category: l.category as LineCategory | "",
     recurring: l.recurring,
     classification: l.classification ?? "",
-    unitOfMeasure: "",
+    // A formula line's is its version's, set when saved (D83).
+    unitOfMeasure: l.formula ? "" : (l.unitOfMeasure ?? ""),
     quantity: String(Number(l.quantity)),
     discount: String(Number(l.discount)),
     yearNumber: 1,

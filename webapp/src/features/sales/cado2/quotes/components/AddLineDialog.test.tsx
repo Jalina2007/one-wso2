@@ -183,12 +183,12 @@ describe("AddLineDialog", () => {
     expect(screen.queryByRole("combobox", { name: /Category/ })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Add product" }));
-    // Product_Unit__c is the product family, so it no longer pre-fills the unit (2026-09-26).
+    // The unit of measure is the product's Quantity Unit Of Measure in Salesforce (D158).
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         pricebookEntryId: "01u000000000001",
         unitPrice: "360",
-        unitOfMeasure: "",
+        unitOfMeasure: "Gateways",
         category: "SUBSCRIPTION",
         recurring: true,
         classification: "PS",
