@@ -34,7 +34,6 @@ export interface LeadImportOptions {
   finished_retention_hours: number;
 }
 
-
 export interface LeadImportCounts {
   rows_read: number;
   leads_written: number;

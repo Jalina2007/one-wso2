@@ -29,7 +29,7 @@ import {
   TableRow,
   Typography,
 } from "@wso2/oxygen-ui";
-import { Check, ChevronDown, Download } from "@wso2/oxygen-ui-icons-react";
+import { Check, ChevronDown, Download, RefreshCw } from "@wso2/oxygen-ui-icons-react";
 import {
   leadImportError,
   useApplyLeadChanges,
@@ -88,7 +88,7 @@ export default function LeadImportRun({ id, onBack }: { id: string; onBack: () =
       <Head run={run} workbook={detail.result?.files.workbook ?? null} onBack={onBack} />
       <Steps run={run} />
       {run.status === "processing" ? (
-        <Converting />
+        <Converting onRefresh={() => void query.refetch()} refreshing={query.isFetching} />
       ) : run.status === "failed" ? (
         <Alert severity="error" sx={{ fontSize: 13 }}>
           {run.error ?? "The file could not be converted."} The upload has been deleted.
@@ -219,13 +219,24 @@ function Steps({ run }: { run: Run }) {
 
 // ---- converting -------------------------------------------------------------------------
 
-function Converting() {
+function Converting({ onRefresh, refreshing }: { onRefresh: () => void; refreshing: boolean }) {
   return (
     <Panel sx={{ p: 4, textAlign: "center" }}>
-      <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Still converting. An email will be sent when it's ready.</Typography>
+      <Typography sx={{ fontSize: 14, fontWeight: 700 }}>
+        Still converting. An email will be sent when it's ready.
+      </Typography>
       <Typography sx={{ fontSize: 12.5, color: "text.secondary", mt: 0.5 }}>
         Most files take 30 seconds to 2 minutes. The email links back to this conversion.
       </Typography>
+      <Button
+        size="small"
+        onClick={onRefresh}
+        disabled={refreshing}
+        startIcon={<RefreshCw size={14} />}
+        sx={{ mt: 2, fontSize: 12 }}
+      >
+        Refresh
+      </Button>
     </Panel>
   );
 }
