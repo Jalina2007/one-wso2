@@ -21,7 +21,6 @@ import {
   commissionProblem,
   durationText,
   emptyDraftForm,
-  lineFromSalesforce,
   commissionAfterYearChange,
   commissionRatesText,
   endDateFor,
@@ -777,36 +776,6 @@ describe("Year 1 always there", () => {
   it("won't delete the only year", () => {
     const v = { yearCount: 1, lastYearEndDate: "2027-06-30", lines: [] };
     expect(deleteYear(v, 1)).toEqual({ yearCount: 1, lastYearEndDate: "2027-06-30", lines: [] });
-  });
-});
-
-// D150: a Salesforce line as it goes into the quote.
-describe("lineFromSalesforce", () => {
-  const load = {
-    pricebookEntryId: "01uAS", productId: "01tAS", productName: "API Manager Analytics", productCode: "P-APIM-AN",
-    productDescription: null, pricebookId: "01sQQ", pricebookName: "QuickQuote USD 2027", unitPrice: "15000",
-    salesPrice: "16500.00", quantity: "2", discount: "5.50", category: "SUBSCRIPTION", classification: "PS",
-    recurring: true, unitOfMeasure: "Per core" as string | null, formula: false,
-  };
-
-  it("keeps the quantity, a raised sales price and the discount, in Year 1, priced from the quote's book", () => {
-    const l = lineFromSalesforce(load);
-    expect(l).toMatchObject({
-      lineId: null, pricebookEntryId: "01uAS", productId: "01tAS", productName: "API Manager Analytics", productCode: "P-APIM-AN",
-      productDescription: "", pricebookId: "01sQQ", unitPrice: "15000", salesPrice: "16500", quantity: "2", discount: "5.5",
-      category: "SUBSCRIPTION", recurring: true, unitOfMeasure: "Per core", yearNumber: 1, startDate: "", endDate: "",
-    });
-    expect(l.key).not.toBe("");
-  });
-
-  it("leaves the price to the book, or the formula, when nothing was raised", () => {
-    expect(lineFromSalesforce({ ...load, salesPrice: null, formula: true }).salesPrice).toBe("");
-  });
-
-  // D158: Salesforce's unit of measure; a formula line's is its version's, set when saved.
-  it("takes the product's Salesforce unit of measure, except on a formula line", () => {
-    expect(lineFromSalesforce({ ...load, unitOfMeasure: null }).unitOfMeasure).toBe("");
-    expect(lineFromSalesforce({ ...load, formula: true }).unitOfMeasure).toBe("");
   });
 });
 

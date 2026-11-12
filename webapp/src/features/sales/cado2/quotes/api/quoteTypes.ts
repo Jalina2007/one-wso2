@@ -114,8 +114,9 @@ export interface RenewalStart {
 export type DealKind = "FIRST_SALE" | "RENEWAL" | "EXPANSION" | "OTHER";
 
 /**
- * A product line on the opportunity in Salesforce (D147). Money is an exact
- * decimal string in the opportunity's currency; null when Salesforce has none.
+ * A product line on a previous opportunity in Salesforce (D159). Money is an
+ * exact decimal string in the opportunity's currency; null when Salesforce
+ * has none.
  */
 export interface OpportunityLineView {
   readonly id: string;
@@ -132,67 +133,16 @@ export interface OpportunityLineView {
   readonly totalPrice: string | null;
   readonly serviceStartDate: string | null;
   readonly serviceEndDate: string | null;
-  /** The line's failed checks (D150); empty when it passes or wasn't checked. */
-  readonly problems: readonly LineProblem[] | null;
-  /** The line's product in the quote's price book, as it would load; null when not in the book (D150). */
-  readonly load: OpportunityLineLoad | null;
 }
 
-/** A failed check (D150): a short label to see at a glance, and the full sentence. */
-export interface LineProblem {
-  readonly short: string;
-  readonly detail: string;
-}
-
-/**
- * A Salesforce line's product in the quote's price book, with the line's
- * Salesforce values (D150): what "Load into quote" adds when every line
- * passes.
- */
-export interface OpportunityLineLoad {
-  readonly pricebookEntryId: string;
-  readonly productId: string;
-  readonly productName: string;
-  readonly productCode: string | null;
-  readonly productDescription: string | null;
-  readonly pricebookId: string;
-  readonly pricebookName: string;
-  /** The quote's price book's price. */
-  readonly unitPrice: string;
-  /** The Salesforce sales price when it differs from the book; null otherwise, and on a formula line. */
-  readonly salesPrice: string | null;
-  /** Salesforce's, exact, e.g. "2.5". */
-  readonly quantity: string;
-  readonly discount: string;
-  /** Its group from its classification (D152); "" when that isn't set up. */
-  readonly category: string;
-  readonly classification: string | null;
-  readonly recurring: boolean;
-  /** The product's Quantity Unit Of Measure in Salesforce (D158); a formula line's comes from its version when saved (D83). */
-  readonly unitOfMeasure: string | null;
-  /** Priced by an Admin's formula (D81): its Salesforce price is ignored. */
-  readonly formula: boolean;
-}
-
-/** Whether an auto-generated renewal's Salesforce lines load in one go (D150). */
-export interface RenewalCheck {
-  /** The opportunity's own problems, e.g. its term. */
-  readonly problems: readonly LineProblem[];
-  /** Every line and the opportunity pass. */
-  readonly canLoad: boolean;
-  readonly isRenewal: boolean;
+/** A previous opportunity's product lines as they are in Salesforce now (D159), read only. */
+export interface OpportunityLines {
+  readonly opportunityName: string | null;
   readonly subsStartDate: string | null;
   readonly subsEndDate: string | null;
-  readonly pricebookName: string | null;
-}
-
-/** The opportunity's product lines as they are in Salesforce now (D147). */
-export interface OpportunityLines {
   /** The opportunity's currency, which the lines are priced in. */
   readonly currency: string | null;
   readonly lines: readonly OpportunityLineView[];
-  /** Null when the quote's price book wasn't sent (D150). */
-  readonly check: RenewalCheck | null;
 }
 
 /** A contact on the opportunity, with its roles there, e.g. "Economic Buyer" (D124). */

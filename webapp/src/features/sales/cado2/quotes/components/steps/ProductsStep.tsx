@@ -35,8 +35,8 @@ import {
   ChevronDownIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
-  CloudDownloadIcon,
   CopyIcon,
+  HistoryIcon,
   PackageIcon,
   PencilIcon,
   PlusIcon,
@@ -48,9 +48,8 @@ import ScheduleTable from "@features/sales/cado2/quotes/components/sheet/Schedul
 import YearSections, { OrderTotalsFooter, type SectionYear } from "@features/sales/cado2/quotes/components/sheet/YearSections";
 import { useCollapsedYears } from "@features/sales/cado2/quotes/components/sheet/useCollapsedYears";
 import { hasYearlySchedule, orderForm, sheetFromForm } from "@features/sales/cado2/quotes/sheet/sheetModel";
-import type { OpportunityLineLoad, PricingPreview, RenewalCheck } from "@features/sales/cado2/quotes/api/quoteTypes";
+import type { PricingPreview } from "@features/sales/cado2/quotes/api/quoteTypes";
 import {
-  useOpportunityQuotes,
   usePricingFormulas,
   useProductsByIds,
   useQuoteSettings,
@@ -69,12 +68,10 @@ import {
   cloneYear,
   contractYears,
   deleteYear,
-  formatDate,
   insertIndex,
   isPartnerLed,
   lastYearEarliestEnd,
   lastYearEndProblem,
-  lineFromSalesforce,
   MAX_YEARS,
   setLastYearEnd,
   type ContractYear,
@@ -84,7 +81,7 @@ import {
 import AddLineDialog from "@features/sales/cado2/quotes/components/AddLineDialog";
 import TermCard from "@features/sales/cado2/quotes/components/TermCard";
 import LastYearEnd from "@features/sales/cado2/quotes/components/LastYearEnd";
-import OpportunityLinesDialog from "@features/sales/cado2/quotes/components/OpportunityLinesDialog";
+import PreviousProductsDialog from "@features/sales/cado2/quotes/components/PreviousProductsDialog";
 import PartnerCommissionCard from "@features/sales/cado2/quotes/components/PartnerCommissionCard";
 import PricingSetupCard from "@features/sales/cado2/quotes/components/PricingSetupCard";
 import { useFieldIssue } from "@features/sales/cado2/quotes/components/fieldIssues";
@@ -147,36 +144,11 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
     index: null,
     year: 1,
   });
-  // D150: an auto-generated renewal's inherited line items in Salesforce,
-  // until a quote has been synced to it (its lines then came from
-  // QuickQuote). First sales and expansions add products, or clone a quote.
-  const opportunityQuotes = useOpportunityQuotes(values.opportunityId || null);
-  const isRenewal = Boolean(values.opportunityId) && values.dealKind === "RENEWAL" && opportunityQuotes.data !== undefined;
-  // A quote already synced to it: the button stays, disabled, saying why,
-  // so renewals don't look different for no reason (2026-11-11).
-  const syncedQuote = isRenewal ? (opportunityQuotes.data?.find((q) => q.syncedAt) ?? null) : null;
-  const showSalesforceLines = isRenewal && !syncedQuote;
-  const importBlocked = syncedQuote
-    ? `${syncedQuote.quoteNumber ?? "A QuickQuote quote"} was synced to this opportunity on ${formatDate(syncedQuote.syncedAt!.slice(0, 10))}, so its products in Salesforce come from QuickQuote: there are no inherited products to import.`
-    : "";
-  const [viewingLines, setViewingLines] = useState(false);
-  const [loaded, setLoaded] = useState<number | null>(null);
-  // Clean lines replace any already added (the dialog warns); the term
-  // becomes the opportunity's one year, so each recurring line covers it.
-  const onLoad = (loads: OpportunityLineLoad[], check: RenewalCheck) => {
-    if (check.subsStartDate) setValue("startDate", check.subsStartDate, { shouldDirty: true });
-    setValue("yearCount", 1, { shouldDirty: true });
-    setValue("lastYearEndDate", "", { shouldDirty: true });
-    // One year: one commission rate again (D151).
-    const rates = getValues("partnerCommissionByYear");
-    if (rates.length > 0) {
-      setValue("partnerCommissionPercent", rates[0], { shouldDirty: true });
-      setValue("partnerCommissionByYear", [], { shouldDirty: true });
-    }
-    replace(loads.map(lineFromSalesforce));
-    setLoaded(loads.length);
-    setViewingLines(false);
-  };
+  // D159: a renewal's previous opportunities' products, read only, synced
+  // or not; the AM adds products one by one.
+  const isRenewal = Boolean(values.opportunityId) && values.dealKind === "RENEWAL";
+  const previousIds = values.previousOpportunityIds ?? [];
+  const [viewingPrevious, setViewingPrevious] = useState(false);
   const fold = useCollapsedYears();
   const linesIssue = useFieldIssue("lines");
   const yearsIssue = useFieldIssue("years");
@@ -440,22 +412,18 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
         aside={
           isRenewal || years.length > 1 ? (
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {/* D150: the renewal's inherited products, to import. */}
-              {showSalesforceLines ? (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<CloudDownloadIcon size={14} />}
-                  onClick={() => setViewingLines(true)}
-                  title="Import the products this renewal inherited in Salesforce"
-                >
-                  Import renewal products
-                </Button>
-              ) : syncedQuote ? (
-                <Tooltip title={importBlocked}>
+              {/* D159: the products on the opportunities this renewal replaces. */}
+              {isRenewal ? (
+                <Tooltip title={previousIds.length === 0 ? "Choose the opportunities this renewal replaces in Overview to see their products." : ""}>
                   <span>
-                    <Button size="small" variant="outlined" startIcon={<CloudDownloadIcon size={14} />} disabled>
-                      Import renewal products
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<HistoryIcon size={14} />}
+                      disabled={previousIds.length === 0}
+                      onClick={() => setViewingPrevious(true)}
+                    >
+                      Previous year&apos;s products
                     </Button>
                   </span>
                 </Tooltip>
@@ -483,21 +451,6 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
           <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} retrying={settings.isFetching} sx={{ mb: 2 }}>
             Couldn&apos;t load the support plans, so this quote&apos;s support isn&apos;t checked.
           </ErrorNotice>
-        ) : null}
-        {values.dealKind === "RENEWAL" && opportunityQuotes.error ? (
-          <ErrorNotice
-            error={opportunityQuotes.error}
-            onRetry={() => void opportunityQuotes.refetch()}
-            retrying={opportunityQuotes.isFetching}
-            sx={{ mb: 2 }}
-          >
-            Couldn&apos;t check this renewal&apos;s quotes, so Import renewal products isn&apos;t offered.
-          </ErrorNotice>
-        ) : null}
-        {loaded !== null ? (
-          <Alert severity="success" sx={{ mb: 2 }} onClose={() => setLoaded(null)} aria-label="Loaded from Salesforce">
-            Loaded {loaded === 1 ? "1 product" : `${loaded} products`} from Salesforce. Check them, then save the draft.
-          </Alert>
         ) : null}
         {orphans.length ? (
           <Alert severity="warning" sx={{ mb: 2 }}>
@@ -648,15 +601,11 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
           </MenuItem>
         ))}
       </Menu>
-      <OpportunityLinesDialog
-        open={viewingLines}
-        opportunityId={values.opportunityId || null}
-        opportunityName={values.opportunityName}
-        pricebookId={values.defaultPricebookId}
-        currency={currency}
-        productCount={values.lines.length}
-        onLoad={onLoad}
-        onClose={() => setViewingLines(false)}
+      <PreviousProductsDialog
+        open={viewingPrevious}
+        opportunityIds={previousIds}
+        accountName={values.accountName}
+        onClose={() => setViewingPrevious(false)}
       />
     </Stack>
   );

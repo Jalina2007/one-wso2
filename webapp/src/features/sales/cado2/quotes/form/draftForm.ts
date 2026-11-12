@@ -31,7 +31,6 @@ import type {
   DraftResponse,
   LineCategory,
   LineFormula,
-  OpportunityLineLoad,
   Partner,
   PricingMethod,
   PricingPreview,
@@ -134,37 +133,6 @@ export interface LineValue {
 let lineKeys = 0;
 /** A new line's key, unique in the page. */
 export const newLineKey = () => `line-${Date.now().toString(36)}-${++lineKeys}`;
-
-/**
- * A clean Salesforce line as it goes into the quote (D150): Year 1, priced
- * from the quote's price book, with its quantity, a sales price above the
- * book and its discount. A recurring line covers the whole year (D146).
- */
-export function lineFromSalesforce(l: OpportunityLineLoad): LineValue {
-  return {
-    lineId: null,
-    pricebookEntryId: l.pricebookEntryId,
-    productId: l.productId,
-    productName: l.productName,
-    productCode: l.productCode ?? "",
-    productDescription: l.productDescription ?? "",
-    pricebookId: l.pricebookId,
-    pricebookName: l.pricebookName,
-    unitPrice: l.unitPrice,
-    category: l.category as LineCategory | "",
-    recurring: l.recurring,
-    classification: l.classification ?? "",
-    // A formula line's is its version's, set when saved (D83).
-    unitOfMeasure: l.formula ? "" : (l.unitOfMeasure ?? ""),
-    quantity: String(Number(l.quantity)),
-    discount: String(Number(l.discount)),
-    yearNumber: 1,
-    startDate: "",
-    endDate: "",
-    salesPrice: l.salesPrice ? String(Number(l.salesPrice)) : "",
-    key: newLineKey(),
-  };
-}
 
 /** The most contract years a quote can have (D85). */
 export const MAX_YEARS = 10;

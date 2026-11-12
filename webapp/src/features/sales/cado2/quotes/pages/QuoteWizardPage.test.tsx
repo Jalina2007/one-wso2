@@ -55,7 +55,7 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => {
     useOpportunityQuotes: () => idle(),
     useAccountOpportunities: () => idle(),
     useOpportunityContacts: () => idle(),
-    useOpportunityLines: () => idle(),
+    usePreviousOpportunityLines: () => [],
     useProducts: () => idle(),
     usePricebooks: () => ({
       ...idle(),
