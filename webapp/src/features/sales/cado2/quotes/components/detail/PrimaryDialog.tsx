@@ -27,6 +27,8 @@ interface PrimaryDialogProps {
   readonly opportunityId: string;
   /** Whether the quote is primary now: the dialog offers the opposite. */
   readonly isPrimary: boolean;
+  /** The latest version's status: in approval or approved, making it primary writes it to Salesforce (D168). */
+  readonly status?: string;
   readonly onClose: () => void;
 }
 
@@ -39,8 +41,14 @@ export default function PrimaryDialog({
   quoteId,
   opportunityId,
   isPrimary,
+  status,
   onClose,
 }: PrimaryDialogProps): JSX.Element {
+  // D168: in approval or approved, it is written to the opportunity now; a draft waits for a sync or Submit.
+  const writes =
+    status === "SUBMITTED" || status === "APPROVED"
+      ? " Its products are written to the opportunity in Salesforce now, if syncing to Salesforce is on."
+      : "";
   const setPrimary = useSetPrimary();
   const notify = useCado2Toast();
   const quotes = useOpportunityQuotes(opportunityId);
@@ -69,8 +77,8 @@ export default function PrimaryDialog({
       {isPrimary
         ? "The opportunity will have no primary quote, so nothing is synced to Salesforce until one is chosen."
         : current
-          ? `${primaryLabel(current)} is the primary quote for this opportunity. Making this quote primary releases it. Approvals aren't affected.`
-          : "This quote becomes the one synced to Salesforce. Approvals aren't affected."}
+          ? `${primaryLabel(current)} is the primary quote for this opportunity. Making this quote primary releases it. Approvals aren't affected.${writes}`
+          : `This quote becomes the one synced to Salesforce. Approvals aren't affected.${writes}`}
     </LifecycleDialog>
   );
 }

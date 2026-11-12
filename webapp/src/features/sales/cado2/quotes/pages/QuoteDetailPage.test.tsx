@@ -209,6 +209,8 @@ describe("QuoteDetailPage — primary quote", () => {
     await user.click(screen.getByRole("menuitem", { name: "Make primary" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("Q-26-00031 (nimesha@wso2.com) is the primary quote for this opportunity. Making this quote primary releases it.");
+    // D168: in approval, it is written to the opportunity now.
+    expect(dialog).toHaveTextContent("Its products are written to the opportunity in Salesforce now, if syncing to Salesforce is on.");
     await user.click(within(dialog).getByRole("button", { name: "Make primary" }));
     expect(setPrimary.mutate).toHaveBeenCalledWith({ quoteId: submitted.quote.id, primary: true }, expect.anything());
   });

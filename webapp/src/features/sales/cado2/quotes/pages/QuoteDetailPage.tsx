@@ -760,7 +760,7 @@ export default function QuoteDetailPage(): JSX.Element {
         />
       ) : null}
       {dialog === "primary" ? (
-        <PrimaryDialog quoteId={q.id} opportunityId={q.sfOpportunityId} isPrimary={q.isPrimary} onClose={() => setDialog(null)} />
+        <PrimaryDialog quoteId={q.id} opportunityId={q.sfOpportunityId} isPrimary={q.isPrimary} status={q.status} onClose={() => setDialog(null)} />
       ) : null}
       {dialog === "close" ? (
         <LifecycleDialog
