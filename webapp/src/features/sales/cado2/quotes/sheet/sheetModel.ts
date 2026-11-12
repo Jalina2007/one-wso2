@@ -55,7 +55,7 @@ import {
   commissionByYearInput,
 } from "@features/sales/cado2/quotes/form/draftForm";
 
-export type ContactRole = "BILLING" | "SECURITY";
+export type ContactRole = "BILLING" | "SECURITY" | "LEGAL";
 
 export interface SheetContact {
   readonly role: ContactRole;
@@ -150,8 +150,8 @@ export interface QuoteSheet {
   readonly partnerCommissionPercent: string | null;
   /** D151: each year's rate when they differ, e.g. ["15", "10", "10"]; null with one rate. */
   readonly partnerCommissionRates?: readonly string[] | null;
-  /** Billing, then security; null when not chosen. */
-  readonly contacts: readonly [SheetContact | null, SheetContact | null];
+  /** Billing, security, then legal (D165); null when not chosen. */
+  readonly contacts: readonly [SheetContact | null, SheetContact | null, SheetContact | null];
   readonly lines: readonly SheetLine[];
   readonly years: readonly PricingYear[];
   readonly totals: Totals | null;
@@ -199,7 +199,7 @@ export interface SheetYear {
   readonly arr: string | null;
 }
 
-const ROLES: readonly ContactRole[] = ["BILLING", "SECURITY"];
+const ROLES: readonly ContactRole[] = ["BILLING", "SECURITY", "LEGAL"];
 
 /** A formula line's version label and explanation, for the order form. */
 function formulaOf(f: LineFormula | null | undefined): SheetLine["formula"] {
@@ -267,7 +267,7 @@ export function sheetFromVersion(res: DraftResponse): QuoteSheet {
     billingFrequency: v.billingFrequency,
     partnerCommissionPercent: v.partnerCommissionPercent ? String(Number(v.partnerCommissionPercent)) : null,
     partnerCommissionRates: v.partnerCommissionByYear?.length ? v.partnerCommissionByYear.map((r) => String(Number(r))) : null,
-    contacts: [contact("BILLING"), contact("SECURITY")],
+    contacts: [contact("BILLING"), contact("SECURITY"), contact("LEGAL")],
     lines: v.lines.map((l) => ({
       number: l.lineNumber,
       productName: l.productName,
@@ -326,7 +326,7 @@ export function sheetFromVersion(res: DraftResponse): QuoteSheet {
 // ---------------------------------------------------------------------------
 
 function formContact(role: ContactRole, c: ContactValue): SheetContact | null {
-  if (c.mode === "none" || !blank(c.name)) return null;
+  if (c.mode === "none" || (!blank(c.name) && !blank(c.email))) return null;
   return { role, name: c.name.trim(), title: blank(c.title), email: blank(c.email), source: c.mode === "manual" ? "MANUAL" : "SALESFORCE" };
 }
 
@@ -378,7 +378,7 @@ export function sheetFromForm(
 ): QuoteSheet {
   const recurring = hasRecurring(v.lines);
   const years = formYears(v);
-  const contacts = [v.billingContact, v.securityContact].map((c, i) => formContact(ROLES[i], c));
+  const contacts = [v.billingContact, v.securityContact, v.legalContact].map((c, i) => formContact(ROLES[i], c));
   return {
     accountId: v.accountId,
     opportunityId: v.opportunityId,
@@ -414,7 +414,7 @@ export function sheetFromForm(
           ? String(Number(v.partnerCommissionPercent))
           : null,
     partnerCommissionRates: isPartnerLed(v) && commissionByYearInput(v) ? v.partnerCommissionByYear.map((r) => String(Number(r))) : null,
-    contacts: [contacts[0], contacts[1]],
+    contacts: [contacts[0], contacts[1], contacts[2]],
     lines: v.lines.map((l, i) => {
       const p = preview?.lines[i];
       // A formula line's price is the preview's: worked out from the rest of the quote (D81).

@@ -173,6 +173,7 @@ export function compareVersions(a: DraftResponse, b: DraftResponse): CompareRow[
   add("Commercials", "Ship to", address(a, "SHIP_TO"), address(b, "SHIP_TO"));
   add("Commercials", "Billing contact", contact(a, "BILLING"), contact(b, "BILLING"));
   add("Commercials", "Security contact", contact(a, "SECURITY"), contact(b, "SECURITY"));
+  add("Commercials", "Legal contact", contact(a, "LEGAL"), contact(b, "LEGAL"));
   add("Commercials", "Justification", text(va.justification), text(vb.justification));
   // Section 04: standard, or non-standard written by Legal; then the partner
   // agreement the AM chose, and the special terms.

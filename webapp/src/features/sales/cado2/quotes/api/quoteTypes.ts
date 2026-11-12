@@ -532,6 +532,8 @@ export interface DraftInput {
   readonly contacts: {
     readonly billing?: ContactInput;
     readonly security?: ContactInput;
+    /** D165: where legal notices go; optional. */
+    readonly legal?: ContactInput;
   };
   readonly billTo?: AddressInput;
   readonly shipTo?: AddressInput;
@@ -584,7 +586,7 @@ export interface LineView {
 }
 
 export interface ContactView {
-  readonly role: "BILLING" | "SECURITY";
+  readonly role: "BILLING" | "SECURITY" | "LEGAL";
   readonly source: "SALESFORCE" | "MANUAL";
   readonly sfContactId: string | null;
   readonly name: string;

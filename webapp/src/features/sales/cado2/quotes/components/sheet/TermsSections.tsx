@@ -64,7 +64,7 @@ export function TermsSection({ sheet, specialSlot }: { sheet: QuoteSheet; specia
   );
 }
 
-const CONTACT_LABEL: Record<ContactRole, string> = { BILLING: "Billing contact", SECURITY: "Security contact" };
+const CONTACT_LABEL: Record<ContactRole, string> = { BILLING: "Billing contact", SECURITY: "Security contact", LEGAL: "Legal contact" };
 
 /** A contact under its address, as on the order form; quiet, since it matters for the document. */
 function ContactBlock({ role, contact }: { role: ContactRole; contact: SheetContact | null }): JSX.Element {
@@ -76,7 +76,8 @@ function ContactBlock({ role, contact }: { role: ContactRole; contact: SheetCont
       {contact ? (
         <>
           <Typography variant="body2">
-            {contact.name}
+            {/* A typed-in legal contact may have only an email (D165). */}
+            {contact.name || contact.email}
             {contact.title ? (
               <Box component="span" sx={{ color: "text.secondary" }}>
                 {` · ${contact.title}`}
@@ -84,7 +85,7 @@ function ContactBlock({ role, contact }: { role: ContactRole; contact: SheetCont
             ) : null}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
-            {contact.email ? (
+            {contact.email && contact.name ? (
               <Link href={`mailto:${contact.email}`} color="inherit">
                 {contact.email}
               </Link>
@@ -94,7 +95,7 @@ function ContactBlock({ role, contact }: { role: ContactRole; contact: SheetCont
         </>
       ) : (
         <Typography variant="body2" color="text.disabled" sx={{ fontStyle: "italic" }}>
-          {role === "SECURITY" ? "Not set (optional)" : "Not set yet"}
+          {role === "BILLING" ? "Not set yet" : "Not set (optional)"}
         </Typography>
       )}
     </Box>
@@ -155,7 +156,7 @@ function AddressCard({
   );
 }
 
-/** Bill to with the billing contact, ship to with the security contact: section 01 of the order form. */
+/** Bill to with the billing contact, ship to with the security and legal contacts: section 01 of the order form. */
 export function AddressesSection({ sheet }: { sheet: QuoteSheet }): JSX.Element {
   return (
     <SheetCard title="Addresses and Contacts" icon={<MapPinIcon size={18} />}>
@@ -166,7 +167,12 @@ export function AddressesSection({ sheet }: { sheet: QuoteSheet }): JSX.Element 
           // Printed in full either way; a small mark says it's the bill-to address.
           address={sheet.shipToSameAsBillTo ? sheet.billTo : sheet.shipTo}
           note={sheet.shipToSameAsBillTo ? "Same as bill to" : undefined}
-          contact={<ContactBlock role="SECURITY" contact={sheet.contacts[1]} />}
+          contact={
+            <Stack spacing={1.25}>
+              <ContactBlock role="SECURITY" contact={sheet.contacts[1]} />
+              <ContactBlock role="LEGAL" contact={sheet.contacts[2]} />
+            </Stack>
+          }
         />
       </Box>
     </SheetCard>

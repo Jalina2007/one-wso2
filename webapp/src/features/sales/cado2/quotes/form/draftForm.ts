@@ -211,6 +211,8 @@ export interface DraftFormValues {
   shipToSameAsBillTo: boolean;
   billingContact: ContactValue;
   securityContact: ContactValue;
+  /** D165: where legal notices go; optional. */
+  legalContact: ContactValue;
   justification: string;
 }
 
@@ -275,6 +277,7 @@ export function emptyDraftForm(): DraftFormValues {
     shipToSameAsBillTo: false,
     billingContact: { ...emptyContact },
     securityContact: { ...emptyContact },
+    legalContact: { ...emptyContact },
     justification: "",
   };
 }
@@ -578,7 +581,7 @@ export function addressFrom(sfAccountId: string, companyName: string, a: Address
 // Saved version → form
 // ---------------------------------------------------------------------------
 
-function contactFrom(res: DraftResponse, role: "BILLING" | "SECURITY"): ContactValue {
+function contactFrom(res: DraftResponse, role: "BILLING" | "SECURITY" | "LEGAL"): ContactValue {
   const c = res.version.contacts.find((x) => x.role === role);
   if (!c) return { ...emptyContact };
   return {
@@ -701,6 +704,7 @@ export function fromVersion(res: DraftResponse): DraftFormValues {
     shipToSameAsBillTo: shipTo?.source === "SAME_AS_BILL_TO",
     billingContact: contactFrom(res, "BILLING"),
     securityContact: contactFrom(res, "SECURITY"),
+    legalContact: contactFrom(res, "LEGAL"),
     justification: v.justification ?? "",
   };
 }
@@ -858,6 +862,7 @@ export function toDraftInput(v: DraftFormValues, expectedUpdatedAt?: string): Dr
     contacts: {
       billing: contactInput(v.billingContact),
       security: contactInput(v.securityContact),
+      legal: contactInput(v.legalContact),
     },
     billTo: addressInput(v.billTo),
     shipTo: v.shipToSameAsBillTo ? undefined : addressInput(v.shipTo),
@@ -1052,6 +1057,7 @@ const STEP_3_FIELDS = [
   "shipTo",
   "contacts.billing",
   "contacts.security",
+  "contacts.legal",
 ];
 
 /** Legal: section 04, the partner agreement and the special terms. */

@@ -239,7 +239,7 @@ export default function OverviewStep({ locked, quoteId = null }: OverviewStepPro
     setValue("recordTypeName", "", { shouldDirty: true });
     setValue("isRenewal", false, { shouldDirty: true });
     setValue("previousOpportunityIds", [], { shouldDirty: true });
-    for (const f of ["billingContact", "securityContact"] as const)
+    for (const f of ["billingContact", "securityContact", "legalContact"] as const)
       setValue(f, { ...emptyContact }, { shouldDirty: true });
     setValue("billTo", { ...emptyAddress }, { shouldDirty: true });
     setValue("shipTo", { ...emptyAddress }, { shouldDirty: true });
