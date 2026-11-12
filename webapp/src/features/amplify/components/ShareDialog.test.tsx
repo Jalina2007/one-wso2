@@ -18,16 +18,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 const mutate = vi.fn();
+const showSuccess = vi.fn();
 vi.mock("../api/useAmplifyMutations", () => ({ useRequestShare: () => ({ mutate, isPending: false }) }));
 vi.mock("../api/useAmplifyData", () => ({
   useAmplifyCategories: () => ({ data: [{ code: "PRODUCT", label: "Product" }] }),
   useAmplifyConfig: () => ({ linkedinOrgUrn: "urn:li:organization:1", privacyNoticeUrl: "https://example.test/privacy", campaignLinkOrigins: ["https://www.linkedin.com", "https://linkedin.com"] }),
 }));
 vi.mock("@context/notifications/NotificationsContext", () => ({
-  useNotifications: () => ({ showError: vi.fn(), showSuccess: vi.fn() }),
+  useNotifications: () => ({ showError: vi.fn(), showSuccess }),
 }));
 
-import ShareDialog from "./ShareDialog";
+import ShareDialog, { SHARE_QUEUED_MESSAGE } from "./ShareDialog";
 import type { Campaign } from "../api/amplifyTypes";
 
 describe("ShareDialog", () => {
@@ -39,7 +40,10 @@ describe("ShareDialog", () => {
     categoryCode: "PRODUCT",
     isPriority: true,
   } as Campaign;
-  beforeEach(() => mutate.mockClear());
+  beforeEach(() => {
+    mutate.mockReset();
+    showSuccess.mockClear();
+  });
 
   it("asks for a REPOST of the post, not a new post that links to it", () => {
     render(<ShareDialog campaign={campaign} onClose={() => {}} />);
@@ -75,6 +79,14 @@ describe("ShareDialog", () => {
     fireEvent.change(thoughts(), { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: "Amplify" }));
     expect(mutate.mock.calls[0][0]).toEqual({ campaignId: "c-1", kind: "REPOST" });
+  });
+
+  it("says the share is queued and may take a while, since shares go out one at a time", () => {
+    mutate.mockImplementation((_body, opts: { onSuccess: () => void }) => opts.onSuccess());
+    render(<ShareDialog campaign={campaign} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Amplify" }));
+    expect(showSuccess).toHaveBeenCalledWith(SHARE_QUEUED_MESSAGE);
+    expect(SHARE_QUEUED_MESSAGE).toMatch(/one at a time/);
   });
 
   it("caps the text at the API limit", () => {
