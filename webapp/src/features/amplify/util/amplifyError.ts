@@ -44,6 +44,8 @@ const MESSAGES: Record<string, string> = {
   LINKEDIN_NOT_CONNECTED: "Link your LinkedIn account first.",
   NEEDS_RECONNECT: "Your LinkedIn link expired. Link it again to keep sharing.",
   DUPLICATE_ACTION: "You've already shared this post.",
+  COMMENTARY_NOT_OWN_WORDS:
+    "Add a few more words of your own. Words copied from the post don't count. Or share it without thoughts.",
   FEATURE_DISABLED: "Sharing is paused right now. Try again later.",
   OAUTH_STATE_INVALID: "That LinkedIn link expired. Start again from Celebrate.",
   MEMBER_ALREADY_LINKED: "That LinkedIn account is already linked to another employee.",

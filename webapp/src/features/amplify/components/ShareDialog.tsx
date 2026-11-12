@@ -88,7 +88,7 @@ export default function ShareDialog({ campaign, onClose }: { campaign: Campaign 
           <Divider />
           <TextField
             label="Add your thoughts (optional)"
-            placeholder="Say why this matters to you. It shows above the repost on your LinkedIn."
+            placeholder="Say why this matters to you, in your own words. It shows above the repost on your LinkedIn."
             value={thoughts}
             onChange={(e) => setThoughts(e.target.value)}
             multiline
