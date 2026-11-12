@@ -228,6 +228,22 @@ function StatusCell({ q }: { q: QuoteListItem }): JSX.Element {
   );
 }
 
+/**
+ * When the issued order form expires (D44): set only once it is issued, a
+ * dash before; in red once the day has passed (D160).
+ */
+function ExpiryCell({ expiryDate, now }: { expiryDate: string | null; now: Date }): JSX.Element {
+  if (!expiryDate) {
+    return <TableCell sx={{ color: "text.secondary" }}>—</TableCell>;
+  }
+  const passed = expiryDate.slice(0, 10) < now.toISOString().slice(0, 10);
+  return (
+    <TableCell sx={{ whiteSpace: "nowrap", color: passed ? "error.main" : "text.secondary" }} title={passed ? "Expired" : undefined}>
+      {day(expiryDate)}
+    </TableCell>
+  );
+}
+
 /** A column: its header, and the key it sorts on (D70). */
 type Column = ListColumn<QuoteSortKey>;
 
@@ -249,6 +265,7 @@ function QuoteTableRow({
       sx={{ cursor: "pointer", "& td": CELL }}
     >
       {cells}
+      <ExpiryCell expiryDate={q.expiryDate} now={now} />
       <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
         {day(q.createdAt)}
       </TableCell>
@@ -273,6 +290,8 @@ function OwnerCell({ q }: { q: QuoteListItem }): JSX.Element {
 }
 
 const DATES: readonly Column[] = [
+  // Not sorted: the list sorts on the server, which doesn't sort on it.
+  { label: "Expires" },
   { label: "Created", sort: "created" },
   { label: "Updated", sort: "updated" },
 ];

@@ -148,8 +148,9 @@ const mine = [
     accountName: "Northwind Logistics",
     sfOpportunityId: "006NW",
     opportunityName: "API Platform 2027",
+    expiryDate: "2099-12-11", // its order form is issued (D160)
   }),
-  item(3, { status: "APPROVED" }),
+  item(3, { status: "APPROVED", expiryDate: "2026-01-05" }), // issued, and expired
   item(5, {
     status: "SUBMITTED",
     sfOpportunityId: "006ACMEIAM",
@@ -390,6 +391,17 @@ describe("Quotes page", () => {
       },
       expect.anything(),
     );
+  });
+
+  // D160: when an issued order form expires; a dash before it is issued, red once passed.
+  it("shows when an issued order form expires", () => {
+    renderPage();
+    const header = within(table()).getByRole("columnheader", { name: "Expires" });
+    expect(within(header).queryByRole("button")).toBeNull(); // not sorted
+    const row = (n: string) => within(bodyRows().find((r) => within(r).queryByRole("link", { name: n }))!);
+    expect(row("Q-26-00001").getByText("—")).toBeInTheDocument();
+    expect(row("Q-26-00002").getByText("11 Dec 2099")).not.toHaveAttribute("title");
+    expect(row("Q-26-00003").getByText("5 Jan 2026")).toHaveAttribute("title", "Expired");
   });
 
   it("sorts on any column, ascending then descending", async () => {
