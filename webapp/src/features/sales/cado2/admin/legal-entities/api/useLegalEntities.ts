@@ -47,6 +47,19 @@ export function useCreateLegalEntity() {
 /** Payload for an update: any subset of the fields except the code. */
 export type LegalEntityChanges = Partial<Omit<LegalEntityFormValues, "code">>;
 
+/** Sets the entities' order, every ID once, first to last (D161); the dropdowns follow it. */
+export function useReorderLegalEntities() {
+  const { getToken, key } = useCado2Basis();
+  const queryClient = useQueryClient();
+  return useMutation<LegalEntity[], Error, number[]>({
+    mutationFn: async (ids) => cado2Send<LegalEntity[]>("PUT", cado2ServiceUrls.legalEntityOrder, await getToken(), { ids }),
+    onSuccess: (all) => {
+      queryClient.setQueryData(key("legal-entities", "all"), all);
+      void queryClient.invalidateQueries({ queryKey: key("legal-entities") });
+    },
+  });
+}
+
 /** Updates, enables or disables an entity. */
 export function useUpdateLegalEntity() {
   const { getToken, key } = useCado2Basis();

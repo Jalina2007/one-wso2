@@ -2044,6 +2044,8 @@ export const cado2ServiceUrls = {
   legalEntities: (activeOnly = false): string =>
     `${cado2BackendUrl}/legal-entities${activeOnly ? "?active=true" : ""}`,
   legalEntity: (id: number): string => `${cado2BackendUrl}/legal-entities/${encodeSegment(id)}`,
+  // PUT: the entities' order, every ID once (D161).
+  legalEntityOrder: `${cado2BackendUrl}/admin/legal-entities/order`,
   // Salesforce lookups, read live through the backend.
   accounts: (nameContains: string): string =>
     `${cado2BackendUrl}/accounts?nameContains=${encodeSegment(nameContains)}&limit=20`,
