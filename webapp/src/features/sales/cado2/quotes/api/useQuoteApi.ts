@@ -43,6 +43,7 @@ import type {
   Issue,
   Opportunity,
   OpportunityLines,
+  OpportunityState,
   OpportunityQuote,
   PricebookOption,
   SyncPreview,
@@ -110,6 +111,15 @@ export function useOpportunityContacts(opportunityId: string | null) {
   return useAuthedQuery<Contact[]>(
     ["opportunity-contacts", opportunityId],
     opportunityId ? cado2ServiceUrls.opportunityContacts(opportunityId) : null,
+  );
+}
+
+/** Whether the opportunity is still open in Salesforce (D164), read fresh while `enabled`. */
+export function useOpportunityState(opportunityId: string | null, enabled: boolean) {
+  return useAuthedQuery<OpportunityState>(
+    ["opportunity-state", opportunityId],
+    enabled && opportunityId ? cado2ServiceUrls.opportunityState(opportunityId) : null,
+    "live",
   );
 }
 

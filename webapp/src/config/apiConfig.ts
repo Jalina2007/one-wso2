@@ -2109,6 +2109,9 @@ export const cado2ServiceUrls = {
   // The quotes on an opportunity, with which is primary (D68).
   opportunityQuotes: (opportunityId: string): string =>
     `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/quotes`,
+  // Whether the opportunity is still open in Salesforce (D164).
+  opportunityState: (opportunityId: string): string =>
+    `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/state`,
   // What AMs may do with quotes they don't own (D69; Admin).
   adminQuoteAccess: `${cado2BackendUrl}/admin/quote-access`,
   adminSalesforceSync: `${cado2BackendUrl}/admin/salesforce-sync`,

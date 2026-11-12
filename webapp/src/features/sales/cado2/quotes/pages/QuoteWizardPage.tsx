@@ -35,6 +35,7 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { CloudUploadIcon, PencilIcon, ShieldCheckIcon, Trash2Icon } from "@wso2/oxygen-ui-icons-react";
+import OpportunityClosedNotice from "@features/sales/cado2/quotes/components/OpportunityClosedNotice";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useLeaveGuard } from "@features/sales/cado2/quotes/form/useLeaveGuard";
@@ -552,6 +553,11 @@ export default function QuoteWizardPage(): JSX.Element {
               }
             />
 
+            {/* D164: closed in Salesforce since it was picked. */}
+            <OpportunityClosedNotice
+              opportunityId={values.opportunityId || null}
+              blocked={version?.status === "DRAFT" ? "submitted or synced to Salesforce" : null}
+            />
             {version?.status === "DRAFT" && clonedFrom ? (
               <Alert severity="info" variant="outlined">
                 Cloned from {clonedFrom}, with its prices. Choose whether this quote is the primary one, then check the rest.

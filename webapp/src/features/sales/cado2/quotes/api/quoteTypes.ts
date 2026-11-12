@@ -135,6 +135,15 @@ export interface OpportunityLineView {
   readonly serviceEndDate: string | null;
 }
 
+/** Whether an opportunity is still open in Salesforce (D164). */
+export interface OpportunityState {
+  /** False when the opportunity is no longer in Salesforce. */
+  readonly found: boolean;
+  readonly open: boolean;
+  /** "Closed Won", "Closed Lost" or the closed stage; "" while open. */
+  readonly state: string;
+}
+
 /** A previous opportunity's product lines as they are in Salesforce now (D159), read only. */
 export interface OpportunityLines {
   readonly opportunityName: string | null;
