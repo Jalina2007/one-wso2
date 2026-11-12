@@ -56,5 +56,9 @@ describe("legalRichText", () => {
     const { sameLegalText } = await import("./legalRichText");
     expect(sameLegalText("AM's wording", "<p>AM's wording</p>")).toBe(true);
     expect(sameLegalText("AM's wording", "<p><strong>AM's</strong> wording</p>")).toBe(false);
+    // Whitespace the editor tidies away doesn't count (D166, quote 156).
+    expect(sameLegalText("<p>added by legal\t\t</p>", "<p>added by legal</p>")).toBe(true);
+    expect(sameLegalText("<p>Two  spaces</p>\n<p>next</p>", "<p>Two spaces</p><p>next</p>")).toBe(true);
+    expect(sameLegalText("<p>added by legal</p>", "<p>added by Legal</p>")).toBe(false);
   });
 });

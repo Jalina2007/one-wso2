@@ -90,7 +90,12 @@ export default function LegalRichTextField({
 
   return (
     <Box>
-      <FormLabel required={required} error={error} sx={{ display: "block", mb: 0.75, fontSize: 13 }}>
+      {/* Prominent: it says whose terms these are, e.g. "SaaS products: governing terms" (2026-11-12). */}
+      <FormLabel
+        required={required}
+        error={error}
+        sx={{ display: "block", mb: 0.75, fontSize: 14, fontWeight: 600, color: error ? "error.main" : "text.primary", "&.Mui-focused": { color: "text.primary" } }}
+      >
         {label}
       </FormLabel>
       <Box

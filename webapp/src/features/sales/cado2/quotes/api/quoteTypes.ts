@@ -329,6 +329,10 @@ export interface LegalView {
   readonly deskSpecialTermsByEmail?: string | null;
   readonly legalSpecialTermsByEmail?: string | null;
   readonly frozen: boolean;
+  /** D166: the earlier version Legal wrote each text in, while it is unchanged since; null otherwise. */
+  readonly onPremTermsFromVersion?: number | null;
+  readonly saasTermsFromVersion?: number | null;
+  readonly specialTermsFromVersion?: number | null;
 }
 
 /**
@@ -828,7 +832,9 @@ export interface AuditEvent {
     // The AM changed the supporting documents (DGD-10); metadata: before, after.
     | "SUPPORTING_DOCUMENTS_CHANGED"
     // Deal Desk overrode the special terms during its step (D139; D128: wrote them); metadata: override.
-    | "SPECIAL_TERMS_WRITTEN";
+    | "SPECIAL_TERMS_WRITTEN"
+    // Legal wrote the terms during its step; metadata: onPrem, saas, special (which it wrote).
+    | "LEGAL_TERMS_WRITTEN";
   readonly versionNumber: number | null;
   readonly actorEmail: string;
   readonly occurredAt: string;

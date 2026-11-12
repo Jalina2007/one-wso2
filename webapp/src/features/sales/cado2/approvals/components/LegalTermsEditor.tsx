@@ -59,6 +59,10 @@ export default function LegalTermsEditor({
   const [saved, setSaved] = useState(false);
   const partner = part !== "special" && (legal.contractName || legal.contractDate);
   // Compared as clean rich text, so opening the editor doesn't count as a change.
+  // D166: Legal wrote it in an earlier version, and it hasn't been changed since (here either).
+  const writtenIn = (from: number | null | undefined, now: string, original: string) =>
+    from && sameLegalText(now, original) ? `Written by Legal in version ${from}.` : "";
+  const specialFrom = writtenIn(legal.specialTermsFromVersion, special, legal.specialTerms ?? "");
   const changed =
     blocks.some((b) => !sameLegalText(texts[b.kind] ?? "", b.text)) ||
     (withSpecial && !sameLegalText(special, legal.specialTerms ?? ""));
@@ -103,7 +107,10 @@ export default function LegalTermsEditor({
           }}
           minHeight={minHeight}
           required
-          helperText="The AM marked these non-standard: write the terms that apply to this customer."
+          helperText={
+            writtenIn(b.kind === "ONPREM" ? legal.onPremTermsFromVersion : legal.saasTermsFromVersion, texts[b.kind] ?? "", b.text) ||
+            "The AM marked these non-standard: write the terms that apply to this customer."
+          }
         />
       ))}
       {withSpecial ? (
@@ -116,7 +123,9 @@ export default function LegalTermsEditor({
           }}
           minHeight={part === "special" ? minHeight : undefined}
           helperText={
-            legal.specialTermsByLegal
+            specialFrom
+              ? `${specialFrom} Change the wording only if it needs it.`
+              : legal.specialTermsByLegal
               ? `Overridden by Legal. Before: "${legalPlainText(legal.deskSpecialTerms ?? legal.amSpecialTerms ?? "")}"`
               : legal.deskSpecialTerms
                 ? "Override Deal Desk's special terms: change the wording only if it needs it."

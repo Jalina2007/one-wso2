@@ -86,8 +86,20 @@ export function legalPlainText(text: string): string {
 /** The editor's empty value is "<p><br></p>", not "": check the words. */
 export const isEmptyLegalText = (text: string) => legalPlainText(text) === "";
 
-/** Whether two legal texts say the same, plain or rich: compared as clean rich text. */
-export const sameLegalText = (a: string, b: string) => cleanLegalText(toLegalHtml(a)) === cleanLegalText(toLegalHtml(b));
+/**
+ * A legal text as it reads: clean rich text with runs of spaces, tabs and
+ * line breaks as one space, and none next to a paragraph or line break. The
+ * editor tidies whitespace when it opens a text, and a browser shows it the
+ * same either way (2026-11-12: "added by legal\t\t" read as changed).
+ */
+const asDisplayed = (text: string) =>
+  cleanLegalText(toLegalHtml(text))
+    .replace(/\s+/g, " ")
+    .replace(/\s*(<\/?p[^>]*>|<br\s*\/?>)\s*/gi, "$1")
+    .trim();
+
+/** Whether two legal texts say the same, plain or rich: compared as they display. */
+export const sameLegalText = (a: string, b: string) => asDisplayed(a) === asDisplayed(b);
 
 /** What a legal text is saved as: clean rich text, or "" with no words. Quill's &nbsp; become spaces. */
 export function cleanLegalText(text: string): string {

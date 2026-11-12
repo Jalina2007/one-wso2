@@ -24,8 +24,11 @@ const write = { mutate: vi.fn(), isPending: false, error: null as unknown };
 vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({ useWriteLegalTerms: () => write }));
 // The rich-text editor as a plain text box, so the test can type into it.
 vi.mock("@features/sales/cado2/components/legal-rich-text/LegalRichTextField", () => ({
-  default: ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
-    <textarea aria-label={label} defaultValue={value} onChange={(e) => onChange(e.target.value)} />
+  default: ({ label, value, onChange, helperText }: { label: string; value: string; onChange: (v: string) => void; helperText?: string }) => (
+    <>
+      <textarea aria-label={label} defaultValue={value} onChange={(e) => onChange(e.target.value)} />
+      {helperText ? <p>{helperText}</p> : null}
+    </>
   ),
 }));
 
@@ -104,5 +107,43 @@ describe("LegalTermsEditor", () => {
     await user.type(special, "!");
     expect(screen.queryByRole("status")).toBeNull();
     write.mutate.mockReset();
+  });
+
+  // D166: written by Legal in an earlier version, and not changed since.
+  it("says Legal wrote the terms in an earlier version, until they're changed", async () => {
+    const carried: LegalView = {
+      ...legal,
+      sections: { ...legal.sections, blocks: [legal.sections.blocks[0], { kind: "SAAS", nonStandard: true, text: "Bespoke SaaS terms." }] },
+      saasTermsFromVersion: 1,
+      specialTerms: "Legal's wording",
+      amSpecialTerms: "Legal's wording",
+      specialTermsFromVersion: 1,
+    };
+    render(<LegalTermsEditor quoteId={7} versionNumber={2} legal={carried} />);
+    expect(screen.getByText("Written by Legal in version 1.")).toBeInTheDocument();
+    expect(screen.getByText("Written by Legal in version 1. Change the wording only if it needs it.")).toBeInTheDocument();
+
+    await userEvent.setup().type(screen.getByRole("textbox", { name: /SaaS products: governing terms/ }), " Changed.");
+    expect(screen.queryByText("Written by Legal in version 1.")).toBeNull();
+  });
+
+  it("says so for the on-premises terms too, each block on its own", () => {
+    const both: LegalView = {
+      ...legal,
+      onPremNonStandard: true,
+      sections: {
+        ...legal.sections,
+        blocks: [
+          { kind: "ONPREM", nonStandard: true, text: "Bespoke on-prem terms." },
+          { kind: "SAAS", nonStandard: true, text: "New SaaS terms." },
+        ],
+      },
+      onPremTermsFromVersion: 1,
+      saasTermsFromVersion: null,
+      specialTerms: null,
+    };
+    render(<LegalTermsEditor quoteId={7} versionNumber={2} legal={both} />);
+    expect(screen.getAllByText("Written by Legal in version 1.")).toHaveLength(1); // on-premises only
+    expect(screen.getByText("The AM marked these non-standard: write the terms that apply to this customer.")).toBeInTheDocument(); // SaaS
   });
 });
