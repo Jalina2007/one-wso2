@@ -2454,3 +2454,44 @@ export function buildDealsUrl(params: {
   qs.set("hideClosed", String(params.hideClosed));
   return `${echoServiceUrls.deals}?${qs.toString()}`;
 }
+
+// Swag Store — employees spend O2C coins on WSO2 swag. Its own backend,
+// configured with the version segment included and no `/api` prefix after it.
+// Unset means "not connected": the store's pages say so and make no requests.
+// Gated as a whole by the `swagStore` preview flag as well (previewFeatures.ts).
+export const swagStoreBackendUrl: string = stripTrailingSlashes(
+  window.config?.ONE_WSO2_SWAG_STORE_BACKEND_URL ?? "",
+);
+
+/** Whether the Swag Store backend URL is set. */
+export function isSwagStoreBackendConfigured(): boolean {
+  return Boolean(swagStoreBackendUrl);
+}
+
+/** Every shopper endpoint of the Swag Store backend. Path parameters are encoded here. */
+export const swagStoreServiceUrls = {
+  /** The caller, their store roles and employee status. 403 `not_wso2` outside WSO2. */
+  me: `${swagStoreBackendUrl}/users/me`,
+  /** The caller's coin wallets, default first. Never cached by the backend. */
+  wallets: `${swagStoreBackendUrl}/wallets`,
+  categories: `${swagStoreBackendUrl}/categories`,
+  /** Active products; filters, sort and paging go in the query string. */
+  products: `${swagStoreBackendUrl}/products`,
+  product: (slug: string): string => `${swagStoreBackendUrl}/products/${encodeURIComponent(slug)}`,
+  cart: `${swagStoreBackendUrl}/cart`,
+  /** Item count only, for the top-bar badge. */
+  cartSummary: `${swagStoreBackendUrl}/cart/summary`,
+  cartLines: `${swagStoreBackendUrl}/cart/lines`,
+  cartLine: (id: string): string => `${swagStoreBackendUrl}/cart/lines/${encodeURIComponent(id)}`,
+  pickupOffices: `${swagStoreBackendUrl}/pickup-offices`,
+  /** POST, but a read: prices the cart for an office and wallet, and stores nothing. */
+  quotes: `${swagStoreBackendUrl}/quotes`,
+  /** GET lists the caller's orders; POST places one (needs an Idempotency-Key header). */
+  orders: `${swagStoreBackendUrl}/orders`,
+  order: (orderNo: string): string => `${swagStoreBackendUrl}/orders/${encodeURIComponent(orderNo)}`,
+  /** Retries the payment of a PENDING_PAYMENT order with its same reference. */
+  orderPayments: (orderNo: string): string =>
+    `${swagStoreBackendUrl}/orders/${encodeURIComponent(orderNo)}/payments`,
+  stockAlerts: `${swagStoreBackendUrl}/stock-alerts`,
+  stockAlert: (id: string): string => `${swagStoreBackendUrl}/stock-alerts/${encodeURIComponent(id)}`,
+};

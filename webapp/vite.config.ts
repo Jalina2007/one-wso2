@@ -61,6 +61,21 @@ const viteConfig = defineConfig({
         rewrite: (path) => path.replace(/^\/legal-backend/, ""),
         changeOrigin: true,
       },
+      // Dev-only proxy for a Swag Store backend on localhost:8080. The backend
+      // reads the caller from x-jwt-assertion, which the API gateway sets in a
+      // real deployment; here the browser's bearer token is copied into it.
+      // In production, set ONE_WSO2_SWAG_STORE_BACKEND_URL to the gateway URL.
+      "/swag-store-backend": {
+        target: "http://localhost:8080",
+        rewrite: (path) => path.replace(/^\/swag-store-backend/, ""),
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyReq, req) => {
+            const auth = req.headers.authorization;
+            if (auth?.startsWith("Bearer ")) proxyReq.setHeader("x-jwt-assertion", auth.slice("Bearer ".length));
+          });
+        },
+      },
     },
   },
 });
