@@ -31,7 +31,7 @@ import {
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
-import { Download, FileSpreadsheet, Trash2, Upload } from "@wso2/oxygen-ui-icons-react";
+import { Download, FileSpreadsheet, RefreshCw, Trash2, Upload } from "@wso2/oxygen-ui-icons-react";
 import { describeError } from "@api/errors";
 import {
   leadImportError,
@@ -54,7 +54,7 @@ import { ConfirmDialog, Empty, EventsLoading, Panel, Timestamp } from "./EventsU
 import { primaryBtn } from "./eventsStyles";
 
 // Lead import — the landing screen: drop a raw event lead file, and the list of
-// everything you converted in the last two hours.
+// everything you converted recently.
 //
 // The file and its sheet type are the only decisions asked for up front. The type is
 // checked against the file name ("<Event name> - Booth") so a misnamed or mixed-up file
@@ -62,6 +62,10 @@ import { primaryBtn } from "./eventsStyles";
 // with the file and reaches Claude as a routing hint.
 // Everything else — layout, mapping, routing — is worked out on the server, and the
 // handful of calls that need a person are asked AFTER, on the run's own screen.
+//
+// The conversion takes a minute or two, so the upload does not wait for it: the page stays
+// here and says that an email will come when the file is ready. Nothing polls. The email
+// links to the run, and Refresh updates the list for anyone who waits on the page.
 
 export default function LeadImport({ onOpen }: { onOpen: (id: string) => void }) {
   const options = useLeadImportOptions();
@@ -72,18 +76,21 @@ export default function LeadImport({ onOpen }: { onOpen: (id: string) => void })
   const [file, setFile] = useState<File | null>(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [started, setStarted] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
 
   // The server refuses uploads without a configured conversion; say so, and don't offer one.
   const unavailable = options.data !== undefined && !options.data.claude_configured;
   const accepted = options.data?.accepted ?? [".xlsx", ".xls", ".csv"];
   const maxBytes = options.data?.max_bytes ?? 10 * 1024 * 1024;
-  const hours = options.data?.retention_hours ?? 2;
+  const hours = options.data?.retention_hours ?? 24;
+  const finishedHours = options.data?.finished_retention_hours ?? 2;
 
   // Refuse here what the server would refuse, so the user isn't made to wait on an
   // upload to learn the file was a PDF. The server checks again regardless.
   function pick(candidate: File | undefined) {
     setError(null);
+    setStarted(null);
     if (!candidate) return;
     const ext = candidate.name.slice(candidate.name.lastIndexOf(".")).toLowerCase();
     if (!accepted.includes(ext)) {
@@ -107,10 +114,10 @@ export default function LeadImport({ onOpen }: { onOpen: (id: string) => void })
     if (!file || !sheetType) return;
     setError(null);
     try {
-      const res = await upload.mutateAsync({ file, sheetType });
+      await upload.mutateAsync({ file, sheetType });
+      setStarted(file.name);
       setFile(null);
       setSheetType("");
-      onOpen(res.id);
     } catch (e) {
       setError(leadImportError(e));
     }
@@ -238,9 +245,26 @@ export default function LeadImport({ onOpen }: { onOpen: (id: string) => void })
             {error}
           </Alert>
         )}
+
+        {started && (
+          <Alert severity="info" sx={{ mt: 2, fontSize: 13 }} onClose={() => setStarted(null)}>
+            Converting <strong>{started}</strong>. An email will be sent when it's ready.
+          </Alert>
+        )}
       </Panel>
 
-      <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 1 }}>Recently converted</Typography>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 700 }}>Recently converted</Typography>
+        <Button
+          size="small"
+          onClick={() => void runs.refetch()}
+          disabled={runs.isFetching}
+          startIcon={<RefreshCw size={14} />}
+          sx={{ fontSize: 12 }}
+        >
+          Refresh
+        </Button>
+      </Box>
       {runs.isError ? (
         <Alert severity="error">Could not load recent conversions. {describeError(runs.error)}</Alert>
       ) : runs.isLoading ? (
@@ -249,8 +273,8 @@ export default function LeadImport({ onOpen }: { onOpen: (id: string) => void })
         <Empty>
           Nothing converted in the last {hours} hours.
           <Box sx={{ mt: 0.5 }}>
-            Converted files stay here for {hours} hours after you finish with them, then they're
-            deleted.
+            Converted files stay here for {hours} hours, or for {finishedHours} hours after you finish
+            with them. Then they're deleted.
           </Box>
         </Empty>
       ) : (
@@ -330,29 +354,7 @@ function RecentTable({ rows, onOpen }: { rows: LeadImportRun[]; onOpen: (id: str
             {rows.map((r) => (
               <TableRow key={r.id} hover>
                 <TableCell sx={{ maxWidth: 280 }}>
-                  <Box
-                    component="button"
-                    type="button"
-                    onClick={() => onOpen(r.id)}
-                    sx={{
-                      border: 0,
-                      p: 0,
-                      bgcolor: "transparent",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      maxWidth: "100%",
-                    }}
-                  >
-                    <Typography noWrap sx={{ fontSize: 13, fontWeight: 600 }}>
-                      {runTitle(r)}
-                    </Typography>
-                    {r.event_name && (
-                      <Typography noWrap sx={{ fontSize: 11, color: "text.secondary" }}>
-                        {r.source_name}
-                      </Typography>
-                    )}
-                  </Box>
+                  <RunName run={r} onOpen={onOpen} />
                 </TableCell>
                 <TableCell>
                   <RunStatus run={r} />
@@ -418,6 +420,48 @@ function RecentTable({ rows, onOpen }: { rows: LeadImportRun[]; onOpen: (id: str
   );
 }
 
+/** The name of a run. It opens the run, except while the file converts: there is nothing
+ *  to open yet, and the email says when there is. */
+function RunName({ run, onOpen }: { run: LeadImportRun; onOpen: (id: string) => void }) {
+  if (run.status === "processing") {
+    return (
+      <Box>
+        <Typography noWrap sx={{ fontSize: 13, fontWeight: 600 }}>
+          {runTitle(run)}
+        </Typography>
+        <Typography noWrap sx={{ fontSize: 11, color: "text.secondary" }}>
+          Converting. An email will be sent when it's ready.
+        </Typography>
+      </Box>
+    );
+  }
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={() => onOpen(run.id)}
+      sx={{
+        border: 0,
+        p: 0,
+        bgcolor: "transparent",
+        textAlign: "left",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        maxWidth: "100%",
+      }}
+    >
+      <Typography noWrap sx={{ fontSize: 13, fontWeight: 600 }}>
+        {runTitle(run)}
+      </Typography>
+      {run.event_name && (
+        <Typography noWrap sx={{ fontSize: 11, color: "text.secondary" }}>
+          {run.source_name}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
 function Num({ n }: { n: number | null | undefined }) {
   return (
     <Typography sx={{ fontSize: 11.5, color: "text.secondary", fontVariantNumeric: "tabular-nums" }}>
@@ -430,7 +474,7 @@ function Num({ n }: { n: number | null | undefined }) {
 export function RunStatus({ run }: { run: LeadImportRun }) {
   const [label, color] =
     run.status === "processing"
-      ? [run.stage === "queued" ? "Queued" : "Converting…", "info.main"]
+      ? ["Converting", "info.main"]
       : run.status === "failed"
         ? ["Failed", "error.main"]
         : run.finished_at

@@ -91,20 +91,15 @@ export function changeActions(status: ChangeStatus): { confirm?: string; undo?: 
   }
 }
 
-/** "1 h 12 min left", "8 min left", "Expiring" — for the Recently converted list. */
-export function timeLeft(expiresAt: string, now: number = Date.now()): string {
+/** "1 h 12 min left", "8 min left", "Expiring" — for the Recently converted list.
+ *  "—" while the file converts: the clock starts when it is ready or failed. */
+export function timeLeft(expiresAt: string | null, now: number = Date.now()): string {
+  if (expiresAt === null) return "—";
   const ms = new Date(expiresAt).getTime() - now;
   if (!Number.isFinite(ms) || ms <= 60 * 1000) return "Expiring";
   const minutes = Math.floor(ms / 60000);
   const hours = Math.floor(minutes / 60);
   return hours > 0 ? `${hours} h ${minutes % 60} min left` : `${minutes} min left`;
-}
-
-/** "42 s", "1 min 05 s" — elapsed time while a file converts. */
-export function elapsed(since: string, now: number = Date.now()): string {
-  const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
-  if (s < 60) return `${s} s`;
-  return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, "0")} s`;
 }
 
 /** The title for a run: the event name Claude found, else the file name. */

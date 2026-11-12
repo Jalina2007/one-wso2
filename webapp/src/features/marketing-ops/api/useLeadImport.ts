@@ -21,8 +21,10 @@
 // so the list key carries the sub, as the Events submission keys do. A run and its sheet
 // are keyed by their unguessable id, and the server answers 404 for another user's id.
 //
-// A conversion runs in the background on the server (30 s to a few minutes); the run
-// query polls while it is processing and stops once it is ready or failed.
+// A conversion runs in the background on the server (30 s to a few minutes). Nothing
+// polls: the server emails the uploader when the run is ready or failed, and the email
+// links back here. The list refreshes on Refresh and when the person comes back to the tab
+// (the app turns focus refetch off, so these queries turn it on).
 
 import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAsgardeo } from "@asgardeo/react";
@@ -56,8 +58,6 @@ const KEY = {
   /** Mutations that rebuild a run's workbook: confirm/undo and cell edits. */
   rebuild: ["marketing-ops", "events", "lead-import", "rebuild"] as const,
 };
-
-const POLL_MS = 3000;
 
 function useBase() {
   const { isSignedIn } = useAsgardeo();
@@ -104,10 +104,8 @@ export function useLeadImportRuns() {
     enabled: ready && Boolean(sub),
     queryFn: async () =>
       authedGet<LeadImportRun[]>(urls.eventsLeadImportRuns, await getAccessToken()),
-    // Keep "time left" and in-flight rows honest without hammering the server.
-    refetchInterval: (query) =>
-      query.state.data?.some((r) => r.status === "processing") ? POLL_MS * 2 : 60 * 1000,
     staleTime: 10 * 1000,
+    refetchOnWindowFocus: true,
     retry: httpRetry,
   });
 }
@@ -119,8 +117,9 @@ export function useLeadImportRun(id: string | null) {
     enabled: ready && Boolean(id),
     queryFn: async () =>
       authedGet<LeadImportDetail>(urls.eventsLeadImportRun(id!), await getAccessToken()),
-    refetchInterval: (query) =>
-      query.state.data?.run.status === "processing" ? POLL_MS : false,
+    // Only while it converts: a refetch during a confirm/undo could answer after the
+    // rebuild and put the older detail back.
+    refetchOnWindowFocus: (query) => query.state.data?.run.status === "processing",
     retry: httpRetry,
   });
 }
