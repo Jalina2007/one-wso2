@@ -28,8 +28,12 @@ export interface LeadImportOptions {
   claude_configured: boolean;
   max_bytes: number;
   accepted: string[];
+  /** How long a ready or failed run is kept. */
   retention_hours: number;
+  /** How long a run is kept after Finish. */
+  finished_retention_hours: number;
 }
+
 
 export interface LeadImportCounts {
   rows_read: number;
@@ -40,16 +44,17 @@ export interface LeadImportCounts {
   reconciles: boolean;
 }
 
-/** One run as the list and the status poll see it (meta.json plus derived flags). */
+/** One run as the list and the run page see it (its database row plus derived flags). */
 export interface LeadImportRun {
   id: string;
   status: LeadImportStatus;
-  stage: "queued" | "converting" | null;
   source_name: string;
   event_name: string | null;
   created_at: string;
+  ready_at: string | null;
   finished_at: string | null;
-  expires_at: string;
+  /** Null while the file converts: the clock starts when it is ready or failed. */
+  expires_at: string | null;
   counts: LeadImportCounts | null;
   rows_per_tab: Record<string, number> | null;
   pending_count: number | null;

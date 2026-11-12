@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   Accordion,
   AccordionDetails,
@@ -22,7 +22,6 @@ import {
   Alert,
   Box,
   Button,
-  LinearProgress,
   Table,
   TableBody,
   TableCell,
@@ -48,14 +47,15 @@ import type {
   LeadImportRun as Run,
   UserEdit,
 } from "../leadImportTypes";
-import { elapsed, fieldLabel, runTitle, tabsLine, timeLeft, userEditAsChange } from "../lib/leadImport";
+import { fieldLabel, runTitle, tabsLine, timeLeft, userEditAsChange } from "../lib/leadImport";
 import { ConfirmDialog, EventsLoading, Panel, WorkspaceHead } from "./EventsUi";
 import { RunStatus } from "./LeadImport";
 import { AllChanges, PendingChanges } from "./LeadImportChanges";
 import LeadSheet from "./LeadSheet";
 import { primaryBtn, quietBtn } from "./eventsStyles";
 
-// One conversion: progress while the server works, then the review.
+// One conversion: a static note while the server works, then the review. The page does
+// not poll: the server emails the uploader when the run is ready, and the email links here.
 //
 // The review LEADS WITH THE SHEET: the converted List Import Template itself, read back
 // from the workbook file, so what a person checks and fixes is exactly what downloads.
@@ -88,7 +88,7 @@ export default function LeadImportRun({ id, onBack }: { id: string; onBack: () =
       <Head run={run} workbook={detail.result?.files.workbook ?? null} onBack={onBack} />
       <Steps run={run} />
       {run.status === "processing" ? (
-        <Converting run={run} />
+        <Converting />
       ) : run.status === "failed" ? (
         <Alert severity="error" sx={{ fontSize: 13 }}>
           {run.error ?? "The file could not be converted."} The upload has been deleted.
@@ -105,7 +105,7 @@ export default function LeadImportRun({ id, onBack }: { id: string; onBack: () =
 function Head({ run, workbook, onBack }: { run: Run; workbook: string | null; onBack: () => void }) {
   const finish = useFinishLeadImport();
   const download = useDownloadLeadFile();
-  const hours = useLeadImportOptions().data?.retention_hours ?? 2;
+  const hours = useLeadImportOptions().data?.finished_retention_hours ?? 2;
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -219,29 +219,12 @@ function Steps({ run }: { run: Run }) {
 
 // ---- converting -------------------------------------------------------------------------
 
-function useNow(everyMs: number): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(Date.now()), everyMs);
-    return () => window.clearInterval(t);
-  }, [everyMs]);
-  return now;
-}
-
-function Converting({ run }: { run: Run }) {
-  const now = useNow(1000);
+function Converting() {
   return (
     <Panel sx={{ p: 4, textAlign: "center" }}>
-      <LinearProgress sx={{ maxWidth: 360, mx: "auto", borderRadius: 1 }} />
-      <Typography sx={{ fontSize: 14, fontWeight: 700, mt: 2 }}>
-        {run.stage === "queued" ? "Waiting for a free slot…" : "Reading the file and checking every row…"}
-      </Typography>
+      <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Still converting. An email will be sent when it's ready.</Typography>
       <Typography sx={{ fontSize: 12.5, color: "text.secondary", mt: 0.5 }}>
-        {elapsed(run.created_at, now)} so far. Most files take 30 seconds to 2 minutes; a few thousand
-        rows can take longer. The sheet opens here when it's done.
-      </Typography>
-      <Typography sx={{ fontSize: 12, color: "text.disabled", mt: 1 }}>
-        You can leave this page — the conversion keeps going and appears under Recently converted.
+        Most files take 30 seconds to 2 minutes. The email links back to this conversion.
       </Typography>
     </Panel>
   );

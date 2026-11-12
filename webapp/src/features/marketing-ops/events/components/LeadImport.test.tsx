@@ -14,8 +14,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Recently converted: deleting a run asks first, then removes it; a run that is still
-// converting can't be deleted.
+// The upload says an email will come, and stays on the list (nothing polls). Recently
+// converted: deleting a run asks first, then removes it; a run that is still converting
+// can't be opened or deleted.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -27,7 +28,13 @@ let runs: LeadImportRun[] = [];
 let options: { claude_configured: boolean } | undefined;
 vi.mock("../../api/useLeadImport", () => ({
   useLeadImportOptions: () => ({ data: options }),
-  useLeadImportRuns: () => ({ data: runs, isLoading: false, isError: false }),
+  useLeadImportRuns: () => ({
+    data: runs,
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
   useUploadLeadFile: () => ({ mutateAsync: upload, isPending: false }),
   useDownloadLeadFile: () => ({ mutateAsync: vi.fn() }),
   useDeleteLeadImport: () => ({ mutateAsync: remove, isPending: false }),
@@ -40,10 +47,10 @@ function run(id: string, overrides: Partial<LeadImportRun> = {}): LeadImportRun 
   return {
     id,
     status: "ready",
-    stage: null,
     source_name: `${id}.xlsx`,
     event_name: null,
     created_at: "2026-11-06T08:00:00+00:00",
+    ready_at: "2026-11-06T08:01:00+00:00",
     finished_at: null,
     expires_at: "2099-01-01T00:00:00+00:00",
     counts: null,
@@ -99,7 +106,7 @@ describe("choosing the sheet type", () => {
     expect(screen.queryByText(/naming convention|but you chose/)).toBeNull();
   });
 
-  it("uploads the file with the chosen sheet type", async () => {
+  it("uploads the file with the chosen sheet type, then says an email will come", async () => {
     upload.mockReset().mockResolvedValue({ id: "run-1" });
     const onOpen = vi.fn();
     const { container } = render(<LeadImport onOpen={onOpen} />);
@@ -109,7 +116,10 @@ describe("choosing the sheet type", () => {
       fireEvent.click(convertButton());
     });
     expect(upload).toHaveBeenCalledWith({ file: expect.any(File), sheetType: "booth" });
-    expect(onOpen).toHaveBeenCalledWith("run-1");
+    expect(screen.getByText(/An email will be sent when it's ready/)).toBeTruthy();
+    expect(screen.getByText("Summit - Booth.csv")).toBeTruthy();
+    // The page stays on the list: there is nothing to open until the run is ready.
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it("warns, without blocking, when the file name says another type", () => {
@@ -124,7 +134,7 @@ describe("choosing the sheet type", () => {
 describe("deleting a recent conversion", () => {
   beforeEach(() => {
     remove.mockReset().mockResolvedValue(undefined);
-    runs = [run("summit"), run("webinar", { status: "processing", stage: "converting" })];
+    runs = [run("summit"), run("webinar", { status: "processing", ready_at: null, expires_at: null })];
   });
 
   it("asks before deleting, then deletes that run", async () => {
@@ -146,9 +156,12 @@ describe("deleting a recent conversion", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
-  it("can't delete a run that is still converting", () => {
+  it("can't open or delete a run that is still converting", () => {
     render(<LeadImport onOpen={vi.fn()} />);
     expect(screen.getByRole("button", { name: /Delete webinar/ }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Converting. An email will be sent when it's ready.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^webinar\.xlsx/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /^summit\.xlsx/ })).toBeTruthy();
   });
 
   it("shows the server's reason when deleting fails", async () => {

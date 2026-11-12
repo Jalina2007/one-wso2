@@ -20,7 +20,6 @@ import { leadImportError } from "../../api/useLeadImport";
 import {
   changeActions,
   changeWhere,
-  elapsed,
   kindLabel,
   runTitle,
   sheetNameWarning,
@@ -41,7 +40,7 @@ describe("lead import helpers", () => {
     expect(timeLeft("2026-11-05T11:12:30Z", now)).toBe("1 h 12 min left");
     expect(timeLeft("2026-11-05T10:08:00Z", now)).toBe("8 min left");
     expect(timeLeft("2026-11-05T10:00:30Z", now)).toBe("Expiring");
-    expect(elapsed("2026-11-05T09:58:55Z", now)).toBe("1 min 05 s");
+    expect(timeLeft(null, now)).toBe("—");
   });
 
   it("names runs and changes the way a person reads them", () => {
