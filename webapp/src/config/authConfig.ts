@@ -193,6 +193,10 @@ declare global {
       ONE_WSO2_SALESFORCE_BASE_URL?: string;
       // Image URL used in the generated email signature. Optional.
       ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL?: string;
+      // Path or URL of an HTML file that replaces the built-in email signature
+      // layout. Optional; when unset, or when the file can't be loaded, the
+      // built-in layout is used.
+      ONE_WSO2_EMAIL_SIGNATURE_TEMPLATE_URL?: string;
       // Override for the Asgardeo My Account portal URL that the top-bar
       // "Profile" menu item opens. Only set this on non-standard tenants
       // (self-hosted / custom domain); on Asgardeo Cloud we derive it from
