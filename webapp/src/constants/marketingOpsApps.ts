@@ -174,6 +174,17 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
         requires: ["admin"],
         path: "/marketing-ops/ad-campaigns/campaign-tracker",
       },
+      // Backend-integrated benchmark grading — same `adcampaigns` gate. The
+      // backend provides raw per-campaign lines (objective, format, region,
+      // LinkedIn form/messaging metrics); grading is computed client-side from
+      // those lines. See benchmarkGradingLogic.ts for the index formula.
+      {
+        id: "mops-benchmark-grading",
+        label: "Benchmark Grading",
+        desc: "Every campaign scored on conversion and cost against WSO2's internal benchmarks, with grade distribution by owner.",
+        requires: ["admin"],
+        path: "/marketing-ops/ad-campaigns/benchmark-grading",
+      },
     ],
   },
   {

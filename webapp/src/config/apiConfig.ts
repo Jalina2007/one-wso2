@@ -921,6 +921,15 @@ export const marketingOpsServiceUrls = {
   adAnalyticsLinkedInRoiRun: `${marketingOpsBackendUrl}/api/ad-campaigns/analytics/linkedin-roi/run`,
   adAnalyticsDashboardRun: `${marketingOpsBackendUrl}/api/ad-campaigns/analytics/dashboard/run`,
 
+  // ---- ad campaigns → benchmark grading --------------------------------------
+  //
+  // POST /api/ad-campaigns/benchmark-grading/run — returns raw per-campaign lines
+  // (spend, impressions, clicks, LinkedIn objective/format/form metrics, etc.) for
+  // the requested date window. Grading is computed entirely client-side from the
+  // returned lines; nothing is stored. The body is { window: DateWindow }. The
+  // endpoint is a POST-as-read for the same reason as the analytics siblings above.
+  benchmarkGradingRun: `${marketingOpsBackendUrl}/api/ad-campaigns/benchmark-grading/run`,
+
   // ---- ad campaigns → campaign tracker ---------------------------------------
   //
   // The weekly operating rhythm for every live campaign: Register/Budget Pacing

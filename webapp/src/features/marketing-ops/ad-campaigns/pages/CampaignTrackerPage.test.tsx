@@ -14,21 +14,11 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// The campaignTrackerPacing flag is captured at module scope
-// (const pacingEnabled = isPreviewEnabled("campaignTrackerPacing")), so each
-// test re-imports the page after setting the flag value, giving it a fresh
-// module that reads the flag at the right time.
-
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
-const pacingFlag = vi.hoisted(() => ({ enabled: false }));
-
-vi.mock("@config/previewFeatures", () => ({
-  isPreviewEnabled: (f: string) => f === "campaignTrackerPacing" && pacingFlag.enabled,
-}));
+import CampaignTrackerPage from "./CampaignTrackerPage";
 
 vi.mock("@features/marketing-ops/components/MarketingOpsShell", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -106,32 +96,14 @@ function makeWrapper() {
   );
 }
 
-beforeEach(() => {
-  vi.resetModules();
-});
-
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("CampaignTrackerPage — Pacing tab flag", () => {
-  it("excludes the Pacing tab and starts on Register when the flag is off", async () => {
-    pacingFlag.enabled = false;
-    const { default: CampaignTrackerPage } = await import("./CampaignTrackerPage");
-
+describe("CampaignTrackerPage — Pacing tab", () => {
+  it("includes the Pacing tab and starts on it", () => {
     render(<CampaignTrackerPage />, { wrapper: makeWrapper() });
 
-    expect(screen.queryByRole("tab", { name: "Pacing" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Register" })).toHaveAttribute("aria-selected", "true");
-  });
-
-  it("includes the Pacing tab and starts on it when the flag is on", async () => {
-    pacingFlag.enabled = true;
-    const { default: CampaignTrackerPage } = await import("./CampaignTrackerPage");
-
-    render(<CampaignTrackerPage />, { wrapper: makeWrapper() });
-
-    expect(screen.getByRole("tab", { name: "Pacing" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Pacing" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Register" })).toHaveAttribute("aria-selected", "false");
   });

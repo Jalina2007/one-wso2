@@ -134,6 +134,7 @@ import ScorecardPage from "@features/amplify/pages/dashboards/ScorecardBoard";
 import MasterDataRoute from "@components/route-guards/MasterDataRoute";
 import AdCampaignsAnalyticsPage from "@features/marketing-ops/ad-campaigns/pages/AdCampaignsAnalyticsPage";
 import CampaignTrackerPage from "@features/marketing-ops/ad-campaigns/pages/CampaignTrackerPage";
+import BenchmarkGradingPage from "@features/marketing-ops/ad-campaigns/pages/BenchmarkGradingPage";
 import UtmGeneratorPage from "@features/marketing-ops/utilities/pages/UtmGeneratorPage";
 import AssetNameGeneratorPage from "@features/marketing-ops/utilities/pages/AssetNameGeneratorPage";
 import UtmSettingsPage from "@features/marketing-ops/admin/pages/UtmSettingsPage";
@@ -977,6 +978,13 @@ export default function App() {
           <Route
             path="marketing-ops/ad-campaigns/campaign-tracker"
             element={<CampaignTrackerPage />}
+          />
+          {/* Ad Campaigns → Benchmark Grading. Every campaign scored on
+              conversion and cost against WSO2's benchmarks; grading is computed
+              client-side from the backend's raw campaign lines. */}
+          <Route
+            path="marketing-ops/ad-campaigns/benchmark-grading"
+            element={<BenchmarkGradingPage />}
           />
           {/* Utilities — open to any authorized Marketing Ops caller. */}
           <Route path="marketing-ops/utilities/utm" element={<UtmGeneratorPage />} />
