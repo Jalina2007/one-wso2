@@ -1100,22 +1100,10 @@ export const marketingOpsServiceUrls = {
   eventsReviewExportAll: (id: string) =>
     `${marketingOpsBackendUrl}/api/events/review/submissions/${encodeURIComponent(id)}/export`,
   // ---- events: lead import --------------------------------------------------
-  eventsLeadImportOptions: `${marketingOpsBackendUrl}/api/events/lead-import/options`,
-  eventsLeadImportRuns: `${marketingOpsBackendUrl}/api/events/lead-import/runs`,
-  eventsLeadImportUpload: (filename: string, sheetType: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs?filename=${encodeURIComponent(filename)}&sheet_type=${encodeURIComponent(sheetType)}`,
-  eventsLeadImportRun: (id: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs/${encodeURIComponent(id)}`,
-  eventsLeadImportApply: (id: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs/${encodeURIComponent(id)}/apply`,
-  eventsLeadImportSheet: (id: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs/${encodeURIComponent(id)}/sheet`,
-  eventsLeadImportEdits: (id: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs/${encodeURIComponent(id)}/edits`,
-  eventsLeadImportFinish: (id: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs/${encodeURIComponent(id)}/finish`,
-  eventsLeadImportFile: (id: string, kind: string) =>
-    `${marketingOpsBackendUrl}/api/events/lead-import/runs/${encodeURIComponent(id)}/files/${encodeURIComponent(kind)}`,
+  // POST — the column-mapping suggestion for one raw lead file: headings and a few sample
+  // values in, one mapping entry per template column out. Stateless; the file itself is
+  // read and converted in the browser.
+  eventsLeadImportSuggest: `${marketingOpsBackendUrl}/api/events/lead-import/suggest`,
 
   // ---- crm-upload ----------------------------------------------------------------
   //
