@@ -14,163 +14,224 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// The upload says an email will come, and stays on the list (nothing polls). Recently
-// converted: deleting a run asks first, then removes it; a run that is still converting
-// can't be opened or deleted.
+// The upload offers only the lead types in use and refuses a wrong file on pick; the
+// mapping screen shows how each template column got its source, what was left out and
+// the rows as they will download; a person's pick replaces the suggestion and can be
+// reset; download says what to do next.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import type { LeadImportRun } from "../leadImportTypes";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import type { FieldDef, MemberStatus } from "../eventsTypes";
+import type { SuggestRequest, SuggestResponse } from "../leadImportTypes";
 
-const remove = vi.fn();
-const upload = vi.fn();
-let runs: LeadImportRun[] = [];
-let options: { claude_configured: boolean } | undefined;
+const suggest = vi.fn<(request: SuggestRequest) => Promise<SuggestResponse>>();
 vi.mock("../../api/useLeadImport", () => ({
-  useLeadImportOptions: () => ({ data: options }),
-  useLeadImportRuns: () => ({
-    data: runs,
-    isLoading: false,
-    isError: false,
-    isFetching: false,
-    refetch: vi.fn(),
-  }),
-  useUploadLeadFile: () => ({ mutateAsync: upload, isPending: false }),
-  useDownloadLeadFile: () => ({ mutateAsync: vi.fn() }),
-  useDeleteLeadImport: () => ({ mutateAsync: remove, isPending: false }),
+  useSuggestLeadMapping: () => ({ mutateAsync: suggest }),
   leadImportError: (e: Error) => e.message,
+}));
+
+const statuses: MemberStatus[] = [
+  { name: "Booth", score: 5, enabled: true },
+  { name: "Retired", score: 0, enabled: false },
+];
+function def(field_name: string, header_label = field_name, extra: Partial<FieldDef> = {}): FieldDef {
+  return { field_name, header_label, data_type: "text", picklist: [], mandatory: false, ...extra };
+}
+const fields: Record<string, FieldDef[]> = {
+  Booth: [
+    def("First Name"),
+    def("Last Name", "Last Name", { mandatory: true }),
+    def("Email", "Email Address"),
+    def("Company", "Company", { mandatory: true }),
+    def("score", "Add to Score (Hasina will fill this)", { computed: true }),
+  ],
+};
+vi.mock("../../api/useEvents", () => ({
+  useMemberStatuses: () => ({ data: statuses, isError: false }),
+  useFieldDefs: () => ({ data: fields, isError: false }),
+}));
+
+const saveBlob = vi.fn();
+vi.mock("../lib/download", () => ({ saveBlob: (...args: unknown[]) => saveBlob(...args) }));
+
+// jsdom's File cannot be read; the reading itself is covered by leadFile.test.ts.
+vi.mock("../lib/leadFile", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/leadFile")>()),
+  readLeadFile: async () => [
+    {
+      name: "Leads",
+      rows: [
+        ["Nombre", "Correo", "Badge"],
+        ["Ana Silva", "ana@acme.io", "B1"],
+        ["Ludwig van Beethoven", "lvb@x.de", "B2"],
+      ],
+    },
+  ],
 }));
 
 const { default: LeadImport } = await import("./LeadImport");
 
-function run(id: string, overrides: Partial<LeadImportRun> = {}): LeadImportRun {
-  return {
-    id,
-    status: "ready",
-    source_name: `${id}.xlsx`,
-    event_name: null,
-    created_at: "2026-11-06T08:00:00+00:00",
-    ready_at: "2026-11-06T08:01:00+00:00",
-    finished_at: null,
-    expires_at: "2099-01-01T00:00:00+00:00",
-    counts: null,
-    rows_per_tab: null,
-    pending_count: 0,
-    warnings_count: 0,
-    error: null,
-    files: { workbook: null, rejects: null, warnings: null, changes: null },
-    can_edit: true,
-    ...overrides,
-  };
+function chooseFile(container: HTMLElement, name: string) {
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  fireEvent.change(input, { target: { files: [new File(["x"], name)] } });
 }
 
-describe("choosing the sheet type", () => {
+async function openFile() {
+  const view = render(
+    <MemoryRouter>
+      <LeadImport />
+    </MemoryRouter>,
+  );
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Lead type" }));
+  expect(screen.queryByRole("option", { name: "Retired" })).toBeNull();
+  fireEvent.click(screen.getByRole("option", { name: "Booth" }));
+  expect(screen.getByText(/4 columns, 2 required: First Name, Last Name, Email, Company\./)).toBeTruthy();
+  chooseFile(view.container, "Apidays.xlsx");
+  fireEvent.click(screen.getByRole("button", { name: "Map columns" }));
+  await screen.findByRole("table", { name: "Column mapping" });
+  await screen.findByText("Exact match", {}, { timeout: 2000 }).catch(() => undefined);
+  return view;
+}
+
+function mappingRow(column: string): HTMLElement {
+  const table = screen.getByRole("table", { name: "Column mapping" });
+  return within(table).getByText(column).closest("tr") as HTMLElement;
+}
+
+function stat(label: string): string {
+  const summary = screen.getByRole("group", { name: "Mapping summary" });
+  return within(summary).getByText(label).nextElementSibling?.textContent ?? "";
+}
+
+describe("Lead import", () => {
   beforeEach(() => {
-    runs = [];
-    options = undefined;
-  });
-
-  function chooseFile(container: HTMLElement, name: string) {
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    fireEvent.change(input, { target: { files: [new File(["email\n"], name)] } });
-  }
-
-  function chooseType(label: string) {
-    fireEvent.mouseDown(screen.getByRole("combobox"));
-    fireEvent.click(screen.getByRole("option", { name: label }));
-  }
-
-  const convertButton = () => screen.getByRole("button", { name: "Convert to List Import Template" });
-
-  it("needs a sheet type before converting", () => {
-    const { container } = render(<LeadImport onOpen={vi.fn()} />);
-    chooseFile(container, "Summit - Booth.csv");
-    expect(convertButton().hasAttribute("disabled")).toBe(true);
-    chooseType("Booth Scan");
-    expect(convertButton().hasAttribute("disabled")).toBe(false);
-  });
-
-  it("offers no upload when the server cannot convert files", () => {
-    options = { claude_configured: false };
-    const { container } = render(<LeadImport onOpen={vi.fn()} />);
-    chooseFile(container, "Summit - Booth.csv");
-    chooseType("Booth Scan");
-    expect(screen.getByText(/isn't available on this server/)).toBeTruthy();
-    expect(convertButton().hasAttribute("disabled")).toBe(true);
-  });
-
-  it("is quiet when the file name matches the sheet type", () => {
-    const { container } = render(<LeadImport onOpen={vi.fn()} />);
-    chooseFile(container, "Summit - Session.csv");
-    chooseType("Session Attendee");
-    expect(screen.queryByText(/naming convention|but you chose/)).toBeNull();
-  });
-
-  it("uploads the file with the chosen sheet type, then says an email will come", async () => {
-    upload.mockReset().mockResolvedValue({ id: "run-1" });
-    const onOpen = vi.fn();
-    const { container } = render(<LeadImport onOpen={onOpen} />);
-    chooseFile(container, "Summit - Booth.csv");
-    chooseType("Booth Scan");
-    await act(async () => {
-      fireEvent.click(convertButton());
+    suggest.mockReset();
+    saveBlob.mockReset();
+    suggest.mockResolvedValue({
+      claude: "used",
+      mapping: [
+        {
+          field_name: "First Name",
+          source_index: 0,
+          split: "first",
+          how: "claude",
+          confidence: "high",
+          reason: "Only a full-name column",
+        },
+        {
+          field_name: "Last Name",
+          source_index: 0,
+          split: "last",
+          how: "claude",
+          confidence: "high",
+          reason: "Only a full-name column",
+        },
+        {
+          field_name: "Email",
+          source_index: 1,
+          split: null,
+          how: "claude",
+          confidence: "low",
+          reason: "Spanish for email",
+        },
+        { field_name: "Company", source_index: null, split: null, how: "none", confidence: null, reason: null },
+      ],
     });
-    expect(upload).toHaveBeenCalledWith({ file: expect.any(File), sheetType: "booth" });
-    expect(screen.getByText(/An email will be sent when it's ready/)).toBeTruthy();
-    expect(screen.getByText("Summit - Booth.csv")).toBeTruthy();
-    // The page stays on the list: there is nothing to open until the run is ready.
-    expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it("warns, without blocking, when the file name says another type", () => {
-    const { container } = render(<LeadImport onOpen={vi.fn()} />);
-    chooseFile(container, "Summit - Attendees.csv");
-    chooseType("Booth Scan");
-    expect(screen.getByText(/but you chose Booth Scan/)).toBeTruthy();
-    expect(convertButton().hasAttribute("disabled")).toBe(false);
-  });
-});
-
-describe("deleting a recent conversion", () => {
-  beforeEach(() => {
-    remove.mockReset().mockResolvedValue(undefined);
-    runs = [run("summit"), run("webinar", { status: "processing", ready_at: null, expires_at: null })];
+  it("refuses a file it can't read as soon as it is picked", () => {
+    const view = render(
+      <MemoryRouter>
+        <LeadImport />
+      </MemoryRouter>,
+    );
+    chooseFile(view.container, "scan.pdf");
+    expect(screen.getByText(/Upload an \.xlsx or \.csv file/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Map columns" })).toHaveProperty("disabled", true);
   });
 
-  it("asks before deleting, then deletes that run", async () => {
-    render(<LeadImport onOpen={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Delete summit/ }));
-    expect(screen.getByText("Delete this conversion?")).toBeTruthy();
-    expect(remove).not.toHaveBeenCalled();
-
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  it("sends only headings and samples, and shows what was mapped and how", async () => {
+    await openFile();
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
+    expect(suggest).toHaveBeenCalledWith({
+      status: "Booth",
+      columns: [
+        { index: 0, heading: "Nombre", samples: ["Ana Silva", "Ludwig van Beethoven"] },
+        { index: 1, heading: "Correo", samples: ["ana@acme.io", "lvb@x.de"] },
+        { index: 2, heading: "Badge", samples: ["B1", "B2"] },
+      ],
     });
-    expect(remove).toHaveBeenCalledWith("summit");
+    expect(stat("Rows")).toBe("2");
+    expect(stat("Needs a look")).toBe("2"); // Email (low confidence), Company (required)
+    expect(within(mappingRow("Email")).getByText("Claude · low confidence")).toBeTruthy();
+    expect(within(mappingRow("Email")).getByText("Spanish for email")).toBeTruthy();
+    expect(within(mappingRow("First Name")).getByText(/Splits a full name/)).toBeTruthy();
+    expect(within(mappingRow("Company")).getByText(/Required\. My Submissions will flag every row/)).toBeTruthy();
+    expect(screen.getByText(/MOP fills Add to Score when the list is submitted/)).toBeTruthy();
+    expect(screen.getByText("Columns of the file not used (1)")).toBeTruthy();
+
+    const preview = screen.getByRole("table", { name: "Preview" });
+    expect(within(preview).getByText("van Beethoven")).toBeTruthy();
+    expect(within(preview).getByText("lvb@x.de")).toBeTruthy();
   });
 
-  it("does nothing when the question is cancelled", () => {
-    render(<LeadImport onOpen={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Delete summit/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(remove).not.toHaveBeenCalled();
+  it("filters to the columns that need a look", async () => {
+    await openFile();
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
+    fireEvent.click(screen.getByRole("button", { name: /Needs a look/ }));
+    const table = screen.getByRole("table", { name: "Column mapping" });
+    expect(within(table).queryByText("First Name")).toBeNull();
+    expect(within(table).getByText("Email")).toBeTruthy();
+    expect(within(table).getByText("Company")).toBeTruthy();
   });
 
-  it("can't open or delete a run that is still converting", () => {
-    render(<LeadImport onOpen={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /Delete webinar/ }).hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("Converting. An email will be sent when it's ready.")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^webinar\.xlsx/ })).toBeNull();
-    expect(screen.getByRole("button", { name: /^summit\.xlsx/ })).toBeTruthy();
+  it("a pick replaces the suggestion, and Reset brings the suggestion back", async () => {
+    await openFile();
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
+    fireEvent.mouseDown(within(mappingRow("Company")).getByRole("combobox"));
+    fireEvent.click(screen.getByRole("option", { name: /^C · Badge/ }));
+    await waitFor(() => expect(stat("Columns mapped")).toBe("4 of 4"));
+    expect(within(mappingRow("Company")).getByText("Chosen by you")).toBeTruthy();
+    expect(screen.queryByText(/Columns of the file not used/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset to suggestion" }));
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
+    expect(screen.queryByRole("button", { name: "Reset to suggestion" })).toBeNull();
   });
 
-  it("shows the server's reason when deleting fails", async () => {
-    remove.mockRejectedValue(new Error("This file is still converting."));
-    render(<LeadImport onOpen={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /Delete summit/ }));
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  it("download saves the workbook and says what to do next", async () => {
+    await openFile();
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
+    fireEvent.click(screen.getByRole("button", { name: "Download workbook" }));
+    await screen.findByText(/Open it, make any changes to the data/);
+    expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), "Apidays - Booth.xlsx");
+    expect(screen.getByRole("button", { name: "Go to My Submissions" })).toBeTruthy();
+  });
+
+  it("says when Claude isn't set up, and still allows mapping by hand", async () => {
+    suggest.mockResolvedValue({
+      claude: "not_configured",
+      mapping: fields.Booth.filter((d) => !d.computed).map((d) => ({
+        field_name: d.field_name,
+        source_index: null,
+        split: null,
+        how: "none" as const,
+        confidence: null,
+        reason: null,
+      })),
     });
-    expect(screen.getByText("This file is still converting.")).toBeTruthy();
+    await openFile();
+    expect(await screen.findByText(/Claude isn't set up on this server/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Download workbook" })).toHaveProperty("disabled", true);
+  });
+
+  it("a failed suggestion leaves every column unmapped, with a retry", async () => {
+    suggest.mockRejectedValueOnce(new Error("Network down."));
+    await openFile();
+    expect(await screen.findByText(/Couldn't get a suggestion: Network down\./)).toBeTruthy();
+    expect(stat("Columns mapped")).toBe("0 of 4");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
   });
 });
