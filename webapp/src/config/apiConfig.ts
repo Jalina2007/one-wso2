@@ -1463,6 +1463,11 @@ export function salesforceRecordUrl(object: "Lead" | "Account", id: string): str
   return `${salesforceBaseUrl}/lightning/r/${object}/${encodeURIComponent(id)}/view`;
 }
 
+// Image used in the generated email signature. Optional; falls back to the default below.
+export const emailSignatureLogoUrl: string =
+  window.config?.ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL?.trim() ||
+  "https://wso2.cachefly.net/wso2/sites/all/image_resources/logos/wso2-orange-logo.png";
+
 // ISAC — a separate marketing application, not part of this webapp and not a
 // Marketing Ops operation. It appears at the top of the Marketing Ops rail as an
 // outbound link because that is where the people who use it look for it, not

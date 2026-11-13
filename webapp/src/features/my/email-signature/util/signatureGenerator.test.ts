@@ -126,4 +126,11 @@ describe("generateSignatureHTML", () => {
     );
     expect(html).not.toContain("<script>");
   });
+
+  it("uses the configured logo URL, escaped, and defaults to the WSO2 logo", () => {
+    expect(generateSignatureHTML(data({ name: "Jane" }))).toContain("wso2-orange-logo.png");
+    const html = generateSignatureHTML(data({ name: "Jane" }), 'https://cdn.example.com/l.png"><script>');
+    expect(html).toContain("https://cdn.example.com/l.png&quot;&gt;&lt;script&gt;");
+    expect(html).not.toContain("<script>");
+  });
 });
