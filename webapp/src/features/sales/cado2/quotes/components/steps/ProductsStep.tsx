@@ -96,7 +96,7 @@ function LineIssue({ index }: { index: number }) {
   const issues = [
     useFieldIssue(`lines[${index}].pricebookEntryId`),
     useFieldIssue(`lines[${index}].quantity`),
-    useFieldIssue(`lines[${index}].discretionaryDiscountPercent`),
+    useFieldIssue(`lines[${index}].discountPercent`),
     useFieldIssue(`lines[${index}].yearNumber`),
     useFieldIssue(`lines[${index}].startDate`),
     useFieldIssue(`lines[${index}].endDate`),
@@ -476,6 +476,7 @@ export default function ProductsStep({ preview }: ProductsStepProps): JSX.Elemen
               commissionPercent={sheet.partnerCommissionPercent}
               collapsed={fold.collapsed}
               onToggle={fold.toggle}
+              discountDetail="hints"
               yearActions={yearActions}
               yearTop={yearTop}
               yearEnd={yearEnd}

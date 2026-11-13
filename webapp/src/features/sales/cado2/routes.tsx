@@ -32,6 +32,7 @@ import ApprovalSlasPage from "./admin/approval-slas/pages/ApprovalSlasPage";
 import LegalEntitiesPage from "./admin/legal-entities/pages/LegalEntitiesPage";
 import ProductClassificationsPage from "./admin/product-classifications/pages/ProductClassificationsPage";
 import SupportPlansPage from "./admin/support-plans/pages/SupportPlansPage";
+import VolumeDiscountsPage from "./admin/volume-discounts/pages/VolumeDiscountsPage";
 import QuoteAccessPage from "./admin/quote-access/pages/QuoteAccessPage";
 import SalesforceSyncPage from "./admin/salesforce-sync/pages/SalesforceSyncPage";
 import EmailNotificationsPage from "./admin/email-notifications/pages/EmailNotificationsPage";
@@ -102,6 +103,7 @@ export const cado2Routes = (
       <Route path="legal-entities" element={<LegalEntitiesPage />} />
       <Route path="product-classifications" element={<ProductClassificationsPage />} />
       <Route path="support-plans" element={<SupportPlansPage />} />
+      <Route path="volume-discounts" element={<VolumeDiscountsPage />} />
       <Route path="legal-texts" element={deferred(<LegalTextsPage />)} />
       <Route path="supporting-documents" element={<SupportingDocumentsPage />} />
       <Route path="quote-access" element={<QuoteAccessPage />} />

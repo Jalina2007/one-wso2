@@ -109,7 +109,7 @@ function keyed(lines: readonly Line[]): Map<string, Line> {
 }
 
 const lineSummary = (l: Line, currency: string) =>
-  `${l.quantity} × ${currency} ${formatMoney(l.unitPrice)}${Number(l.discretionaryDiscountPercent) ? `, ${Number(l.discretionaryDiscountPercent)}% off` : ""}`;
+  `${l.quantity} × ${currency} ${formatMoney(l.unitPrice)}${Number(l.discountPercent) ? `, ${Number(l.discountPercent)}% off` : ""}`;
 
 /**
  * Field-by-field comparison of two versions. Lines are matched by product
@@ -155,7 +155,7 @@ export function compareVersions(a: DraftResponse, b: DraftResponse): CompareRow[
     const name = l.productName;
     add("Products", `${name} · Quantity`, String(l.quantity), String(m.quantity));
     add("Products", `${name} · Unit price`, formatMoney(l.unitPrice), formatMoney(m.unitPrice));
-    add("Products", `${name} · Discount`, `${Number(l.discretionaryDiscountPercent)}%`, `${Number(m.discretionaryDiscountPercent)}%`);
+    add("Products", `${name} · Discount`, `${Number(l.discountPercent)}%`, `${Number(m.discountPercent)}%`);
     add("Products", `${name} · Period`, `${formatDate(l.startDate)} – ${formatDate(l.endDate)}`, `${formatDate(m.startDate)} – ${formatDate(m.endDate)}`);
     add("Products", `${name} · Annual`, formatMoney(l.annualNet), formatMoney(m.annualNet));
   }

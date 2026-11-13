@@ -197,7 +197,7 @@ describe("toDraftInput", () => {
       keepSnapshotFromLineId: 11,
       pricebookEntryId: "01uA",
       quantity: 20,
-      discretionaryDiscountPercent: "10",
+      discountPercent: "10",
       unitOfMeasure: undefined,
       useLatestFormula: undefined,
       yearNumber: 1,
@@ -205,7 +205,7 @@ describe("toDraftInput", () => {
       endDate: undefined,
     });
     expect(input.lines[1]).toMatchObject({
-      discretionaryDiscountPercent: "0",
+      discountPercent: "0",
       keepSnapshotFromLineId: undefined,
     });
     expect(JSON.stringify(input)).not.toContain("unitPrice");
@@ -545,6 +545,9 @@ describe("fromVersion", () => {
             unitOfMeasure: null,
             quantity: 20,
             category: "SUBSCRIPTION",
+            discountPercent: "10.00",
+            volumeCeilingPercent: null,
+            volumeDiscountPercent: "0.00",
             discretionaryDiscountPercent: "10.00",
             recurring: true,
             classification: "PS",
@@ -564,6 +567,9 @@ describe("fromVersion", () => {
             unitOfMeasure: null,
             quantity: 5,
             category: "PROFESSIONAL_SERVICE",
+            discountPercent: "0.00",
+            volumeCeilingPercent: null,
+            volumeDiscountPercent: "0.00",
             discretionaryDiscountPercent: "0.00",
             recurring: false,
             classification: "TR",

@@ -29,6 +29,7 @@ export type Cado2AdminSection =
   | "currencies"
   | "product-classifications"
   | "support-plans"
+  | "volume-discounts"
   | "legal-texts"
   | "supporting-documents"
   | "quote-access"

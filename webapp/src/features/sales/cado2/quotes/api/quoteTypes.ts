@@ -444,6 +444,15 @@ export interface PricingPreview {
     readonly salesPrice?: string;
     readonly pricingMethod?: PricingMethod;
     readonly formula?: LineFormula | null;
+    /**
+     * The discount the AM entered (D169), split at the line's volume discount
+     * ceiling: up to it the volume discount (no approval), the rest the
+     * discretionary discount, which approvals measure. The ceiling is null when
+     * the line has none (its product is in no table, or it is formula-priced).
+     */
+    readonly discountPercent?: string;
+    readonly volumeCeilingPercent?: string | null;
+    readonly volumeDiscountPercent?: string;
     readonly discretionaryDiscountPercent?: string;
     readonly annualList: string;
     readonly annualNet: string;
@@ -481,7 +490,8 @@ export interface DraftLineInput {
   readonly keepSnapshotFromLineId?: number;
   readonly pricebookEntryId: string;
   readonly quantity: number;
-  readonly discretionaryDiscountPercent: string;
+  /** The discount the AM enters; the backend splits it at the volume discount ceiling (D169). */
+  readonly discountPercent: string;
   readonly unitOfMeasure?: string;
   /** A kept line moved to its product's pricing in force: the latest formula version, or the price book (D82). */
   readonly useLatestFormula?: boolean;
@@ -574,6 +584,15 @@ export interface LineView {
   readonly recurring: boolean;
   readonly quantity: number;
   readonly category: LineCategory | "";
+  /**
+   * The discount the AM entered (D169), split at the line's volume discount
+   * ceiling: up to it the volume discount (no approval), the rest the
+   * discretionary discount, which approvals measure. The ceiling is null when
+   * the line has none (its product is in no table, or it is formula-priced).
+   */
+  readonly discountPercent: string;
+  readonly volumeCeilingPercent: string | null;
+  readonly volumeDiscountPercent: string;
   readonly discretionaryDiscountPercent: string;
   /** The contract year it belongs to. */
   readonly yearNumber: number | null;

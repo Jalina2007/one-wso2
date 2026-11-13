@@ -2196,6 +2196,9 @@ export const cado2ServiceUrls = {
     `${cado2BackendUrl}/admin/supporting-documents/${encodeSegment(id)}${action ? `/${action}` : ""}`,
   // Support plans (D155): Admins pick the products; the wizard reads them in quote settings.
   adminSupportPlans: `${cado2BackendUrl}/admin/support-plans`,
+  // Volume discounts (D169): Admins set each product's quantity tiers and ceilings.
+  adminVolumeDiscounts: `${cado2BackendUrl}/admin/volume-discounts`,
+  adminVolumeDiscount: (id: number): string => `${cado2BackendUrl}/admin/volume-discounts/${encodeSegment(id)}`,
   // Particular products of the quote's price book, e.g. the support plans' (D155).
   productsByIds: (currency: string, pricebookId: string, ids: readonly string[]): string =>
     `${cado2BackendUrl}/products?${new URLSearchParams({ currency, pricebookId, ids: ids.join(","), limit: String(Math.max(ids.length, 1)) }).toString()}`,

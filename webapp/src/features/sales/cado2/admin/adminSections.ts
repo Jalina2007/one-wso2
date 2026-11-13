@@ -38,6 +38,7 @@ export const ADMIN_SECTION_GROUPS: readonly AdminSectionGroup[] = [
     sections: [
       { id: "product-classifications", label: "Product Classifications" },
       { id: "support-plans", label: "Support Plans" },
+      { id: "volume-discounts", label: "Volume Discounts" },
       { id: "pricing-formulas", label: "Pricing Formulas" },
     ],
   },

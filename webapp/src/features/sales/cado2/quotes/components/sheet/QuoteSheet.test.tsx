@@ -104,7 +104,7 @@ describe("QuoteSheet", () => {
 // A 3-year quote: two subscriptions, support and a one-time service.
 const line = (number: number, productName: string, category: SheetLine["category"], tcv: string, arr: string): SheetLine => ({
   number, productName, productCode: null, productDescription: null, pricebookName: "FY26 USD", category, recurring: category !== "PROFESSIONAL_SERVICE", quantity: "1", unitOfMeasure: null, unitPrice: "1",
-  discountPercent: "0", formula: null, yearNumber: 1, startDate: "2027-01-01", endDate: "2027-12-31", annualList: null, annualNet: null, arr, acv: null, tcv, commission: "0.00",
+  discountPercent: "0", volumeCeilingPercent: null, discretionaryPercent: "0", formula: null, yearNumber: 1, startDate: "2027-01-01", endDate: "2027-12-31", annualList: null, annualNet: null, arr, acv: null, tcv, commission: "0.00",
   schedule: [1, 2, 3].map((y) => ({ yearNumber: y, periodStart: "", periodEnd: "", yearFraction: "1.0000", gross: "1.00", discount: "0.00", net: "1.00", billing: "1.00" })),
 });
 const threeYears: Sheet = {
