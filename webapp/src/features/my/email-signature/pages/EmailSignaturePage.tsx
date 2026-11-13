@@ -64,11 +64,14 @@ export default function EmailSignaturePage() {
     const { firstName, lastName } = userInfo.data;
     const designation = userInfo.data.designation ?? "";
     const name = [firstName, lastName].filter(Boolean).join(" ").trim();
-    if (name || designation) {
+    // Only the part before "@": a template supplies its own domain.
+    const emailUser = (userInfo.data.workEmail ?? "").split("@")[0].trim();
+    if (name || designation || emailUser) {
       setData((prev) => ({
         ...prev,
         name: prev.name.trim() ? prev.name : name,
         designation: prev.designation.trim() ? prev.designation : designation,
+        emailUser: prev.emailUser.trim() ? prev.emailUser : emailUser,
       }));
     }
   }

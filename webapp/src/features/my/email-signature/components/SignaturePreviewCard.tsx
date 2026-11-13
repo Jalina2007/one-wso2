@@ -23,7 +23,10 @@ import {
   CopyIcon,
   TriangleAlertIcon,
 } from "@wso2/oxygen-ui-icons-react";
+import { emailSignatureLogoUrl } from "@config/apiConfig";
 import { copyRichText } from "../util/clipboard";
+import { renderSignatureTemplate } from "../util/signatureTemplate";
+import { useSignatureTemplate } from "../util/useSignatureTemplate";
 import { generateSignatureHTML, hasSignatureContent, type SignatureData } from "../util/signatureGenerator";
 
 type CopyState = "idle" | "success" | "error";
@@ -35,11 +38,15 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
 
   useEffect(() => () => clearTimeout(timerRef.current), []);
 
+  const template = useSignatureTemplate();
   const hasContent = hasSignatureContent(data);
-  const signatureHTML = useMemo(
-    () => (hasContent ? generateSignatureHTML(data) : ""),
-    [hasContent, data],
-  );
+  // Hold the preview back until a configured template has loaded, so the
+  // built-in layout doesn't flash first.
+  const loadingTemplate = template === undefined;
+  const signatureHTML = useMemo(() => {
+    if (!hasContent || template === undefined) return "";
+    return template ? renderSignatureTemplate(template, data, emailSignatureLogoUrl) : generateSignatureHTML(data);
+  }, [hasContent, template, data]);
 
   const handleCopy = useCallback(async () => {
     if (!signatureHTML) return;
@@ -93,7 +100,7 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
             client's canvas, which is always light regardless of app theme,
             and the signature HTML's text colors are hardcoded to match. */}
         <Box sx={{ bgcolor: "#ffffff", p: 3, minHeight: 150 }}>
-          {hasContent ? (
+          {hasContent && signatureHTML ? (
             <div dangerouslySetInnerHTML={{ __html: signatureHTML }} />
           ) : (
             <Typography
@@ -101,7 +108,9 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
               sx={{ color: "rgba(0, 0, 0, 0.6)", fontStyle: "italic", pt: 5 }}
               align="center"
             >
-              Fill in your name or designation to see a preview.
+              {hasContent && loadingTemplate
+                ? "Loading your signature layout…"
+                : "Fill in your name or designation to see a preview."}
             </Typography>
           )}
         </Box>
@@ -110,7 +119,7 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
       <Button
         variant="contained"
         fullWidth
-        disabled={!hasContent}
+        disabled={!signatureHTML}
         onClick={() => void handleCopy()}
         startIcon={<CopyStateIcon size={16} />}
         color={copyState === "error" ? "error" : copyState === "success" ? "success" : "primary"}

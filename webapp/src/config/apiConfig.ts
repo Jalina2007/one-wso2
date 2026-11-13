@@ -1465,6 +1465,11 @@ export const emailSignatureLogoUrl: string =
   window.config?.ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL?.trim() ||
   "https://wso2.cachefly.net/wso2/sites/all/image_resources/logos/wso2-orange-logo.png";
 
+// Optional path or URL of an HTML file that replaces the built-in email signature
+// layout (for example a file mounted next to config.js, "/email-signature.html").
+// Empty means the built-in layout is used.
+export const emailSignatureTemplateUrl: string = window.config?.ONE_WSO2_EMAIL_SIGNATURE_TEMPLATE_URL?.trim() ?? "";
+
 // ISAC — a separate marketing application, not part of this webapp and not a
 // Marketing Ops operation. It appears at the top of the Marketing Ops rail as an
 // outbound link because that is where the people who use it look for it, not

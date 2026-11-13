@@ -209,6 +209,11 @@ window.config = {
   // blank, the built-in default is used.
   // ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL: "<your-image-url>",
 
+  // Path or URL of an HTML file that replaces the built-in email signature
+  // layout, e.g. a file mounted next to this one. Optional — when unset, or when
+  // the file can't be loaded, the built-in layout is used.
+  // ONE_WSO2_EMAIL_SIGNATURE_TEMPLATE_URL: "/email-signature.html",
+
   // Idle handling. Defaults to false. The "Are you still there?" dialog
   // appears after 25 minutes of inactivity either way; this decides only what
   // happens if it is ignored. False leaves it waiting and the session alive;

@@ -35,6 +35,8 @@ export interface SignatureData {
   linkedin: string;
   customUrl: string;
   customUrlLabel: string;
+  /** The part of the work email before "@". Not a form field; a template adds its own domain. */
+  emailUser: string;
 }
 
 export const EMPTY_SIGNATURE_DATA: SignatureData = {
@@ -46,6 +48,7 @@ export const EMPTY_SIGNATURE_DATA: SignatureData = {
   linkedin: "",
   customUrl: "",
   customUrlLabel: "",
+  emailUser: "",
 };
 
 /** True once there's enough to preview — matches the source app's own gate. */
@@ -53,7 +56,7 @@ export function hasSignatureContent(data: SignatureData): boolean {
   return data.name.trim().length > 0 || data.designation.trim().length > 0;
 }
 
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
