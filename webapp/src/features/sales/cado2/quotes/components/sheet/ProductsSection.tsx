@@ -65,6 +65,7 @@ export default function ProductsSection({ sheet }: { sheet: QuoteSheet }): JSX.E
             commissionPercent={sheet.partnerCommissionPercent}
             collapsed={fold.collapsed}
             onToggle={fold.toggle}
+            discountDetail="columns"
           />
           <OrderTotalsFooter
             lines={sheet.lines}

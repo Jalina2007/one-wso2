@@ -90,6 +90,13 @@ export interface SheetLine {
   /** e.g. "10" for 10%; "0" when none. A formula line's is off its formula price (D149). */
   readonly discountPercent: string;
   /**
+   * D169: the line's volume discount ceiling, e.g. "4.17"; null when it has
+   * none or it isn't known yet (the wizard, before pricing).
+   */
+  readonly volumeCeilingPercent: string | null;
+  /** D169: the part of the discount above the ceiling, which approvals measure; null when not known. */
+  readonly discretionaryPercent: string | null;
+  /**
    * A formula line's version and how it worked the unit price out (D81, D82):
    * "v3 · 15 Oct 2026" and "max(25,000, 10% × 320,000)"; null on a price-book line.
    */
@@ -279,7 +286,9 @@ export function sheetFromVersion(res: DraftResponse): QuoteSheet {
       quantity: String(l.quantity),
       unitOfMeasure: blank(l.unitOfMeasure),
       unitPrice: l.salesPrice ?? l.unitPrice,
-      discountPercent: String(Number(l.discretionaryDiscountPercent)),
+      discountPercent: String(Number(l.discountPercent)),
+      volumeCeilingPercent: l.volumeCeilingPercent === null ? null : String(Number(l.volumeCeilingPercent)),
+      discretionaryPercent: String(Number(l.discretionaryDiscountPercent)),
       formula: l.pricingMethod === "FORMULA" ? formulaOf(l.formula) : null,
       yearNumber: l.yearNumber ?? 0,
       startDate: l.startDate,
@@ -432,6 +441,9 @@ export function sheetFromForm(
         unitOfMeasure: blank(l.unitOfMeasure),
         unitPrice: byFormula ? (p.unitPrice ?? l.unitPrice) : l.salesPrice || l.unitPrice,
         discountPercent: String(Number(l.discount || "0")),
+        // From the preview, when it prices this same line (D169).
+        volumeCeilingPercent: p?.volumeCeilingPercent ? String(Number(p.volumeCeilingPercent)) : null,
+        discretionaryPercent: p?.discretionaryDiscountPercent ? String(Number(p.discretionaryDiscountPercent)) : null,
         formula: byFormula ? formulaOf(p.formula) : null,
         yearNumber: l.yearNumber,
         startDate: dates?.start ?? null,

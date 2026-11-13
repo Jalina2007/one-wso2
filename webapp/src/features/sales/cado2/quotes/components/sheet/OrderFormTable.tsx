@@ -15,7 +15,7 @@
 // under the License.
 
 import { Fragment, type JSX, type ReactNode } from "react";
-import { alpha, Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@wso2/oxygen-ui";
+import { alpha, Box, Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@wso2/oxygen-ui";
 import { CircleAlertIcon } from "@wso2/oxygen-ui-icons-react";
 import { orderForm, type SheetLine } from "@features/sales/cado2/quotes/sheet/sheetModel";
 import { commissionRatesText, durationShort, formatDate } from "@features/sales/cado2/quotes/form/draftForm";
@@ -50,6 +50,48 @@ interface OrderFormTableProps {
    * shows, with a plain heading.
    */
   readonly flagNotSetUp?: boolean;
+  /**
+   * D169, the volume discount ceiling: "hints" (the wizard) puts it under
+   * each discount, with whether the discount needs approval; "columns" (the
+   * read-only views) adds Volume discount ceiling and Discretionary columns beside
+   * the discount. Left out, the discount shows alone.
+   */
+  readonly discountDetail?: "hints" | "columns";
+}
+
+/** D169: what a percentage reads as, e.g. "4.17%". */
+const pct = (v: string) => `${Number(v)}%`;
+
+/**
+ * The wizard's hint under a line's discount (D169):
+ *
+ *   Volume discount ceiling 4.17%   [No approval needed]
+ *   Volume discount ceiling 2.08%   [2.92% needs approval]
+ *   No volume discount ceiling                    (a discount on a product without one)
+ */
+function DiscountHint({ line }: { line: SheetLine }): JSX.Element | null {
+  const discount = Number(line.discountPercent);
+  const above = Number(line.discretionaryPercent ?? 0);
+  if (line.volumeCeilingPercent === null) {
+    if (!discount || line.discretionaryPercent === null) return null;
+    return (
+      <Typography variant="caption" color="text.secondary" display="block" sx={{ whiteSpace: "normal" }}>
+        {line.formula ? "Formula-priced: no volume discount ceiling" : "No volume discount ceiling for this product"}
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0.5, mt: 0.25 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+        Volume discount ceiling {pct(line.volumeCeilingPercent)}
+      </Typography>
+      {above > 0 ? (
+        <Chip size="small" color="warning" variant="outlined" label={`${pct(String(above))} needs approval`} />
+      ) : discount > 0 ? (
+        <Chip size="small" color="success" variant="outlined" label="No approval needed" />
+      ) : null}
+    </Box>
+  );
 }
 
 /**
@@ -72,13 +114,17 @@ export default function OrderFormTable({
   commissionPercent = null,
   commissionRates = null,
   flagNotSetUp = false,
+  discountDetail,
   totalLabel = "Total order value",
   showTotals = true,
   closingTotalLabel,
 }: OrderFormTableProps): JSX.Element {
   const form = orderForm(lines, commissionPercent);
-  // Product, unit of measure, unit list, qty, discount, duration, amount (+ actions).
-  const dataCols = 7;
+  // Product, unit of measure, unit list, qty, discount, duration, amount (+ actions);
+  // with the volume columns (D169), the ceiling before the discount and the
+  // discretionary part after it.
+  const split = discountDetail === "columns";
+  const dataCols = split ? 9 : 7;
   const cols = actions ? dataCols + 1 : dataCols;
   // Lines whose category isn't chosen yet (D72): listed first, under their own
   // heading, on every view, so no line is ever left out of the table.
@@ -168,9 +214,20 @@ export default function OrderFormTable({
           <TableCell align="right" sx={num}>
             {l.quantity}
           </TableCell>
+          {split ? (
+            <TableCell align="right" sx={num}>
+              {l.volumeCeilingPercent === null ? "–" : pct(l.volumeCeilingPercent)}
+            </TableCell>
+          ) : null}
           <TableCell align="right" sx={num}>
             {Number(l.discountPercent) ? `${l.discountPercent}%` : "–"}
+            {discountDetail === "hints" ? <DiscountHint line={l} /> : null}
           </TableCell>
+          {split ? (
+            <TableCell align="right" sx={{ ...num, ...(Number(l.discretionaryPercent) > 0 ? { color: "warning.main", fontWeight: 600 } : {}) }}>
+              {Number(l.discretionaryPercent) ? pct(l.discretionaryPercent ?? "0") : "–"}
+            </TableCell>
+          ) : null}
           {/* Each line's term (D113): its start and end (D146), its length
               below like the SKU under the name; a one-off line "One-time". */}
           <TableCell sx={{ whiteSpace: "nowrap" }}>
@@ -248,7 +305,9 @@ export default function OrderFormTable({
               <TableCell>Unit of measure</TableCell>
               <TableCell align="right">Unit price</TableCell>
               <TableCell align="right">Qty</TableCell>
-              <TableCell align="right">Discount</TableCell>
+              {split ? <TableCell align="right">Volume discount ceiling</TableCell> : null}
+              <TableCell align="right">{split ? "Entered discount" : "Discount"}</TableCell>
+              {split ? <TableCell align="right">Discretionary</TableCell> : null}
               <TableCell>Term</TableCell>
               <TableCell align="right">Amount{cur}</TableCell>
               {actions ? (

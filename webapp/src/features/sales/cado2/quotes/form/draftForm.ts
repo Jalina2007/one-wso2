@@ -678,7 +678,7 @@ export function fromVersion(res: DraftResponse): DraftFormValues {
       classification: l.classification ?? "",
       unitOfMeasure: l.unitOfMeasure ?? "",
       quantity: String(l.quantity),
-      discount: String(Number(l.discretionaryDiscountPercent)),
+      discount: String(Number(l.discountPercent)),
       yearNumber: l.yearNumber ?? 0,
       // A one-off line's real dates, kept when the term moves (D146). A
       // recurring line takes its year's.
@@ -871,7 +871,7 @@ export function toDraftInput(v: DraftFormValues, expectedUpdatedAt?: string): Dr
       keepSnapshotFromLineId: l.lineId ?? undefined,
       pricebookEntryId: l.pricebookEntryId,
       quantity: Number(l.quantity),
-      discretionaryDiscountPercent: l.discount.trim() || "0",
+      discountPercent: l.discount.trim() || "0",
       unitOfMeasure: opt(l.unitOfMeasure),
       // A saved line the AM moved to the pricing in force (D82).
       useLatestFormula: l.lineId !== null && l.useLatestPricing ? true : undefined,
@@ -902,7 +902,7 @@ export function toPreviewBody(v: DraftFormValues): object | null {
     lines: lines.map((l) => ({
       pricebookEntryId: l.pricebookEntryId,
       quantity: Number(l.quantity),
-      discretionaryDiscountPercent: l.discount.trim() || "0",
+      discountPercent: l.discount.trim() || "0",
       ...linePlace(l),
       keepPricing:
         l.keepPricing && !l.useLatestPricing

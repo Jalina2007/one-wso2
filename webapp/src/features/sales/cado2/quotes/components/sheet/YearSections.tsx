@@ -49,6 +49,12 @@ interface YearSectionsProps {
   readonly lineActions?: (index: number) => ReactNode;
   readonly below?: (index: number) => ReactNode;
   readonly flagNotSetUp?: boolean;
+  /**
+   * D169: "hints" under each discount (the wizard), or "columns" (read-only
+   * views), shown only when some line of the quote has a volume discount ceiling, so
+   * every year's table has the same columns and older quotes look as before.
+   */
+  readonly discountDetail?: "hints" | "columns";
 }
 
 /**
@@ -74,7 +80,9 @@ export default function YearSections({
   lineActions,
   below,
   flagNotSetUp = false,
+  discountDetail,
 }: YearSectionsProps): JSX.Element {
+  const detail = discountDetail === "columns" && !lines.some((l) => l.volumeCeilingPercent !== null) ? undefined : discountDetail;
   return (
     <Box sx={{ borderTop: 1, borderColor: "divider" }}>
       {years.map((y) => {
@@ -164,6 +172,7 @@ export default function YearSections({
                     showTotals={false}
                     closingTotalLabel={y.number ? `Year ${y.number} total` : "Total"}
                     flagNotSetUp={flagNotSetUp}
+                    discountDetail={detail}
                     actions={lineActions ? (k) => lineActions(indexes[k]) : undefined}
                     below={below ? (k) => below(indexes[k]) : undefined}
                   />
