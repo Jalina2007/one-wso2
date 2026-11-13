@@ -136,11 +136,15 @@ export function choose(
     confidence: null,
     reason: null,
   });
-  const current = mapping.find((entry) => entry.field_name === field);
   const partner = pair && (field === pair.first ? pair.last : field === pair.last ? pair.first : null);
+  // The settings can gain a column after the suggestion came back; give it an entry so
+  // the pick is not lost.
+  const withEntry = (list: MappingEntry[], name: string) =>
+    list.some((entry) => entry.field_name === name) ? list : [...list, mine(name, null, null)];
+  const current = mapping.find((entry) => entry.field_name === field);
 
   if (choice?.split && pair && partner) {
-    return mapping.map((entry) =>
+    return withEntry(withEntry(mapping, pair.first), pair.last).map((entry) =>
       entry.field_name === pair.first
         ? mine(pair.first, choice.source, "first")
         : entry.field_name === pair.last
@@ -148,7 +152,7 @@ export function choose(
           : entry,
     );
   }
-  return mapping.map((entry) => {
+  return withEntry(mapping, field).map((entry) => {
     if (entry.field_name === field) return mine(field, choice?.source ?? null, null);
     if (current?.split && entry.field_name === partner && entry.split) {
       return mine(entry.field_name, null, null);

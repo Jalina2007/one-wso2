@@ -55,22 +55,21 @@ vi.mock("../../api/useEvents", () => ({
 const saveBlob = vi.fn();
 vi.mock("../lib/download", () => ({ saveBlob: (...args: unknown[]) => saveBlob(...args) }));
 
+const SHEET = [
+  ["Nombre", "Correo", "Badge"],
+  ["Ana Silva", "ana@acme.io", "B1"],
+  ["Ludwig van Beethoven", "lvb@x.de", "B2"],
+];
+let sheetRows = SHEET;
+
 // jsdom's File cannot be read; the reading itself is covered by leadFile.test.ts.
 vi.mock("../lib/leadFile", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/leadFile")>()),
-  readLeadFile: async () => [
-    {
-      name: "Leads",
-      rows: [
-        ["Nombre", "Correo", "Badge"],
-        ["Ana Silva", "ana@acme.io", "B1"],
-        ["Ludwig van Beethoven", "lvb@x.de", "B2"],
-      ],
-    },
-  ],
+  readLeadFile: async () => [{ name: "Leads", rows: sheetRows }],
 }));
 
 const { default: LeadImport } = await import("./LeadImport");
+const { MAX_HEADING_CHARS } = await import("../lib/leadFile");
 
 function chooseFile(container: HTMLElement, name: string) {
   const input = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -108,6 +107,7 @@ describe("Lead import", () => {
   beforeEach(() => {
     suggest.mockReset();
     saveBlob.mockReset();
+    sheetRows = SHEET;
     suggest.mockResolvedValue({
       claude: "used",
       mapping: [
@@ -207,6 +207,33 @@ describe("Lead import", () => {
     await screen.findByText(/Open it, make any changes to the data/);
     expect(saveBlob).toHaveBeenCalledWith(expect.any(Blob), "Apidays - Booth.xlsx");
     expect(screen.getByRole("button", { name: "Go to My Submissions" })).toBeTruthy();
+  });
+
+  it("a failed download keeps the mapping and retries the download, not the suggestion", async () => {
+    saveBlob.mockImplementationOnce(() => {
+      throw new Error("Disk full.");
+    });
+    await openFile();
+    await waitFor(() => expect(stat("Columns mapped")).toBe("3 of 4"));
+    fireEvent.click(screen.getByRole("button", { name: "Download workbook" }));
+    expect(await screen.findByText(/The workbook could not be written\. Disk full\./)).toBeTruthy();
+    expect(screen.queryByText(/Couldn't get a suggestion/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await screen.findByText(/Open it, make any changes to the data/);
+    expect(suggest).toHaveBeenCalledTimes(1);
+    expect(saveBlob).toHaveBeenCalledTimes(2);
+  });
+
+  it("cuts a very long heading to what the server accepts", async () => {
+    const long = "How likely are you to recommend us? ".repeat(20);
+    sheetRows = [
+      ["Correo", long],
+      ["ana@acme.io", "9"],
+    ];
+    await openFile();
+    const sent = suggest.mock.calls[0][0].columns;
+    expect(sent[1].heading).toHaveLength(MAX_HEADING_CHARS);
+    expect(sent[1].heading).toBe(long.slice(0, MAX_HEADING_CHARS));
   });
 
   it("says when Claude isn't set up, and still allows mapping by hand", async () => {

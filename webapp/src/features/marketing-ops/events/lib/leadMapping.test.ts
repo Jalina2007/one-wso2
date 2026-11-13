@@ -140,6 +140,16 @@ describe("choose", () => {
     expect(next[0]).toBe(start[0]);
   });
 
+  it("keeps a pick for a column the suggestion didn't include", () => {
+    const next = choose([entry("Email", 1)], "Company", { source: 2, split: null }, PAIR);
+    expect(next.find((e) => e.field_name === "Company")).toMatchObject({ source_index: 2, how: "you" });
+    const split = choose([entry("Email", 1)], "First Name", { source: 0, split: "first" }, PAIR);
+    expect(split.filter((e) => e.split).map((e) => [e.field_name, e.split])).toEqual([
+      ["First Name", "first"],
+      ["Last Name", "last"],
+    ]);
+  });
+
   it("finds the name pair by key, not by wording", () => {
     expect(namePair([def(" first  name "), def("LAST_NAME")])).toEqual({ first: " first  name ", last: "LAST_NAME" });
     expect(namePair([def("First Name")])).toBeNull();

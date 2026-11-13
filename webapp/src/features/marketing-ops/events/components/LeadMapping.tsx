@@ -36,7 +36,7 @@ import { leadImportError, useSuggestLeadMapping } from "../../api/useLeadImport"
 import type { FieldDef } from "../eventsTypes";
 import type { ClaudeStep, MappingEntry } from "../leadImportTypes";
 import { saveBlob } from "../lib/download";
-import { defaultSheet, headerRowOf, sourceColumns, type RawSheet } from "../lib/leadFile";
+import { defaultSheet, headerRowOf, MAX_HEADING_CHARS, sourceColumns, type RawSheet } from "../lib/leadFile";
 import {
   applyMapping,
   attentionOf,
@@ -103,8 +103,14 @@ export default function LeadMapping({
   const [suggested, setSuggested] = useState<MappingEntry[] | null>(null);
   const [claude, setClaude] = useState<ClaudeStep | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string | null>(null);
+  /** The mapping on screen, for a download that finishes after the person changed it. */
+  const current = useRef<MappingEntry[] | null>(null);
+  useEffect(() => {
+    current.current = mapping;
+  }, [mapping]);
 
   const sources = useMemo(() => sourceColumns(rows, headerRow), [rows, headerRow]);
   const pair = useMemo(() => namePair(defs), [defs]);
@@ -118,11 +124,16 @@ export default function LeadMapping({
     setSuggested(null);
     setClaude(null);
     setError(null);
+    setExportError(null);
     setSaved(null);
     try {
       const response = await mutateAsync({
         status,
-        columns: sources.map(({ index, heading, samples }) => ({ index, heading, samples })),
+        columns: sources.map(({ index, heading, samples }) => ({
+          index,
+          heading: heading.slice(0, MAX_HEADING_CHARS),
+          samples,
+        })),
       });
       if (request !== latest.current) return;
       if (!response) throw new Error("The server sent an empty answer.");
@@ -153,14 +164,16 @@ export default function LeadMapping({
 
   async function download() {
     if (!output) return;
+    const exported = mapping;
     setSaving(true);
-    setError(null);
+    setExportError(null);
     try {
       const name = outputFileName(fileName, status);
       saveBlob(await buildWorkbook(status, output), name);
-      setSaved(name);
+      // The note says what was saved, so it only shows while the mapping still matches.
+      if (current.current === exported) setSaved(name);
     } catch (e) {
-      setError(`The workbook could not be written. ${leadImportError(e)}`);
+      setExportError(`The workbook could not be written. ${leadImportError(e)}`);
     } finally {
       setSaving(false);
     }
@@ -185,7 +198,15 @@ export default function LeadMapping({
         backLabel="Choose another file"
       >
         {changed && (
-          <Button sx={quietBtn} startIcon={<RotateCcw size={16} />} onClick={() => suggested && setMapping(suggested)}>
+          <Button
+            sx={quietBtn}
+            startIcon={<RotateCcw size={16} />}
+            onClick={() => {
+              if (!suggested) return;
+              setSaved(null);
+              setMapping(suggested);
+            }}
+          >
             Reset to suggestion
           </Button>
         )}
@@ -203,6 +224,20 @@ export default function LeadMapping({
           </span>
         </Tooltip>
       </WorkspaceHead>
+
+      {exportError && (
+        <Alert
+          severity="error"
+          sx={{ fontSize: 13 }}
+          action={
+            <Button size="small" startIcon={<RefreshCw size={14} />} onClick={() => void download()}>
+              Try again
+            </Button>
+          }
+        >
+          {exportError}
+        </Alert>
+      )}
 
       {saved ? (
         <Alert
