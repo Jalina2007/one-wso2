@@ -1,29 +1,7 @@
-import { defineConfig, mergeConfig, type Plugin } from "vite";
+import { defineConfig, mergeConfig } from "vite";
 import { configDefaults, defineConfig as defineVitestConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { buildCsp, parseAuthOrigins } from "./src/config/csp";
-
-// The production CSP lives in src/config/csp.ts — build-time only, and
-// unit-tested there. ONE_WSO2_CSP_AUTH_ORIGINS adds extra sign-in origins
-// for deployments whose IdP is not already allowlisted.
-const CSP = buildCsp(parseAuthOrigins(process.env.ONE_WSO2_CSP_AUTH_ORIGINS));
-
-function cspPlugin(): Plugin {
-  return {
-    name: "one-wso2-csp",
-    apply: "build",
-    transformIndexHtml() {
-      return [
-        {
-          tag: "meta",
-          injectTo: "head",
-          attrs: { "http-equiv": "Content-Security-Policy", content: CSP },
-        },
-      ];
-    },
-  };
-}
 
 // https://vite.dev/config/
 const viteConfig = defineConfig({
@@ -33,7 +11,6 @@ const viteConfig = defineConfig({
         plugins: [["babel-plugin-react-compiler"]],
       },
     }),
-    cspPlugin(),
   ],
   resolve: {
     alias: {

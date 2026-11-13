@@ -28,9 +28,7 @@
       media="(prefers-color-scheme: light)"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Limit referrer leakage across origins. (Content-Security-Policy is
-         injected on production builds only — see vite.config.ts — so it
-         doesn't interfere with the dev server's inline scripts / HMR.) -->
+    <!-- Limit referrer leakage across origins. -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>One WSO2</title>
     <!-- Runtime config injected at deploy time. See public/config.js.example. -->

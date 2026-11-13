@@ -65,14 +65,6 @@ async function main() {
     },
   });
 
-  const builtHtml = await readFile(path.join(outDir, pagePath), "utf8");
-  if (!builtHtml.includes('http-equiv="Content-Security-Policy"')) {
-    throw new Error("The build has no CSP <meta>, so this check would prove nothing. Is cspPlugin still applied?");
-  }
-  if (builtHtml.includes("'unsafe-eval'") || builtHtml.includes("&#39;unsafe-eval&#39;")) {
-    throw new Error("The CSP allows 'unsafe-eval'. Keep it out (see the comment on script-src in vite.config.ts).");
-  }
-
   const server = await preview({
     configFile,
     root: webappDir,

@@ -52,14 +52,7 @@ Before opening a PR: `npx tsc -b && npm test && npm run lint`.
 ## Configuration
 
 Runtime config is read from `window.config`, set by `public/config.js`.
-[`public/config.js.example`](public/config.js.example) is the full, commented list of keys. Build-time
-env vars use the `ONE_WSO2_` prefix (`vite.config.ts`).
-
-### Build-time keys
-
-| Key | Description | Example |
-|---|---|---|
-| `ONE_WSO2_CSP_AUTH_ORIGINS` | Comma-separated `https://host[:port]` origins added to the production CSP's `connect-src` and `frame-src`. The policy is baked into the build while `window.config` is not, so a deployment that signs in through an identity server outside the default allowlist (ThunderID or another non-Asgardeo OIDC server) must name that origin here and rebuild. Entries must be https origins — the build fails on anything else. | `https://id.internal.example.com` |
+[`public/config.js.example`](public/config.js.example) is the full, commented list of keys.
 
 ### App-wide keys
 
