@@ -114,7 +114,7 @@ async function main() {
       for (const e of pageErrors) problems.push(`Browser console: ${e.slice(0, 300)}`);
       throw new Error(problems.join("\n  "));
     }
-    console.log(`OK: the NDA PDF downloads under the production CSP (${message})`);
+    console.log(`OK: the NDA PDF downloads from a production build (${message})`);
   } finally {
     await browser.close();
     await server.close();
