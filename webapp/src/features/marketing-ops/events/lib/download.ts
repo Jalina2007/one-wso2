@@ -14,7 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Authenticated binary downloads for the review exports.
+// Authenticated binary downloads for the review exports, and saving a file the page built
+// (Lead Import's workbook).
 //
 // The two export endpoints return a CSV or a server-side zip, not JSON, so they can't
 // go through authedGet — but they still need the Bearer token, so they can't be a plain
@@ -34,7 +35,11 @@ export async function downloadAuthed(
     const body = await res.text().catch(() => "");
     throw new HttpError(url, res.status, body);
   }
-  const blob = await res.blob();
+  saveBlob(await res.blob(), filename);
+}
+
+/** Hand a blob the page built (or fetched) to the browser to save as `filename`. */
+export function saveBlob(blob: Blob, filename: string): void {
   const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = objectUrl;

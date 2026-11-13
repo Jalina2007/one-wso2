@@ -90,7 +90,7 @@ export interface ParsedWorkbook {
  *  exceljs hands back rich objects: `{ result }` for formulas, `{ richText }` for
  *  styled runs, `{ text }` for hyperlinks, `Date` for dates. Left raw, a phone number
  *  becomes "94112345678" via a float and a hot-lead flag becomes "1.0". */
-function clean(value: unknown): string {
+export function clean(value: unknown): string {
   if (value === null || value === undefined) return ''
   if (typeof value === 'string') return value.trim()
   if (typeof value === 'number') return String(value)
@@ -150,7 +150,7 @@ function readTable(ws: {
 
 /** The heading row: whichever of the first few rows carries the most text. More robust
  *  than "the first row with two non-empty cells", which a title row satisfies. */
-function findHeaderRow(table: string[][]): number {
+export function findHeaderRow(table: string[][]): number {
   let best = -1
   let most = 0
   for (let i = 0; i < Math.min(HEADER_SEARCH_DEPTH, table.length); i++) {
