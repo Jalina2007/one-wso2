@@ -14,10 +14,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// `npm run check:prod-pdf`: the CSP <meta> is only added by `vite build`, so a
-// policy that breaks the NDA PDF never shows up under `npm run dev`. This
-// builds scripts/prod-pdf-check/ with the app's vite.config (same CSP), serves
-// it with `vite preview`, and has Chrome generate and download the NDA.
+// `npm run check:prod-pdf`: a production build can break the NDA PDF in ways
+// that never show up under `npm run dev`. This builds scripts/prod-pdf-check/
+// with the app's vite.config, serves it with `vite preview`, and has Chrome
+// generate and download the NDA.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
