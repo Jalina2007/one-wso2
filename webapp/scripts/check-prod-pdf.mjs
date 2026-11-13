@@ -14,10 +14,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// `npm run check:prod-pdf`: the CSP <meta> is only added by `vite build`, so a
-// policy that breaks the NDA PDF never shows up under `npm run dev`. This
-// builds scripts/prod-pdf-check/ with the app's vite.config (same CSP), serves
-// it with `vite preview`, and has Chrome generate and download the NDA.
+// `npm run check:prod-pdf`: a production build can break the NDA PDF in ways
+// that never show up under `npm run dev`. This builds scripts/prod-pdf-check/
+// with the app's vite.config, serves it with `vite preview`, and has Chrome
+// generate and download the NDA.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -64,14 +64,6 @@ async function main() {
       rollupOptions: { input: path.join(webappDir, pagePath) },
     },
   });
-
-  const builtHtml = await readFile(path.join(outDir, pagePath), "utf8");
-  if (!builtHtml.includes('http-equiv="Content-Security-Policy"')) {
-    throw new Error("The build has no CSP <meta>, so this check would prove nothing. Is cspPlugin still applied?");
-  }
-  if (builtHtml.includes("'unsafe-eval'") || builtHtml.includes("&#39;unsafe-eval&#39;")) {
-    throw new Error("The CSP allows 'unsafe-eval'. Keep it out (see the comment on script-src in vite.config.ts).");
-  }
 
   const server = await preview({
     configFile,
@@ -122,7 +114,7 @@ async function main() {
       for (const e of pageErrors) problems.push(`Browser console: ${e.slice(0, 300)}`);
       throw new Error(problems.join("\n  "));
     }
-    console.log(`OK: the NDA PDF downloads under the production CSP (${message})`);
+    console.log(`OK: the NDA PDF downloads from a production build (${message})`);
   } finally {
     await browser.close();
     await server.close();

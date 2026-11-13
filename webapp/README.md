@@ -42,7 +42,7 @@ host injects a fresh `config.js` per environment.
 | `npm run dev` | dev server at http://localhost:3000 |
 | `npm run build` | `tsc -b && vite build` → `dist/` |
 | `npm run preview` | serve the production build |
-| `npm run check:prod-pdf` | check that the NDA PDF downloads under the production CSP (`vite build` + `vite preview` + Chrome) |
+| `npm run check:prod-pdf` | check that the NDA PDF downloads from a production build (`vite build` + `vite preview` + Chrome) |
 | `npm test` | run the test suite once (`vitest run`) |
 | `npm run test:watch` | tests in watch mode |
 | `npm run lint` | ESLint (cached in `.eslintcache`; delete it after upgrading an ESLint plugin, since plugin upgrades don't clear it) |
@@ -52,14 +52,7 @@ Before opening a PR: `npx tsc -b && npm test && npm run lint`.
 ## Configuration
 
 Runtime config is read from `window.config`, set by `public/config.js`.
-[`public/config.js.example`](public/config.js.example) is the full, commented list of keys. Build-time
-env vars use the `ONE_WSO2_` prefix (`vite.config.ts`).
-
-### Build-time keys
-
-| Key | Description | Example |
-|---|---|---|
-| `ONE_WSO2_CSP_AUTH_ORIGINS` | Comma-separated `https://host[:port]` origins added to the production CSP's `connect-src` and `frame-src`. The policy is baked into the build while `window.config` is not, so a deployment that signs in through an identity server outside the default allowlist (ThunderID or another non-Asgardeo OIDC server) must name that origin here and rebuild. Entries must be https origins — the build fails on anything else. | `https://id.internal.example.com` |
+[`public/config.js.example`](public/config.js.example) is the full, commented list of keys.
 
 ### App-wide keys
 
@@ -147,7 +140,7 @@ webapp/
 ├── index.html
 ├── package.json
 ├── tsconfig*.json
-└── vite.config.ts           → build, aliases, production CSP, Vitest
+└── vite.config.ts           → build, aliases, Vitest
 ```
 
 ## Perspective model
