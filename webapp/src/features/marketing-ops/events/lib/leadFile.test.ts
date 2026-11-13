@@ -80,9 +80,16 @@ describe("readLeadFile", () => {
     await expect(readLeadFile(new File(["\n\n"], "empty.csv"))).rejects.toThrow("no data");
   });
 
-  it("refuses a sheet longer than My Submissions reads, rather than cutting it", async () => {
-    const lines = ["Email", ...Array.from({ length: MAX_DATA_ROWS + 11 }, (_, i) => `p${i}@x.io`)];
-    await expect(readLeadFile(new File([lines.join("\n")], "big.csv"))).rejects.toBeInstanceOf(LeadFileError);
+  it("counts the heading in the row limit My Submissions reads, and refuses rather than cuts", async () => {
+    const csv = (rows: number) =>
+      new File([["Email", ...Array.from({ length: rows - 1 }, (_, i) => `p${i}@x.io`)].join("\n")], "big.csv");
+    await expect(readLeadFile(csv(MAX_DATA_ROWS))).resolves.toHaveLength(1);
+    await expect(readLeadFile(csv(MAX_DATA_ROWS + 1))).rejects.toBeInstanceOf(LeadFileError);
+  });
+
+  it("refuses a CSV with a quote that never closes, instead of folding leads into one cell", async () => {
+    const file = new File(['Email,Notes\na@x.io,"asked for a demo\nb@x.io,fine\nc@x.io,ok\n'], "leads.csv");
+    await expect(readLeadFile(file)).rejects.toThrow(/quoted value that never closes/);
   });
 
   it("refuses a sheet wider than the limit", async () => {

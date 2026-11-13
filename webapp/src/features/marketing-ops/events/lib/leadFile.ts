@@ -25,16 +25,16 @@ import Papa from "papaparse";
 import type { SourceColumn } from "../leadImportTypes";
 import { clean, findHeaderRow } from "../rules/workbook";
 
-/** My Submissions reads at most this many rows per sheet, so a longer list would lose
- *  rows there. Refused here, with the reason, rather than cut. */
+/** My Submissions reads at most this many sheet rows, heading included, so a longer list
+ *  would lose rows there. Refused here, with the reason, rather than cut. */
 export const MAX_DATA_ROWS = 5000;
 /** Vendor exports can be wide (survey answers, consent flags). The server takes as many. */
 export const MAX_COLUMNS = 200;
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const SAMPLES = 5;
 export const SAMPLE_CHARS = 80;
-/** Rows above the heading a sheet may carry (a title, a spacer). */
-const HEADER_ALLOWANCE = 10;
+/** The longest heading the suggestion endpoint accepts; longer ones are cut to it. */
+export const MAX_HEADING_CHARS = 300;
 
 export class LeadFileError extends Error {}
 
@@ -51,7 +51,7 @@ function extension(name: string): string {
 
 /** Throw when a sheet is too long or too wide to be mapped. */
 function checkSize(sheet: RawSheet): void {
-  if (sheet.rows.length > MAX_DATA_ROWS + HEADER_ALLOWANCE) {
+  if (sheet.rows.length > MAX_DATA_ROWS) {
     throw new LeadFileError(
       `The sheet "${sheet.name}" has more than ${MAX_DATA_ROWS.toLocaleString()} rows. My ` +
         "Submissions reads at most that many per sheet, so split the file and map each part.",
@@ -105,6 +105,15 @@ async function readXlsx(file: File): Promise<RawSheet[]> {
 async function readCsv(file: File): Promise<RawSheet[]> {
   const text = (await file.text()).replace(/^\uFEFF/, "");
   const parsed = Papa.parse<string[]>(text, { skipEmptyLines: false });
+  // An unclosed quote makes Papa Parse fold every following line into one cell, so the
+  // leads after it would vanish into a Notes value. Refused rather than recovered.
+  const quoting = parsed.errors.find((error) => error.type === "Quotes");
+  if (quoting) {
+    throw new LeadFileError(
+      `The CSV has a quoted value that never closes${quoting.row !== undefined ? ` (row ${quoting.row + 1})` : ""}. ` +
+        "Fix the quotes, or open the file in Excel or Google Sheets and save it as .xlsx.",
+    );
+  }
   const rows = parsed.data.map((row) => (Array.isArray(row) ? row.map((cell) => clean(cell)) : []));
   return [{ name: file.name.replace(/\.[^.]+$/, ""), rows: tidy(rows) }];
 }
