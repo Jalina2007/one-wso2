@@ -2050,6 +2050,8 @@ export const cado2ServiceUrls = {
   legalEntities: (activeOnly = false): string =>
     `${cado2BackendUrl}/legal-entities${activeOnly ? "?active=true" : ""}`,
   legalEntity: (id: number): string => `${cado2BackendUrl}/legal-entities/${encodeSegment(id)}`,
+  // PUT: the entities' order, every ID once (D161).
+  legalEntityOrder: `${cado2BackendUrl}/admin/legal-entities/order`,
   // Salesforce lookups, read live through the backend.
   accounts: (nameContains: string): string =>
     `${cado2BackendUrl}/accounts?nameContains=${encodeSegment(nameContains)}&limit=20`,
@@ -2061,11 +2063,8 @@ export const cado2ServiceUrls = {
     `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/contacts`,
   // The opportunity's product lines as they are in Salesforce now (D147); with
   // the quote's price book and currency, checked for loading (D150).
-  opportunityLines: (opportunityId: string, check?: { pricebookId: string; currency: string }): string => {
-    const base = `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/products`;
-    if (!check) return base;
-    return `${base}?${new URLSearchParams({ pricebookId: check.pricebookId, currency: check.currency }).toString()}`;
-  },
+  opportunityLines: (opportunityId: string): string =>
+    `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/products`,
   // One page of a price book's products in a currency. Paged server-side by
   // limit/offset (Salesforce stops at offset 2000).
   products: (
@@ -2116,6 +2115,9 @@ export const cado2ServiceUrls = {
   // The quotes on an opportunity, with which is primary (D68).
   opportunityQuotes: (opportunityId: string): string =>
     `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/quotes`,
+  // Whether the opportunity is still open in Salesforce (D164).
+  opportunityState: (opportunityId: string): string =>
+    `${cado2BackendUrl}/opportunities/${encodeSegment(opportunityId)}/state`,
   // What AMs may do with quotes they don't own (D69; Admin).
   adminQuoteAccess: `${cado2BackendUrl}/admin/quote-access`,
   adminSalesforceSync: `${cado2BackendUrl}/admin/salesforce-sync`,

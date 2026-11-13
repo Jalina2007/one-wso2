@@ -22,6 +22,7 @@ import {
   ButtonBase,
   Chip,
   Divider,
+  IconButton,
   InputAdornment,
   Paper,
   Skeleton,
@@ -30,9 +31,12 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   BadgeCheckIcon,
   LandmarkIcon,
   MapPinIcon,
@@ -50,6 +54,7 @@ import LegalEntityDrawer from "@features/sales/cado2/admin/legal-entities/compon
 import {
   useCreateLegalEntity,
   useLegalEntities,
+  useReorderLegalEntities,
   useUpdateLegalEntity,
 } from "@features/sales/cado2/admin/legal-entities/api/useLegalEntities";
 import type { LegalEntity, LegalEntityFormValues } from "@features/sales/cado2/admin/legal-entities/api/legalEntityTypes";
@@ -68,6 +73,7 @@ export default function LegalEntitiesPage(): JSX.Element {
   const { data: entities, error, isPending, isFetching, refetch } = useLegalEntities();
   const create = useCreateLegalEntity();
   const update = useUpdateLegalEntity();
+  const reorder = useReorderLegalEntities();
   const notify = useCado2Toast();
   const [drawer, setDrawer] = useState<DrawerState>({ open: false });
   const [search, setSearch] = useState("");
@@ -99,6 +105,18 @@ export default function LegalEntitiesPage(): JSX.Element {
       create.mutate(values, done);
     }
   };
+
+  // Moves an entity one place in the whole list; the dropdowns follow (D161).
+  const move = (e: LegalEntity, by: -1 | 1) => {
+    if (!entities) return;
+    const ids = entities.map((x) => x.id);
+    const from = ids.indexOf(e.id);
+    const to = from + by;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    reorder.mutate(ids);
+  };
+  const filtered = search.trim() !== "" || status !== "all";
 
   const saving = create.isPending || (drawer.open && drawer.entity !== null && update.isPending);
   const saveError = drawer.open ? (drawer.entity ? update.error : create.error) : null;
@@ -172,6 +190,12 @@ export default function LegalEntitiesPage(): JSX.Element {
             selectedId={selectedId}
             onSelect={setSelectedId}
             busy={update.isPending}
+            reorder={{
+              // Only the whole list can be reordered, so places are unambiguous.
+              blocked: filtered ? "Clear the search and show All to change the order" : "",
+              pending: reorder.isPending,
+              move,
+            }}
             onToggle={(e, on) => {
               if (!on) {
                 update.reset();
@@ -184,6 +208,12 @@ export default function LegalEntitiesPage(): JSX.Element {
           />
         </>
       )}
+
+      {reorder.error ? (
+        <ErrorNotice error={reorder.error} onRetry={() => reorder.reset()} sx={{ mt: 2 }}>
+          Couldn&apos;t change the order.
+        </ErrorNotice>
+      ) : null}
 
       {/* A failed toggle has no drawer to show its error in. */}
       {!drawer.open && !deactivating && update.error ? (
@@ -258,6 +288,7 @@ function MasterDetail({
   selectedId,
   onSelect,
   busy,
+  reorder,
   onToggle,
   onEdit,
 }: {
@@ -265,6 +296,8 @@ function MasterDetail({
   selectedId: number | null;
   onSelect: (id: number) => void;
   busy: boolean;
+  /** Moving entities up and down; blocked says why it can't (a filtered list). */
+  reorder: { blocked: string; pending: boolean; move: (e: LegalEntity, by: -1 | 1) => void };
   onToggle: (e: LegalEntity, active: boolean) => void;
   onEdit: (e: LegalEntity) => void;
 }): JSX.Element {
@@ -294,7 +327,19 @@ function MasterDetail({
           {entities.map((e, i) => {
             const on = e.id === selected.id;
             return (
-              <li key={e.id}>
+              <Box
+                component="li"
+                key={e.id}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  borderTop: i === 0 ? 0 : 1,
+                  borderColor: "divider",
+                  borderLeft: 3,
+                  borderLeftColor: on ? "primary.main" : "transparent",
+                  bgcolor: on ? "action.selected" : "transparent",
+                }}
+              >
                 <ButtonBase
                   onClick={() => onSelect(e.id)}
                   aria-current={on ? "true" : undefined}
@@ -304,14 +349,11 @@ function MasterDetail({
                     width: "100%",
                     justifyContent: "flex-start",
                     gap: 1.5,
-                    px: 2,
+                    pl: 2,
+                    pr: 1,
                     py: 1.5,
+                    minWidth: 0,
                     textAlign: "left",
-                    borderTop: i === 0 ? 0 : 1,
-                    borderColor: "divider",
-                    borderLeft: 3,
-                    borderLeftColor: on ? "primary.main" : "transparent",
-                    bgcolor: on ? "action.selected" : "transparent",
                     "&:hover": { bgcolor: on ? "action.selected" : "action.hover" },
                   }}
                 >
@@ -351,7 +393,29 @@ function MasterDetail({
                     }}
                   />
                 </ButtonBase>
-              </li>
+                <Tooltip title={reorder.blocked}>
+                  <Stack direction="row" sx={{ pr: 1, flexShrink: 0 }}>
+                    <IconButton
+                      size="small"
+                      aria-label={`Move ${e.name} up`}
+                      title={reorder.blocked ? undefined : "Move up"}
+                      disabled={i === 0 || reorder.pending || reorder.blocked !== ""}
+                      onClick={() => reorder.move(e, -1)}
+                    >
+                      <ArrowUpIcon size={14} />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      aria-label={`Move ${e.name} down`}
+                      title={reorder.blocked ? undefined : "Move down"}
+                      disabled={i === entities.length - 1 || reorder.pending || reorder.blocked !== ""}
+                      onClick={() => reorder.move(e, 1)}
+                    >
+                      <ArrowDownIcon size={14} />
+                    </IconButton>
+                  </Stack>
+                </Tooltip>
+              </Box>
             );
           })}
         </Box>

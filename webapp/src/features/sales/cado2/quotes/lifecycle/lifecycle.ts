@@ -173,6 +173,7 @@ export function compareVersions(a: DraftResponse, b: DraftResponse): CompareRow[
   add("Commercials", "Ship to", address(a, "SHIP_TO"), address(b, "SHIP_TO"));
   add("Commercials", "Billing contact", contact(a, "BILLING"), contact(b, "BILLING"));
   add("Commercials", "Security contact", contact(a, "SECURITY"), contact(b, "SECURITY"));
+  add("Commercials", "Legal contact", contact(a, "LEGAL"), contact(b, "LEGAL"));
   add("Commercials", "Justification", text(va.justification), text(vb.justification));
   // Section 04: standard, or non-standard written by Legal; then the partner
   // agreement the AM chose, and the special terms.
@@ -346,7 +347,16 @@ function eventText({ event: e, count }: HistoryEntry): string {
       if (meta.override === false) return `Deal Desk went back to the AM's special terms on ${v.toLowerCase()}`;
       if (meta.override === true) return `Deal Desk overrode the special terms of ${v.toLowerCase()}`;
       return meta.specialTerms === false ? `Deal Desk removed the special terms of ${v.toLowerCase()}` : `Deal Desk wrote the special terms of ${v.toLowerCase()}`;
-    default:
-      return e.eventType;
+    case "LEGAL_TERMS_WRITTEN": {
+      // Which texts Legal wrote: the governing terms of each product type, and the special terms.
+      const parts = [meta.onPrem === true ? "on-premises terms" : "", meta.saas === true ? "SaaS terms" : "", meta.special === true ? "special terms" : ""].filter(Boolean);
+      const what = parts.length === 0 ? "terms" : parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+      return `Legal wrote the ${what} of ${v.toLowerCase()}`;
+    }
+    default: {
+      // Never a raw code: an event this screen doesn't know yet, "SOME_NEW_EVENT", reads "Some new event".
+      const code: string = e.eventType;
+      return code.charAt(0) + code.slice(1).toLowerCase().replace(/_/g, " ");
+    }
   }
 }

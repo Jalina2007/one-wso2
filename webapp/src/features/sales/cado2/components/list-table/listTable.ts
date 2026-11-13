@@ -23,7 +23,8 @@ export type ListLayout = "list" | "tree";
 /** A column: its header, the key it sorts on, and its alignment. */
 export interface ListColumn<K extends string> {
   readonly label: string;
-  readonly sort: K;
+  /** The key it sorts on; none for a column that doesn't sort. */
+  readonly sort?: K;
   readonly align?: "left" | "right";
 }
 

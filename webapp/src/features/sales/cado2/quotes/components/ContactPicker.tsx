@@ -15,9 +15,9 @@
 // under the License.
 
 import { useState, type JSX } from "react";
-import { useFormContext, useWatch } from "react-hook-form";
+import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { Alert, Avatar, Box, Button, ButtonBase, Chip, InputAdornment, Paper, Skeleton, Stack, TextField, Typography } from "@wso2/oxygen-ui";
-import { MailIcon, SearchIcon } from "@wso2/oxygen-ui-icons-react";
+import { MailIcon, PencilIcon, SearchIcon } from "@wso2/oxygen-ui-icons-react";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import SalesforceLink from "@features/sales/cado2/components/salesforce-link/SalesforceLink";
 import type { Contact } from "@features/sales/cado2/quotes/api/quoteTypes";
@@ -25,7 +25,7 @@ import { emptyContact, type DraftFormValues } from "@features/sales/cado2/quotes
 import { initialsOfName } from "@features/sales/cado2/utils/initials";
 import { useFieldIssue } from "./fieldIssues";
 
-type ContactField = "billingContact" | "securityContact";
+type ContactField = "billingContact" | "securityContact" | "legalContact";
 
 interface ContactPickerProps {
   readonly name: ContactField;
@@ -41,10 +41,19 @@ interface ContactPickerProps {
   readonly loadError?: unknown;
   readonly onRetry?: () => void;
   readonly helperText?: string;
+  /**
+   * D165: the contact may also be entered here, when it isn't on the
+   * opportunity (the legal contact); others come from Salesforce only.
+   */
+  readonly allowTyped?: boolean;
 }
 
 /** What each picker chooses, for "No billing contact chosen yet" and "Choose the billing contact". */
-const ROLE: Record<ContactField, string> = { billingContact: "billing contact", securityContact: "security contact" };
+const ROLE: Record<ContactField, string> = {
+  billingContact: "billing contact",
+  securityContact: "security contact",
+  legalContact: "legal contact",
+};
 
 /**
  * Pick one of the opportunity's contacts in Salesforce (D124: not the
@@ -68,10 +77,12 @@ export default function ContactPicker({
   loadError,
   onRetry,
   helperText,
+  allowTyped = false,
 }: ContactPickerProps): JSX.Element {
   const { control, setValue } = useFormContext<DraftFormValues>();
   const value = useWatch({ control, name });
   const idIssue = useFieldIssue(`${issueField}.sfContactId`);
+  const emailIssue = useFieldIssue(`${issueField}.email`);
   const [changing, setChanging] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -81,6 +92,17 @@ export default function ContactPicker({
     setSearch("");
   };
   const clear = () => setValue(name, { ...emptyContact }, { shouldDirty: true });
+  // D165: entered here instead, when it isn't on the opportunity.
+  const enter = () => {
+    setValue(name, { mode: "manual", sfContactId: "", name: "", title: "", email: "" }, { shouldDirty: true });
+    setChanging(false);
+    setSearch("");
+  };
+  const enterButton = allowTyped ? (
+    <Button size="small" startIcon={<PencilIcon size={14} />} onClick={enter}>
+      Enter an email
+    </Button>
+  ) : null;
 
   const heading = (
     <Box>
@@ -114,6 +136,46 @@ export default function ContactPicker({
             <Button size="small" variant="outlined" startIcon={<SearchIcon size={14} />} onClick={() => setChanging(true)}>
               Choose from the opportunity
             </Button>
+            {enterButton}
+          </Stack>
+        </Paper>
+        {issue}
+      </Stack>
+    );
+  }
+
+  // D165: entered here, for a contact that isn't on the opportunity. Only
+  // its email matters: it is where legal notices go.
+  if (value.mode === "manual" && allowTyped && !changing) {
+    return (
+      <Stack spacing={1}>
+        {heading}
+        <Paper variant="outlined" aria-label={`${label}: entered here`} sx={{ p: 1.75, borderRadius: 2 }}>
+          <Stack spacing={1.5}>
+            <Controller
+              name={`${name}.email`}
+              control={control}
+              render={({ field: f }) => (
+                <TextField
+                  {...f}
+                  size="small"
+                  type="email"
+                  label="Email"
+                  placeholder="legal@example.com"
+                  error={Boolean(emailIssue)}
+                  helperText={emailIssue}
+                  fullWidth
+                />
+              )}
+            />
+            <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+              <Button size="small" startIcon={<SearchIcon size={14} />} onClick={() => setChanging(true)}>
+                Choose from the opportunity instead
+              </Button>
+              <Button size="small" color="inherit" onClick={clear}>
+                Remove
+              </Button>
+            </Stack>
           </Stack>
         </Paper>
         {issue}
@@ -273,6 +335,11 @@ export default function ContactPicker({
             </Box>
           )}
           <Stack direction="row" spacing={1} justifyContent="flex-end" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+            {allowTyped ? (
+              <Button size="small" startIcon={<PencilIcon size={14} />} onClick={enter} sx={{ mr: "auto" }}>
+                Not on the opportunity? Enter an email
+              </Button>
+            ) : null}
             {changing || hadValue ? (
               <Stack direction="row" spacing={1}>
                 {hadValue ? (

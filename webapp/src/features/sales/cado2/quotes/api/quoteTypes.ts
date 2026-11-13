@@ -114,8 +114,9 @@ export interface RenewalStart {
 export type DealKind = "FIRST_SALE" | "RENEWAL" | "EXPANSION" | "OTHER";
 
 /**
- * A product line on the opportunity in Salesforce (D147). Money is an exact
- * decimal string in the opportunity's currency; null when Salesforce has none.
+ * A product line on a previous opportunity in Salesforce (D159). Money is an
+ * exact decimal string in the opportunity's currency; null when Salesforce
+ * has none.
  */
 export interface OpportunityLineView {
   readonly id: string;
@@ -132,65 +133,25 @@ export interface OpportunityLineView {
   readonly totalPrice: string | null;
   readonly serviceStartDate: string | null;
   readonly serviceEndDate: string | null;
-  /** The line's failed checks (D150); empty when it passes or wasn't checked. */
-  readonly problems: readonly LineProblem[] | null;
-  /** The line's product in the quote's price book, as it would load; null when not in the book (D150). */
-  readonly load: OpportunityLineLoad | null;
 }
 
-/** A failed check (D150): a short label to see at a glance, and the full sentence. */
-export interface LineProblem {
-  readonly short: string;
-  readonly detail: string;
+/** Whether an opportunity is still open in Salesforce (D164). */
+export interface OpportunityState {
+  /** False when the opportunity is no longer in Salesforce. */
+  readonly found: boolean;
+  readonly open: boolean;
+  /** "Closed Won", "Closed Lost" or the closed stage; "" while open. */
+  readonly state: string;
 }
 
-/**
- * A Salesforce line's product in the quote's price book, with the line's
- * Salesforce values (D150): what "Load into quote" adds when every line
- * passes.
- */
-export interface OpportunityLineLoad {
-  readonly pricebookEntryId: string;
-  readonly productId: string;
-  readonly productName: string;
-  readonly productCode: string | null;
-  readonly productDescription: string | null;
-  readonly pricebookId: string;
-  readonly pricebookName: string;
-  /** The quote's price book's price. */
-  readonly unitPrice: string;
-  /** The Salesforce sales price when it differs from the book; null otherwise, and on a formula line. */
-  readonly salesPrice: string | null;
-  /** Salesforce's, exact, e.g. "2.5". */
-  readonly quantity: string;
-  readonly discount: string;
-  /** Its group from its classification (D152); "" when that isn't set up. */
-  readonly category: string;
-  readonly classification: string | null;
-  readonly recurring: boolean;
-  /** Priced by an Admin's formula (D81): its Salesforce price is ignored. */
-  readonly formula: boolean;
-}
-
-/** Whether an auto-generated renewal's Salesforce lines load in one go (D150). */
-export interface RenewalCheck {
-  /** The opportunity's own problems, e.g. its term. */
-  readonly problems: readonly LineProblem[];
-  /** Every line and the opportunity pass. */
-  readonly canLoad: boolean;
-  readonly isRenewal: boolean;
+/** A previous opportunity's product lines as they are in Salesforce now (D159), read only. */
+export interface OpportunityLines {
+  readonly opportunityName: string | null;
   readonly subsStartDate: string | null;
   readonly subsEndDate: string | null;
-  readonly pricebookName: string | null;
-}
-
-/** The opportunity's product lines as they are in Salesforce now (D147). */
-export interface OpportunityLines {
   /** The opportunity's currency, which the lines are priced in. */
   readonly currency: string | null;
   readonly lines: readonly OpportunityLineView[];
-  /** Null when the quote's price book wasn't sent (D150). */
-  readonly check: RenewalCheck | null;
 }
 
 /** A contact on the opportunity, with its roles there, e.g. "Economic Buyer" (D124). */
@@ -233,6 +194,7 @@ export interface Product {
   /** The product's Salesforce description. */
   readonly description?: string | null;
   readonly family: string | null;
+  /** Salesforce's Quantity Unit Of Measure (D158), e.g. "Per core"; null when blank. */
   readonly unitOfMeasure: string | null;
   /** Product_Unit__c and product_Classification__c: the approval group inputs. */
   readonly productUnit: string | null;
@@ -367,6 +329,10 @@ export interface LegalView {
   readonly deskSpecialTermsByEmail?: string | null;
   readonly legalSpecialTermsByEmail?: string | null;
   readonly frozen: boolean;
+  /** D166: the earlier version Legal wrote each text in, while it is unchanged since; null otherwise. */
+  readonly onPremTermsFromVersion?: number | null;
+  readonly saasTermsFromVersion?: number | null;
+  readonly specialTermsFromVersion?: number | null;
 }
 
 /**
@@ -570,6 +536,8 @@ export interface DraftInput {
   readonly contacts: {
     readonly billing?: ContactInput;
     readonly security?: ContactInput;
+    /** D165: where legal notices go; optional. */
+    readonly legal?: ContactInput;
   };
   readonly billTo?: AddressInput;
   readonly shipTo?: AddressInput;
@@ -622,7 +590,7 @@ export interface LineView {
 }
 
 export interface ContactView {
-  readonly role: "BILLING" | "SECURITY";
+  readonly role: "BILLING" | "SECURITY" | "LEGAL";
   readonly source: "SALESFORCE" | "MANUAL";
   readonly sfContactId: string | null;
   readonly name: string;
@@ -864,7 +832,9 @@ export interface AuditEvent {
     // The AM changed the supporting documents (DGD-10); metadata: before, after.
     | "SUPPORTING_DOCUMENTS_CHANGED"
     // Deal Desk overrode the special terms during its step (D139; D128: wrote them); metadata: override.
-    | "SPECIAL_TERMS_WRITTEN";
+    | "SPECIAL_TERMS_WRITTEN"
+    // Legal wrote the terms during its step; metadata: onPrem, saas, special (which it wrote).
+    | "LEGAL_TERMS_WRITTEN";
   readonly versionNumber: number | null;
   readonly actorEmail: string;
   readonly occurredAt: string;

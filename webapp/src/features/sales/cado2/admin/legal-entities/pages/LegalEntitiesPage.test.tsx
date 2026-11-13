@@ -24,12 +24,14 @@ const list = { data: undefined as unknown, error: null as unknown, isPending: tr
 const mutation = () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown });
 const create = mutation();
 const update = mutation();
+const reorder = mutation();
 
 // Mocked so the page is tested without Asgardeo, the network or window.config.
 vi.mock("@features/sales/cado2/admin/legal-entities/api/useLegalEntities", () => ({
   useLegalEntities: () => list,
   useCreateLegalEntity: () => create,
   useUpdateLegalEntity: () => update,
+  useReorderLegalEntities: () => reorder,
 }));
 
 const row = {
@@ -53,6 +55,7 @@ const row = {
 beforeEach(() => {
   Object.assign(list, { data: undefined, error: null, isPending: true });
   update.mutate.mockReset();
+  reorder.mutate.mockReset();
 });
 
 describe("LegalEntitiesPage", () => {
@@ -95,6 +98,26 @@ describe("LegalEntitiesPage", () => {
     expect(uk.getByRole("switch", { name: "WSO2 UK Ltd active" })).not.toBeChecked();
     expect(uk.getByText("GB999")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "WSO2 UK Ltd" })).toHaveAttribute("aria-current", "true");
+  });
+
+  // D161: the order the dropdowns follow, changed one place at a time on the whole list.
+  it("moves an entity up or down, only while the whole list shows", async () => {
+    const uk = { ...row, id: 8, code: "WSO2_UK", name: "WSO2 UK Ltd", country: "United Kingdom" };
+    const de = { ...row, id: 9, code: "WSO2_DE", name: "WSO2 Germany GmbH", country: "Germany" };
+    Object.assign(list, { isPending: false, data: [row, uk, de] });
+    render(<LegalEntitiesPage />);
+    const user = userEvent.setup();
+
+    expect(screen.getByRole("button", { name: "Move WSO2, LLC. up" })).toBeDisabled(); // already first
+    expect(screen.getByRole("button", { name: "Move WSO2 Germany GmbH down" })).toBeDisabled(); // already last
+    await user.click(screen.getByRole("button", { name: "Move WSO2 Germany GmbH up" }));
+    expect(reorder.mutate).toHaveBeenCalledWith([7, 9, 8]);
+    await user.click(screen.getByRole("button", { name: "Move WSO2, LLC. down" }));
+    expect(reorder.mutate).toHaveBeenLastCalledWith([8, 7, 9]);
+
+    // A filtered list can't be reordered: the places would be unclear.
+    await user.type(screen.getByRole("textbox", { name: "Search legal entities" }), "WSO2");
+    expect(screen.getByRole("button", { name: "Move WSO2 UK Ltd up" })).toBeDisabled();
   });
 
   it("searches and filters by status", async () => {

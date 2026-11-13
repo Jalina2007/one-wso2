@@ -42,6 +42,8 @@ const setPrimary = {
   isPending: false,
   error: null,
 };
+// D108 from the list: clones the row's latest version.
+const clone = { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown };
 const deleteDraft = {
   mutate: vi.fn(),
   reset: vi.fn(),
@@ -106,6 +108,7 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
     refetch: vi.fn(),
   }),
   useDeleteDraft: () => deleteDraft,
+  useCloneQuote: () => clone,
 }));
 
 // A rep by default; Deal Desk without the Sales role in its own test (D127).
@@ -148,8 +151,9 @@ const mine = [
     accountName: "Northwind Logistics",
     sfOpportunityId: "006NW",
     opportunityName: "API Platform 2027",
+    expiryDate: "2099-12-11", // its order form is issued (D160)
   }),
-  item(3, { status: "APPROVED" }),
+  item(3, { status: "APPROVED", expiryDate: "2026-01-05" }), // issued, and expired
   item(5, {
     status: "SUBMITTED",
     sfOpportunityId: "006ACMEIAM",
@@ -180,6 +184,7 @@ function renderPage(path = "/sales/quickquote/quotes") {
       <Routes>
         <Route path="/sales/quickquote/quotes" element={<MyQuotesPage />} />
         <Route path="/sales/quickquote/quotes/:id/quote" element={<Where />} />
+        <Route path="/sales/quickquote/quotes/:id/versions/:n/edit" element={<Where />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -291,7 +296,10 @@ describe("Quotes page", () => {
     ).toBeInTheDocument();
     const suva = within(bodyRows()[5]);
     expect(suva.getByText("nimesha@wso2.com")).toBeInTheDocument();
-    expect(suva.queryByRole("button", { name: /^Actions for/ })).toBeNull(); // quote access View
+    // Another AM's quote: read-only, but it can be cloned (D108).
+    await user.click(suva.getByRole("button", { name: /^Actions for/ }));
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Clone quote"]);
+    await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("combobox", { name: "Owner" })).toBeNull(); // no owner dropdown (2026-10-12)
     await user.type(
@@ -353,6 +361,8 @@ describe("Quotes page", () => {
     );
     expect(screen.queryByRole("menuitem", { name: "Delete draft" })).toBeNull(); // approved, not a draft
     await user.click(screen.getByRole("menuitem", { name: "Make primary" }));
+    // D168: approved, so it is written to the opportunity now.
+    expect(screen.getByRole("dialog")).toHaveTextContent("Its products are written to the opportunity in Salesforce now");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Make primary",
@@ -374,7 +384,7 @@ describe("Quotes page", () => {
       }),
     );
     // The quote page's menu (2026-10-13): the everyday action first, Delete draft last.
-    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Remove primary", "Delete draft"]); // this draft is the primary
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Clone quote", "Remove primary", "Delete draft"]); // this draft is the primary
     await user.click(screen.getByRole("menuitem", { name: "Delete draft" }));
     const dialog = screen.getByRole("dialog", {
       name: "Delete this draft quote?",
@@ -390,6 +400,33 @@ describe("Quotes page", () => {
       },
       expect.anything(),
     );
+  });
+
+  // D108 from the list: clone a row's latest version, after asking, then open the new draft.
+  it("clones a quote from its row menu", async () => {
+    clone.mutate.mockImplementation((_v: unknown, o: { onSuccess: (r: unknown) => void }) =>
+      o.onSuccess({ quote: { id: 99 }, version: { versionNumber: 1 } }),
+    );
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(within(bodyRows()[0]).getByRole("button", { name: "Actions for Q-26-00001" }));
+    await user.click(screen.getByRole("menuitem", { name: "Clone quote" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Clone Q-26-00001 v2?" }));
+    expect(screen.getByRole("table", { name: "Quotes", hidden: true })).toBeInTheDocument(); // still on the list: the click didn't open the quote
+    await user.click(dialog.getByRole("button", { name: "Clone" }));
+    expect(clone.mutate).toHaveBeenCalledWith({ quoteId: 1, version: 2 }, expect.anything());
+    expect(screen.getByLabelText("Location")).toHaveTextContent("/sales/quickquote/quotes/99/versions/1/edit");
+  });
+
+  // D160: when an issued order form expires; a dash before it is issued, red once passed.
+  it("shows when an issued order form expires", () => {
+    renderPage();
+    const header = within(table()).getByRole("columnheader", { name: "Expires" });
+    expect(within(header).queryByRole("button")).toBeNull(); // not sorted
+    const row = (n: string) => within(bodyRows().find((r) => within(r).queryByRole("link", { name: n }))!);
+    expect(row("Q-26-00001").getByText("—")).toBeInTheDocument();
+    expect(row("Q-26-00002").getByText("11 Dec 2099")).not.toHaveAttribute("title");
+    expect(row("Q-26-00003").getByText("5 Jan 2026")).toHaveAttribute("title", "Expired");
   });
 
   it("sorts on any column, ascending then descending", async () => {

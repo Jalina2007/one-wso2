@@ -18,6 +18,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryResult,
@@ -42,6 +43,7 @@ import type {
   Issue,
   Opportunity,
   OpportunityLines,
+  OpportunityState,
   OpportunityQuote,
   PricebookOption,
   SyncPreview,
@@ -112,18 +114,32 @@ export function useOpportunityContacts(opportunityId: string | null) {
   );
 }
 
-/** The opportunity's product lines as they are in Salesforce now (D147): read fresh while `enabled`. */
-export function useOpportunityLines(
-  opportunityId: string | null,
-  enabled: boolean,
-  check?: { pricebookId: string; currency: string },
-) {
-  const usable = check && check.pricebookId && check.currency ? check : undefined;
-  return useAuthedQuery<OpportunityLines>(
-    ["opportunity-lines", opportunityId, usable ?? null],
-    enabled && opportunityId ? cado2ServiceUrls.opportunityLines(opportunityId, usable) : null,
+/** Whether the opportunity is still open in Salesforce (D164), read fresh while `enabled`. */
+export function useOpportunityState(opportunityId: string | null, enabled: boolean) {
+  return useAuthedQuery<OpportunityState>(
+    ["opportunity-state", opportunityId],
+    enabled && opportunityId ? cado2ServiceUrls.opportunityState(opportunityId) : null,
     "live",
   );
+}
+
+/**
+ * The previous opportunities' product lines as they are in Salesforce now
+ * (D159), one query per opportunity, in the order given: read fresh while
+ * `enabled`.
+ */
+export function usePreviousOpportunityLines(opportunityIds: readonly string[], enabled: boolean) {
+  const { getToken, ready, key } = useCado2Basis();
+  return useQueries({
+    queries: opportunityIds.map((id) => ({
+      queryKey: key("opportunity-lines", id),
+      queryFn: async () => authedGet<OpportunityLines>(cado2ServiceUrls.opportunityLines(id), await getToken()),
+      enabled: ready && enabled,
+      staleTime: 0,
+      refetchOnMount: "always" as const,
+      retry: httpRetry,
+    })),
+  });
 }
 
 /** How many products one page of the Add-line list loads. */

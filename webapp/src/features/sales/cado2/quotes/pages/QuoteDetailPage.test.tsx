@@ -31,6 +31,8 @@ async function openMenu(user: ReturnType<typeof userEvent.setup>): Promise<void>
 const menuItems = () => screen.getAllByRole("menuitem").map((m) => m.textContent);
 
 const query = (data: unknown) => ({ data, error: null, isPending: false, isFetching: false, refetch: vi.fn() });
+// D164: the opportunity's state in Salesforce, open unless a test closes it.
+const opportunityState = query({ found: true, open: true, state: "" });
 const quote = query(undefined as unknown);
 const versions = new Map<number, DraftResponse>();
 const history = query([] as unknown);
@@ -91,6 +93,7 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
   useCloseQuote: () => close,
   useSetPrimary: () => setPrimary,
   useOpportunityQuotes: () => opportunityQuotes,
+  useOpportunityState: () => opportunityState,
   useDeleteDraft: () => del,
   useDocuments: (_q: number, _v: number, enabled: boolean) => (enabled ? documents : query(undefined)),
   useIssueOrderForm: () => issue,
@@ -152,6 +155,7 @@ function showAt(url: string, q: QuoteView, ...vs: DraftResponse[]) {
 }
 
 beforeEach(() => {
+  opportunityState.data = { found: true, open: true, state: "" };
   Object.assign(setPrimary, mutation());
   opportunityQuotes.data = [];
   Object.assign(decide, mutation());
@@ -205,6 +209,8 @@ describe("QuoteDetailPage — primary quote", () => {
     await user.click(screen.getByRole("menuitem", { name: "Make primary" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("Q-26-00031 (nimesha@wso2.com) is the primary quote for this opportunity. Making this quote primary releases it.");
+    // D168: in approval, it is written to the opportunity now.
+    expect(dialog).toHaveTextContent("Its products are written to the opportunity in Salesforce now, if syncing to Salesforce is on.");
     await user.click(within(dialog).getByRole("button", { name: "Make primary" }));
     expect(setPrimary.mutate).toHaveBeenCalledWith({ quoteId: submitted.quote.id, primary: true }, expect.anything());
   });
@@ -870,6 +876,25 @@ describe("QuoteDetailPage — load errors say so", () => {
     Object.assign(documents, { data: undefined, error: new Error("down") });
     show({ ...approved.quote, versions: [{ versionNumber: 1, status: "APPROVED", tcv: "6480.00", submittedAt: null, updatedAt: approved.version.updatedAt }] } as unknown as QuoteView, approved);
     expect(screen.getByText(/^Couldn't load the order form\./)).toBeInTheDocument();
+  });
+
+  // D164: closed in Salesforce since it was picked: the order form can't be issued.
+  it("says when an approved quote's opportunity is closed in Salesforce", () => {
+    const approved: DraftResponse = {
+      ...submitted,
+      quote: { ...submitted.quote, status: "APPROVED", actions: ["CLOSE"] },
+      version: { ...submitted.version, status: "APPROVED" },
+    };
+    opportunityState.data = { found: true, open: false, state: "Closed Won" };
+    show({ ...approved.quote, versions: [{ versionNumber: 1, status: "APPROVED", tcv: "6480.00", submittedAt: null, updatedAt: approved.version.updatedAt }] } as unknown as QuoteView, approved);
+    expect(screen.getByLabelText("Opportunity closed")).toHaveTextContent(
+      "This opportunity is Closed Won in Salesforce. This quote can't be issued while it is. Close the quote, or reopen the opportunity in Salesforce.",
+    );
+    cleanup();
+
+    // In approval nothing is said: approvers aren't asked to act on it.
+    show(submitted.quote, submitted);
+    expect(screen.queryByLabelText("Opportunity closed")).toBeNull();
   });
 });
 

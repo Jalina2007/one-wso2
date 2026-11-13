@@ -19,8 +19,9 @@ import { TableCell, TableHead, TableRow, TableSortLabel } from "@wso2/oxygen-ui"
 import { LIST_CELL, type ListColumn, type ListSort } from "@features/sales/cado2/components/list-table/listTable";
 
 /**
- * Headers that sort: click once for ascending, again for descending. An
- * extra empty header can follow, for a row's actions.
+ * Headers that sort: click once for ascending, again for descending; a
+ * column without a sort key is a plain header. An extra empty header can
+ * follow, for a row's actions.
  */
 export default function SortableHead<K extends string>({
   columns,
@@ -46,19 +47,23 @@ export default function SortableHead<K extends string>({
           },
         }}
       >
-        {columns.map((c) => (
-          <TableCell key={c.sort} align={c.align} sortDirection={sort.key === c.sort ? sort.dir : false}>
-            <TableSortLabel
-              active={sort.key === c.sort}
-              direction={sort.key === c.sort ? sort.dir : "asc"}
-              onClick={() =>
-                onSort({ key: c.sort, dir: sort.key === c.sort && sort.dir === "asc" ? "desc" : "asc" })
-              }
-            >
-              {c.label}
-            </TableSortLabel>
-          </TableCell>
-        ))}
+        {columns.map(({ label, sort: key, align }) =>
+          key === undefined ? (
+            <TableCell key={label} align={align}>
+              {label}
+            </TableCell>
+          ) : (
+            <TableCell key={key} align={align} sortDirection={sort.key === key ? sort.dir : false}>
+              <TableSortLabel
+                active={sort.key === key}
+                direction={sort.key === key ? sort.dir : "asc"}
+                onClick={() => onSort({ key, dir: sort.key === key && sort.dir === "asc" ? "desc" : "asc" })}
+              >
+                {label}
+              </TableSortLabel>
+            </TableCell>
+          ),
+        )}
         {actionsColumn ? <TableCell aria-label="Actions" /> : null}
       </TableRow>
     </TableHead>

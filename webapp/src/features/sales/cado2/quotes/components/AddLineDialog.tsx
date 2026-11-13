@@ -342,8 +342,9 @@ export default function AddLineDialog({
         ? { text: `This product now has a pricing formula: ${versionLabel(inForce.version, inForce.updatedAt)}.`, action: "Use the formula" }
         : null;
   // The unit of measure, saved with the line and shown in the table, not in
-  // this dialog (D114): a formula line's comes from its version (D83);
-  // otherwise it will come from Salesforce (D79), and a line moved off a
+  // this dialog (D114): a formula line's comes from its version (D83); a new
+  // price-book line's from its product's Quantity Unit Of Measure in
+  // Salesforce (D158); a kept line keeps its own, and a line moved off a
   // formula has none.
   const uom =
     pricing.kind === "FORMULA"
@@ -354,9 +355,11 @@ export default function AddLineDialog({
         )
       : pricing.kind === "KEPT_FORMULA"
         ? (pricing.formula.unitOfMeasure ?? line?.unitOfMeasure ?? "")
-        : keepsExisting && moved && line.keepPricing?.method === "FORMULA"
-          ? ""
-          : (line?.unitOfMeasure ?? "");
+        : !keepsExisting
+          ? (product?.unitOfMeasure ?? "")
+          : moved && line.keepPricing?.method === "FORMULA"
+            ? ""
+            : (line.unitOfMeasure ?? "");
   // A line moved off a formula goes back to the price-book price it was worked out from.
   const keptUnitPrice =
     keepsExisting && moved && line.keepPricing?.method === "FORMULA" ? (line.keepPricing.formula?.listPrice ?? line.unitPrice) : line?.unitPrice ?? "";
@@ -384,8 +387,6 @@ export default function AddLineDialog({
 
   const chooseProduct = (p: Product | null) => {
     setProduct(p);
-    // No pre-fill: Product_Unit__c turned out to be the product family (APIM,
-    // IAM…), not a unit of measure (verified 2026-09-26). The rep types it.
   };
 
   const save = () => {

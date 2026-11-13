@@ -83,6 +83,18 @@ const event = (over: Partial<AuditEvent>): AuditEvent => ({
 });
 
 describe("history", () => {
+  // Legal's writing reads as words, saying what it wrote; an unknown event is never a raw code.
+  it("says what Legal wrote, in words", () => {
+    const [both] = groupHistory([event({ eventType: "LEGAL_TERMS_WRITTEN", versionNumber: 2, metadata: { onPrem: true, saas: true, special: false } })]);
+    expect(describeEvent(both)).toBe("Legal wrote the on-premises terms and SaaS terms of version 2");
+    const [all] = groupHistory([event({ eventType: "LEGAL_TERMS_WRITTEN", metadata: { onPrem: true, saas: true, special: true } })]);
+    expect(describeEvent(all)).toBe("Legal wrote the on-premises terms, SaaS terms and special terms of version 1");
+    const [special] = groupHistory([event({ eventType: "LEGAL_TERMS_WRITTEN", metadata: { onPrem: false, saas: false, special: true } })]);
+    expect(describeEvent(special)).toBe("Legal wrote the special terms of version 1");
+    const [unknown] = groupHistory([event({ eventType: "SOME_NEW_EVENT" as AuditEvent["eventType"] })]);
+    expect(describeEvent(unknown)).toBe("Some new event");
+  });
+
   it("groups consecutive saves by the same person on the same version", () => {
     const entries = groupHistory([
       event({ id: 1, eventType: "QUOTE_CREATED" }),

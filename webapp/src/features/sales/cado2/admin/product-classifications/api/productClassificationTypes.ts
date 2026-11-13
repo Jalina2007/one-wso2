@@ -16,15 +16,20 @@
 
 import type { LineCategory } from "@features/sales/cado2/quotes/api/quoteTypes";
 
+/** How a classification's products are deployed (D163); null when not applicable. */
+export type Deployment = "ON_PREMISES" | "SAAS";
+
 /**
  * One Salesforce product classification (Product_Classification__c, e.g.
  * "ES") as Admin → Product Classifications shows it (D152): its category on the
- * order form and whether its products recur. Both null while it isn't set up.
+ * order form and whether its products recur, both null while it isn't set up;
+ * and how its products are deployed (D163).
  */
 export interface ProductClassificationItem {
   readonly classification: string;
   readonly category: LineCategory | null;
   readonly recurring: boolean | null;
+  readonly deployment: Deployment | null;
   /** How many active Salesforce products have it. */
   readonly productCount: number;
   readonly updatedByEmail: string | null;
@@ -32,11 +37,12 @@ export interface ProductClassificationItem {
 }
 
 /** GET /admin/product-classifications. */
-/** One classification's setting, as an Admin sends it (both required). */
+/** One classification's setting, as an Admin sends it (all three). */
 export interface ProductClassificationInput {
   readonly classification: string;
   readonly category: LineCategory;
   readonly recurring: boolean;
+  readonly deployment: Deployment | null;
 }
 
 export interface ProductClassifications {

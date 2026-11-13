@@ -40,10 +40,11 @@ export function useSetProductClassification() {
   const { getToken, key } = useCado2Basis();
   const queryClient = useQueryClient();
   return useMutation<ProductClassificationItem, Error, ProductClassificationInput>({
-    mutationFn: async ({ classification, category, recurring }) =>
+    mutationFn: async ({ classification, category, recurring, deployment }) =>
       cado2Send<ProductClassificationItem>("PUT", cado2ServiceUrls.productClassification(classification), await getToken(), {
         category,
         recurring,
+        deployment: deployment ?? "",
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key(DOMAIN) }),
   });

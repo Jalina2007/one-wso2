@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from "
 import { Link as RouterLink, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { Alert, alpha, Box, Button, Chip, CircularProgress, Collapse, Divider, Link, Paper, Stack, Tab, Tabs, Typography, type Theme } from "@wso2/oxygen-ui";
 import DeleteDraftDialog from "@features/sales/cado2/quotes/components/detail/DeleteDraftDialog";
+import OpportunityClosedNotice from "@features/sales/cado2/quotes/components/OpportunityClosedNotice";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import {
   useAuditEvents,
@@ -462,6 +463,13 @@ export default function QuoteDetailPage(): JSX.Element {
             }}
           />
         ) : null}
+        {/* D164: closed in Salesforce since it was picked. */}
+        {!viewingOlder ? (
+          <OpportunityClosedNotice
+            opportunityId={q.sfOpportunityId}
+            blocked={v.status === "DRAFT" ? "submitted or synced to Salesforce" : v.status === "APPROVED" ? "issued" : null}
+          />
+        ) : null}
         {viewingOlder ? (
           <Alert severity="info">
             You&apos;re viewing version {v.versionNumber}. The latest is version {latestNumber}. Clone copies this version; other
@@ -752,7 +760,7 @@ export default function QuoteDetailPage(): JSX.Element {
         />
       ) : null}
       {dialog === "primary" ? (
-        <PrimaryDialog quoteId={q.id} opportunityId={q.sfOpportunityId} isPrimary={q.isPrimary} onClose={() => setDialog(null)} />
+        <PrimaryDialog quoteId={q.id} opportunityId={q.sfOpportunityId} isPrimary={q.isPrimary} status={q.status} onClose={() => setDialog(null)} />
       ) : null}
       {dialog === "close" ? (
         <LifecycleDialog

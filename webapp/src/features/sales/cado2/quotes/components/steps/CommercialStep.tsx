@@ -119,6 +119,19 @@ export default function CommercialStep(): JSX.Element {
           onRetry={() => void contacts.refetch()}
           helperText="Receives WSO2 security bulletins"
         />
+        {/* D165: where legal notices go; without one, the security contact. */}
+        <ContactPicker
+          name="legalContact"
+          issueField="contacts.legal"
+          label="Legal contact (optional)"
+          opportunityId={opportunityId}
+          contacts={contacts.data ?? []}
+          loading={contacts.isFetching}
+          loadError={contacts.error}
+          onRetry={() => void contacts.refetch()}
+          helperText="Receives legal notices. Without one, they go to the security contact"
+          allowTyped
+        />
       </Section>
     </Stack>
   );

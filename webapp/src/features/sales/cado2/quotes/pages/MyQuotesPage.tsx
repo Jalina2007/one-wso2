@@ -39,6 +39,7 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import {
+  CopyIcon,
   FileTextIcon,
   PlusIcon,
   SearchIcon,
@@ -54,9 +55,11 @@ import { useDocumentTitle } from "@hooks/useDocumentTitle";
 import {
   ACCOUNT_PAGE,
   QUOTE_PAGE,
+  useCloneQuote,
   useQuoteList,
   useQuoteVersion,
 } from "@features/sales/cado2/quotes/api/useQuoteApi";
+import LifecycleDialog from "@features/sales/cado2/quotes/components/detail/LifecycleDialog";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import DeleteDraftDialog from "@features/sales/cado2/quotes/components/detail/DeleteDraftDialog";
 import PrimaryDialog from "@features/sales/cado2/quotes/components/detail/PrimaryDialog";
@@ -108,21 +111,33 @@ const day = (iso: string) => formatDate(iso.slice(0, 10));
  * Rendered only when `q.canEdit`, so "Draft" here is the quote page's
  * "Draft and CLOSE allowed".
  */
-function RowMenu({ q }: { q: QuoteListItem }): JSX.Element {
+/**
+ * A row's actions: Clone quote for anyone who may quote, also on others'
+ * quotes (D108: any AM who can read a quote may clone it); Make primary and
+ * Delete draft for whoever may change the quote.
+ */
+function RowMenu({ q, canClone }: { q: QuoteListItem; canClone: boolean }): JSX.Element {
   const [deleting, setDeleting] = useState(false);
   const [primary, setPrimary] = useState(false);
+  const [cloning, setCloning] = useState(false);
   return (
     <>
       <QuoteActionsMenu
         inRow
         label={`Actions for ${quoteLabel(q.quoteNumber, q.accountName, q.opportunityName)}`}
         actions={[
-          { label: q.isPrimary ? "Remove primary" : "Make primary", icon: <StarIcon size={16} />, onClick: () => setPrimary(true) },
+          ...(canClone ? [{ label: "Clone quote", icon: <CopyIcon size={16} />, onClick: () => setCloning(true) }] : []),
+          ...(q.canEdit
+            ? [{ label: q.isPrimary ? "Remove primary" : "Make primary", icon: <StarIcon size={16} />, onClick: () => setPrimary(true) }]
+            : []),
         ]}
         destructive={
-          q.status === "DRAFT" ? [{ label: "Delete draft", icon: <Trash2Icon size={16} />, onClick: () => setDeleting(true) }] : []
+          q.canEdit && q.status === "DRAFT"
+            ? [{ label: "Delete draft", icon: <Trash2Icon size={16} />, onClick: () => setDeleting(true) }]
+            : []
         }
       />
+      {cloning ? <CloneFromList q={q} onClose={() => setCloning(false)} /> : null}
       {deleting ? (
         <DeleteFromList q={q} onClose={() => setDeleting(false)} />
       ) : null}
@@ -131,10 +146,41 @@ function RowMenu({ q }: { q: QuoteListItem }): JSX.Element {
           quoteId={q.id}
           opportunityId={q.sfOpportunityId}
           isPrimary={q.isPrimary}
+          status={q.status}
           onClose={() => setPrimary(false)}
         />
       ) : null}
     </>
+  );
+}
+
+/** Clones the row's latest version, as the quote page does (D108), then opens the new draft. */
+function CloneFromList({ q, onClose }: { q: QuoteListItem; onClose: () => void }): JSX.Element {
+  const clone = useCloneQuote();
+  const navigate = useNavigate();
+  const from = `${q.quoteNumber ?? "the quote"} v${q.versionNumber}`;
+  return (
+    <LifecycleDialog
+      title={`Clone ${q.quoteNumber ?? "this quote"} v${q.versionNumber}?`}
+      confirmLabel="Clone"
+      pending={clone.isPending}
+      error={clone.error}
+      onClose={onClose}
+      onConfirm={() =>
+        clone.mutate(
+          { quoteId: q.id, version: q.versionNumber },
+          {
+            onSuccess: (res) => {
+              onClose();
+              navigate(cado2Paths.editVersion(res.quote.id, res.version.versionNumber), { state: { clonedFrom: from } });
+            },
+          },
+        )
+      }
+    >
+      A new draft quote is created on the same account and opportunity, with everything from version {q.versionNumber} at
+      the same prices. You can change anything except the account and opportunity. This quote stays as it is.
+    </LifecycleDialog>
   );
 }
 
@@ -228,6 +274,22 @@ function StatusCell({ q }: { q: QuoteListItem }): JSX.Element {
   );
 }
 
+/**
+ * When the issued order form expires (D44): set only once it is issued, a
+ * dash before; in red once the day has passed (D160).
+ */
+function ExpiryCell({ expiryDate, now }: { expiryDate: string | null; now: Date }): JSX.Element {
+  if (!expiryDate) {
+    return <TableCell sx={{ color: "text.secondary" }}>—</TableCell>;
+  }
+  const passed = expiryDate.slice(0, 10) < now.toISOString().slice(0, 10);
+  return (
+    <TableCell sx={{ whiteSpace: "nowrap", color: passed ? "error.main" : "text.secondary" }} title={passed ? "Expired" : undefined}>
+      {day(expiryDate)}
+    </TableCell>
+  );
+}
+
 /** A column: its header, and the key it sorts on (D70). */
 type Column = ListColumn<QuoteSortKey>;
 
@@ -242,6 +304,8 @@ function QuoteTableRow({
   cells: ReactNode;
 }): JSX.Element {
   const navigate = useNavigate();
+  // Any AM may clone a quote they can read (D108).
+  const canClone = cado2Access(useCado2Me().data).canQuote;
   return (
     <TableRow
       hover
@@ -249,6 +313,7 @@ function QuoteTableRow({
       sx={{ cursor: "pointer", "& td": CELL }}
     >
       {cells}
+      <ExpiryCell expiryDate={q.expiryDate} now={now} />
       <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
         {day(q.createdAt)}
       </TableCell>
@@ -256,7 +321,13 @@ function QuoteTableRow({
         {changedAgo(q.updatedAt, now)}
       </TableCell>
       <TableCell align="right" sx={{ width: 48 }}>
-        {q.canEdit ? <RowMenu q={q} /> : null}
+        {q.canEdit || canClone ? (
+          // A dialog opened from the menu shows outside the row, but its clicks
+          // still reach the row in React: they must not open the quote.
+          <span onClick={(e) => e.stopPropagation()}>
+            <RowMenu q={q} canClone={canClone} />
+          </span>
+        ) : null}
       </TableCell>
     </TableRow>
   );
@@ -273,6 +344,8 @@ function OwnerCell({ q }: { q: QuoteListItem }): JSX.Element {
 }
 
 const DATES: readonly Column[] = [
+  // Not sorted: the list sorts on the server, which doesn't sort on it.
+  { label: "Expires" },
   { label: "Created", sort: "created" },
   { label: "Updated", sort: "updated" },
 ];

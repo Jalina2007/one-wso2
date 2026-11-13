@@ -28,10 +28,11 @@ vi.mock("@features/sales/cado2/admin/product-classifications/api/useProductClass
   useSetProductClassification: () => set,
 }));
 
-const row = (classification: string, category: string | null, recurring: boolean | null, productCount: number) => ({
+const row = (classification: string, category: string | null, recurring: boolean | null, productCount: number, deployment: string | null = null) => ({
   classification,
   category,
   recurring,
+  deployment,
   productCount,
   updatedByEmail: category ? "migration" : null,
   updatedAt: category ? "2026-11-10T10:00:00Z" : null,
@@ -69,7 +70,7 @@ describe("ProductClassificationsPage", () => {
     await user.click(screen.getByRole("combobox", { name: "Type of ES" }));
     await user.click(screen.getByRole("option", { name: "Non-recurring" }));
     expect(set.mutate).toHaveBeenLastCalledWith(
-      { classification: "ES", category: "SUPPORT", recurring: false },
+      { classification: "ES", category: "SUPPORT", recurring: false, deployment: null },
       expect.anything(),
     );
   });
@@ -90,9 +91,31 @@ describe("ProductClassificationsPage", () => {
     await user.click(screen.getByRole("combobox", { name: "Type of AI" }));
     await user.click(screen.getByRole("option", { name: "Recurring" }));
     expect(set.mutate).toHaveBeenLastCalledWith(
-      { classification: "AI", category: "SUBSCRIPTION", recurring: true },
+      { classification: "AI", category: "SUBSCRIPTION", recurring: true, deployment: null },
       expect.anything(),
     );
+  });
+
+  // D163: how a classification's products are deployed, saved with the rest.
+  it("sets the deployment, and says where each setting is used", async () => {
+    show([row("PS", "SUBSCRIPTION", true, 1, "ON_PREMISES"), row("ES", "SUPPORT", true, 5)]);
+    expect(screen.getByRole("combobox", { name: "Deployment of PS" })).toHaveTextContent("On-premises");
+    expect(screen.getByRole("combobox", { name: "Deployment of ES" })).toHaveTextContent("Not applicable");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("combobox", { name: "Deployment of PS" }));
+    await user.click(screen.getByRole("option", { name: "SaaS" }));
+    expect(set.mutate).toHaveBeenLastCalledWith(
+      { classification: "PS", category: "SUBSCRIPTION", recurring: true, deployment: "SAAS" },
+      expect.anything(),
+    );
+    await user.click(screen.getByRole("combobox", { name: "Deployment of PS" }));
+    await user.click(screen.getByRole("option", { name: "Not applicable" }));
+    expect(set.mutate).toHaveBeenLastCalledWith(expect.objectContaining({ classification: "PS", deployment: null }), expect.anything());
+
+    const uses = within(screen.getByRole("region", { name: "Where these settings are used" }));
+    expect(uses.getByText("Deployment")).toBeInTheDocument();
+    expect(uses.getByText(/the on-premises terms for on-premises products, the SaaS terms for SaaS products/)).toBeInTheDocument();
   });
 
   it("says so when Salesforce can't be read", () => {

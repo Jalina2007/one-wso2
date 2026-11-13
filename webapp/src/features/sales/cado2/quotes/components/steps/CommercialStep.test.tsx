@@ -87,6 +87,15 @@ describe("CommercialStep — Commercials", () => {
     expect(billTo.getByRole("textbox", { name: "PO number (optional)" })).toBeInTheDocument();
   });
 
+  // D165: an optional legal contact, under the security contact on Ship To.
+  it("offers a legal contact under the security contact", () => {
+    render(<Harness lines={[line("0")]} />);
+    const shipTo = within(screen.getByRole("region", { name: "Ship To" }));
+    const text = shipTo.getByText("Security contact (optional)").compareDocumentPosition(shipTo.getByText("Legal contact (optional)"));
+    expect(text & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shipTo.getByText(/Receives legal notices/)).toBeInTheDocument();
+  });
+
   // D88: services-only quotes choose their billing too. The special-terms
   // to-do now sits on the Legal step, with the switch.
   it("asks for the billing frequency when no product recurs", () => {

@@ -29,15 +29,11 @@ import ProductsStep from "./ProductsStep";
 
 // D72: products brought in from the opportunity.
 
-// The opportunity's line items in Salesforce (D147).
-const sfLine = { id: "00kA", productName: "API Manager", productCode: null, quantity: "4", salesPrice: "9000", discount: "25", totalPrice: "27000.00", commissionPercent: null, serviceStartDate: null, serviceEndDate: null, problems: null, load: null };
-const opportunityLines: { currency: string; lines: unknown[]; check: unknown } = { currency: "USD", lines: [sfLine], check: null };
-// The quotes on the opportunity (D150: none synced to it yet).
-const opportunityQuotes: { data: unknown[] | undefined; error?: Error | null } = { data: [] };
-const sfLoad = {
-  pricebookEntryId: "01uAPIM", productId: "01tAPIM", productName: "API Manager", productCode: "P-APIM", productDescription: null,
-  pricebookId: "01sUSD", pricebookName: "USD Price Book", unitPrice: "8000", salesPrice: "9000", quantity: "4", discount: "25",
-  category: "SUBSCRIPTION", classification: "PS", recurring: true, formula: false,
+// D159: a previous opportunity's line items in Salesforce.
+const previousLines = {
+  opportunityName: "Acme - Integration 2026", subsStartDate: "2026-01-01", subsEndDate: "2026-12-31", currency: "USD",
+  lines: [{ id: "00kA", productName: "API Manager", productCode: "P-APIM", quantity: "4", salesPrice: "9000", discount: "25", totalPrice: "27000.00",
+    commissionPercent: null, serviceStartDate: "2026-01-01", serviceEndDate: "2026-12-31" }],
 };
 // D155: Admin → Support Plans, and those products in the quote's book.
 const supportProduct = (id: string, name: string, code: string) => ({
@@ -69,8 +65,7 @@ const empty = {
 };
 vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
   useAccountOpportunities: () => empty,
-  useOpportunityLines: () => ({ ...empty, data: opportunityLines }),
-  useOpportunityQuotes: () => ({ ...empty, data: opportunityQuotes.data, error: opportunityQuotes.error ?? null }),
+  usePreviousOpportunityLines: (ids: readonly string[]) => ids.map(() => ({ ...empty, data: previousLines })),
   usePricingFormulas: () => empty,
   useQuoteSettings: () =>
     quoteSettings.error
@@ -147,21 +142,16 @@ function Harness({
 
 describe("ProductsStep (Products & Pricing)", () => {
   beforeEach(() => {
-    opportunityQuotes.data = [];
-    opportunityQuotes.error = null;
     quoteSettings.supportPlans = null;
     quoteSettings.error = null;
     supportProducts.data = supportProducts.data.map((p) => ({ ...p, classificationProblem: null }));
   });
 
-  // A failed lookup says so, instead of looking like "no support plans" or "not a renewal".
-  it("says when the support plans or the renewal's quotes couldn't be loaded", () => {
+  // A failed lookup says so, instead of looking like "no support plans".
+  it("says when the support plans couldn't be loaded", () => {
     quoteSettings.error = new Error("down");
-    opportunityQuotes.data = undefined;
-    opportunityQuotes.error = new Error("down");
     render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL" }} />);
     expect(screen.getByText(/Couldn't load the support plans, so this quote's support isn't checked/)).toBeInTheDocument();
-    expect(screen.getByText(/Couldn't check this renewal's quotes, so Import renewal products isn't offered/)).toBeInTheDocument();
   });
 
   it("won't add a support product whose classification isn't set up", () => {
@@ -218,55 +208,31 @@ describe("ProductsStep (Products & Pricing)", () => {
     expect(screen.queryByRole("button", { name: "Add Premium Support" })).toBeNull();
   });
 
-  // D150: only an auto-generated renewal's inherited lines, until a quote is synced to it.
-  it("shows the Salesforce line items only on a renewal never synced from QuickQuote", async () => {
+  // D159: a renewal's previous opportunities' products, read only, synced or not.
+  it("shows the previous year's products on a renewal once its previous opportunities are chosen", async () => {
     const user = userEvent.setup();
     const { unmount } = render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal" }} />);
-    expect(screen.queryByRole("button", { name: "Import renewal products" })).toBeNull(); // a first sale
+    expect(screen.queryByRole("button", { name: "Previous year's products" })).toBeNull(); // a first sale
     unmount();
 
-    // Its lines came from QuickQuote: the button stays, disabled, saying why.
-    opportunityQuotes.data = [{ quoteId: 9, quoteNumber: "Q-26-00040", syncedAt: "2026-11-01T10:00:00Z" }];
-    const synced = render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL" }} />);
-    expect(screen.getByRole("button", { name: "Import renewal products" })).toBeDisabled();
-    await user.hover(screen.getByRole("button", { name: "Import renewal products" }).parentElement!);
-    expect(await screen.findByRole("tooltip")).toHaveTextContent(
-      "Q-26-00040 was synced to this opportunity on 1 Nov 2026, so its products in Salesforce come from QuickQuote: there are no inherited products to import.",
-    );
-    synced.unmount();
+    // None chosen in Overview yet: disabled, saying where to choose them.
+    const none = render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL" }} />);
+    expect(screen.getByRole("button", { name: "Previous year's products" })).toBeDisabled();
+    await user.hover(screen.getByRole("button", { name: "Previous year's products" }).parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Choose the opportunities this renewal replaces in Overview to see their products.");
+    none.unmount();
 
-    opportunityQuotes.data = [{ quoteId: 10, syncedAt: null }]; // this quote, never synced
-    render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL" }} />);
-    await user.click(screen.getByRole("button", { name: "Import renewal products" }));
-    const dialog = within(screen.getByRole("dialog", { name: /Import renewal products from Salesforce/ }));
-    expect(dialog.getByText(/Acme renewal/)).toBeInTheDocument();
+    render(
+      <Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL", previousOpportunityIds: ["006P1"] }} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Previous year's products" }));
+    const dialog = within(screen.getByRole("dialog", { name: /Previous year's products/ }));
+    expect(dialog.getByText("Acme - Integration 2026")).toBeInTheDocument();
     expect(dialog.getByText("API Manager")).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: /Load|Add/ })).toBeNull(); // read only
     await user.click(dialog.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByText("WSO2 Gateway")).toBeInTheDocument(); // the quote's own lines untouched
-  });
-
-  // D150: a clean renewal's lines replace the quote's, in the opportunity's one year.
-  it("loads a clean renewal's line items into the quote", async () => {
-    const user = userEvent.setup();
-    opportunityLines.lines = [{ ...sfLine, problems: [], load: sfLoad }];
-    opportunityLines.check = { problems: [], canLoad: true, isRenewal: true, subsStartDate: "2027-02-01", subsEndDate: "2028-01-31", pricebookName: "USD Price Book" };
-    try {
-      render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL", yearCount: 2 }} />);
-      await user.click(screen.getByRole("button", { name: "Import renewal products" }));
-      expect(screen.getByText("Replaces the 2 products already on this quote.")).toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: "Load into quote" }));
-
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-      expect(screen.getByLabelText("Loaded from Salesforce")).toHaveTextContent("Loaded 1 product from Salesforce. Check them, then save the draft.");
-      expect(screen.queryByText("WSO2 Gateway")).toBeNull(); // replaced
-      expect(screen.getByText("API Manager")).toBeInTheDocument();
-      expect(screen.getByLabelText("Quantities")).toHaveTextContent(/=4$/);
-      expect(screen.getByRole("button", { name: /Add Year 2/ })).toBeInTheDocument(); // down to one year
-    } finally {
-      opportunityLines.lines = [sfLine];
-      opportunityLines.check = null;
-    }
   });
 
   // D151: a rate per year, from the Partner Commission card.
