@@ -21,9 +21,18 @@ import { emailSignatureTemplateUrl } from "@config/apiConfig";
 // can't be used, which means "use the built-in layout".
 export type SignatureTemplate = string | null | undefined;
 
+// A stalled server must not leave the preview waiting forever.
+const LOAD_TIMEOUT_MS = 8000;
+
+// `signal` is the unmount signal. The deadline gets its own controller, so a
+// timeout resolves to null (built-in layout) instead of looking like an unmount.
 async function loadTemplate(url: string, signal: AbortSignal): Promise<string | null> {
+  const request = new AbortController();
+  const timer = setTimeout(() => request.abort(), LOAD_TIMEOUT_MS);
+  const cancel = () => request.abort();
+  signal.addEventListener("abort", cancel);
   try {
-    const res = await fetch(url, { signal, cache: "no-cache" });
+    const res = await fetch(url, { signal: request.signal, cache: "no-cache" });
     if (!res.ok) return null;
     const text = await res.text();
     // A missing file can come back as the app's own index page with a 200.
@@ -31,6 +40,9 @@ async function loadTemplate(url: string, signal: AbortSignal): Promise<string | 
     return text;
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", cancel);
   }
 }
 

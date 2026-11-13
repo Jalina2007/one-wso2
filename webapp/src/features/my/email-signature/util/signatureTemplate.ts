@@ -54,10 +54,15 @@ function templateValues(data: SignatureData, logoUrl: string): Record<string, st
 
 export function renderSignatureTemplate(template: string, data: SignatureData, logoUrl: string): string {
   const values = templateValues(data, logoUrl);
-  const withSections = template.replace(
-    /\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g,
-    (_match, key: string, inner: string) => (values[key] ? inner : ""),
-  );
+  // Sections can nest: keep resolving until none are left, so the inner ones
+  // inside a kept outer section are evaluated too.
+  const sectionPattern = /\{\{#(\w+)\}\}([\s\S]*?)\{\{\/\1\}\}/g;
+  let withSections = template;
+  for (let i = 0; i < 10; i++) {
+    const next = withSections.replace(sectionPattern, (_match, key: string, inner: string) => (values[key] ? inner : ""));
+    if (next === withSections) break;
+    withSections = next;
+  }
   const filled = withSections.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => escapeHtml(values[key] ?? ""));
   const clean = DOMPurify.sanitize(filled, {
     FORBID_TAGS: ["style", "link", "script", "iframe", "object", "embed", "form"],

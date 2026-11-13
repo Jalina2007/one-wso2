@@ -72,4 +72,12 @@ describe("renderSignatureTemplate", () => {
     expect(text({ linkedin: "https://l.com", medium: "https://m.com", customUrl: "https://x.com", customUrlLabel: "G" })).toBe("L|M|G");
     expect(renderSignatureTemplate(t, data(), LOGO)).not.toContain("data-sep");
   });
+
+  it("resolves a section nested inside another one", () => {
+    const t = "{{#name}}<p>{{name}}</p>{{#workPhone}}<p>W {{workPhone}}</p>{{/workPhone}}{{/name}}";
+    const html = renderSignatureTemplate(t, data({ name: "Jo" }), LOGO);
+    expect(html).toContain("Jo");
+    expect(html).not.toMatch(/W |\{\{/);
+    expect(renderSignatureTemplate(t, data({ name: "Jo", workPhone: "1" }), LOGO)).toContain("W 1");
+  });
 });

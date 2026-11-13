@@ -42,6 +42,7 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
   const hasContent = hasSignatureContent(data);
   // Hold the preview back until a configured template has loaded, so the
   // built-in layout doesn't flash first.
+  const loadingTemplate = template === undefined;
   const signatureHTML = useMemo(() => {
     if (!hasContent || template === undefined) return "";
     return template ? renderSignatureTemplate(template, data, emailSignatureLogoUrl) : generateSignatureHTML(data);
@@ -107,7 +108,9 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
               sx={{ color: "rgba(0, 0, 0, 0.6)", fontStyle: "italic", pt: 5 }}
               align="center"
             >
-              Fill in your name or designation to see a preview.
+              {hasContent && loadingTemplate
+                ? "Loading your signature layout…"
+                : "Fill in your name or designation to see a preview."}
             </Typography>
           )}
         </Box>
@@ -116,7 +119,7 @@ export default function SignaturePreviewCard({ data }: { data: SignatureData }) 
       <Button
         variant="contained"
         fullWidth
-        disabled={!hasContent}
+        disabled={!signatureHTML}
         onClick={() => void handleCopy()}
         startIcon={<CopyStateIcon size={16} />}
         color={copyState === "error" ? "error" : copyState === "success" ? "success" : "primary"}
