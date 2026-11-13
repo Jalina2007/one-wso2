@@ -187,6 +187,8 @@ declare global {
       // https://wso2.lightning.force.com, correct for every WSO2
       // environment today. Set it only for a sandbox org.
       ONE_WSO2_SALESFORCE_BASE_URL?: string;
+      // Image URL used in the generated email signature. Optional.
+      ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL?: string;
       // Override for the Asgardeo My Account portal URL that the top-bar
       // "Profile" menu item opens. Only set this on non-standard tenants
       // (self-hosted / custom domain); on Asgardeo Cloud we derive it from

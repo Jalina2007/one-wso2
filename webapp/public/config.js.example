@@ -199,6 +199,10 @@ window.config = {
   // sandbox org.
   // ONE_WSO2_SALESFORCE_BASE_URL: "https://wso2.lightning.force.com",
 
+  // Image URL used in the generated email signature. Optional — when unset or
+  // blank, the built-in default is used.
+  // ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL: "<your-image-url>",
+
   // Idle handling. Defaults to false. The "Are you still there?" dialog
   // appears after 25 minutes of inactivity either way; this decides only what
   // happens if it is ignored. False leaves it waiting and the session alive;
