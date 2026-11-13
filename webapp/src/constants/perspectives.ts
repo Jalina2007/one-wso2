@@ -61,6 +61,7 @@ import {
   HandshakeIcon,
   WalletIcon,
   ServerIcon,
+  ShoppingBagIcon,
   type LucideIcon,
 } from "@wso2/oxygen-ui-icons-react";
 import type { ComponentType } from "react";
@@ -85,6 +86,7 @@ import { INFRA_APPS } from "@constants/infraApps";
 import { UMT_PATH, umtPaths } from "@features/umt/lib/umtPaths";
 import { UMT_DOCUMENTATION_ITEM_ID, openUmtDocumentation } from "@features/umt/lib/umtDocumentation";
 import { SMART_SEARCH_LIBRARY_PATH } from "@features/sales/smartSearch/smartSearchPaths";
+import { swagStorePaths } from "@features/swag-store/swagStorePaths";
 import {
   Cado2LogoIcon,
   EchoLogoIcon,
@@ -556,6 +558,13 @@ const AMPLIFY_SECTIONS: PerspectiveSection[] = [
   },
 ];
 
+// Swag Store's shop rows: flat leaves, open to every employee. Categories are
+// chips on the Shop page rather than rows here, because the rail shows one
+// level and its labels are plain strings.
+const SWAG_STORE_SHOP_SECTIONS: PerspectiveSection[] = [
+  { id: "swag-store-shop", label: "Shop", icon: ShoppingBagIcon, path: swagStorePaths.shop },
+];
+
 // Knowledge's one item so far. Its own perspective (not nested under Me)
 // since "a company-wide learnings feed" is a destination in its own right,
 // not a personal-portal item — see `knowledge` in PERSPECTIVES below.
@@ -870,6 +879,22 @@ export const PERSPECTIVES: readonly PerspectiveDef[] = [
           path: "/amplify",
           forwardsToFirstItem: true,
           sections: AMPLIFY_SECTIONS,
+        },
+      ]
+    : []),
+  // Swag Store, held behind its preview flag until the pilot. The top-bar
+  // button opens it too. `forwardsToFirstItem` drops the Overview row: the
+  // landing route is the Shop page itself, which is the first row.
+  ...(isPreviewEnabled("swagStore")
+    ? [
+        {
+          key: "store",
+          label: "Swag Store",
+          icon: ShoppingBagIcon,
+          access: true,
+          path: swagStorePaths.shop,
+          forwardsToFirstItem: true,
+          sections: SWAG_STORE_SHOP_SECTIONS,
         },
       ]
     : []),

@@ -363,3 +363,33 @@ describe("the Marketing Ops rail", () => {
     expect(ids?.slice(0, 3)).toEqual(["sec-app-marketing-calendar", "mops-isac", "sec-app-email-workbench"]);
   });
 });
+
+describe("the Swag Store perspective", () => {
+  async function loadWithStore(on: boolean): Promise<Perspectives> {
+    vi.resetModules();
+    window.config = {
+      ...(window.config ?? {}),
+      ONE_WSO2_PREVIEW_FEATURES: on ? { swagStore: true } : {},
+    } as Window["config"];
+    return import("./perspectives");
+  }
+
+  it("is absent while its preview flag is off, so /store opens no rail", async () => {
+    const perspectives = await loadWithStore(false);
+    expect(perspectives.findPerspectiveByKey("store")).toBeUndefined();
+    expect(perspectives.findPerspectiveByPath("/store")).toBeUndefined();
+  });
+
+  it("is reachable at /store with the Shop row first once the flag is on", async () => {
+    const perspectives = await loadWithStore(true);
+    const store = perspectives.findPerspectiveByKey("store");
+    expect(store?.path).toBe("/store");
+    expect(perspectives.reachablePerspectives().map((p) => p.key)).toContain("store");
+    expect(store?.sections?.[0]).toMatchObject({ id: "swag-store-shop", label: "Shop", path: "/store" });
+  });
+
+  it("owns every store page, so product pages keep the store rail", async () => {
+    const perspectives = await loadWithStore(true);
+    expect(perspectives.findPerspectiveByPath("/store/p/hoodie")?.key).toBe("store");
+  });
+});

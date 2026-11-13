@@ -97,7 +97,14 @@ export type PreviewFeature =
    * Marketing Ops → Campaign Tracker → Pacing tab. The BudgetSyncPacingPanel
    * is still being built out; this flag hides the tab until it is ready.
    */
-  | "campaignTrackerPacing";
+  | "campaignTrackerPacing"
+  /**
+   * Swag Store, where employees spend O2C coins on WSO2 swag: its top-bar
+   * button, its launcher tile and rail, every route under `/store`, and its
+   * backend calls. Held back until the store's first release is ready for
+   * the pilot.
+   */
+  | "swagStore";
 
 /**
  * Whether a preview feature should be shown.

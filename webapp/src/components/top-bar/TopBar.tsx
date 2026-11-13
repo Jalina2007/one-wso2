@@ -30,6 +30,7 @@ import { Link as RouterLink } from "react-router";
 import { landingPath } from "@config/landingConfig";
 import PinnedTabs from "@features/pinned/components/PinnedTabs";
 import PinThisPageButton from "@features/pinned/components/PinThisPageButton";
+import StoreButton from "@features/swag-store/components/StoreButton";
 import { usePinnedEntries } from "@features/pinned/usePinned";
 import ThemeSelect from "./ThemeSelect";
 import UserProfileMenu from "./UserProfileMenu";
@@ -255,6 +256,9 @@ export default function TopBar({
       <PinnedTabs />
 
       <Header.Actions>
+        {/* Swag Store's shortcut, just left of the app switcher. Renders
+            nothing while its preview flag is off. */}
+        <StoreButton />
         <Tooltip title="Switch app">
           <IconButton
             onClick={(e) => onToggleWaffle(e.currentTarget)}

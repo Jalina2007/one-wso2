@@ -233,6 +233,7 @@ import { auditRoutes } from "@features/security/grc/modules/audit/routes";
 import { adminRoutes } from "@features/security/grc/modules/admin/routes";
 import { evidenceRoutes } from "@features/security/evidence-portal/routes";
 import { cado2Routes } from "@features/sales/cado2/routes";
+import { swagStoreShopRoutes } from "@features/swag-store/routes";
 import PartnersListPage from "@features/due-diligence/partners/pages/PartnersListPage";
 import PartnerPendingPage from "@features/due-diligence/partners/pages/PartnerPendingPage";
 import PartnerDashboardPage from "@features/due-diligence/partners/pages/PartnerDashboardPage";
@@ -1133,6 +1134,9 @@ export default function App() {
               <Route path="amplify/connect/callback" element={<LinkedInCallbackPage />} />
             </>
           )}
+          {/* Swag Store's shop, behind its preview flag like the rail entry and
+              the top-bar button. SwagStoreShell resolves access for every page. */}
+          {isPreviewEnabled("swagStore") && swagStoreShopRoutes}
           {/* Legal perspective — currently just a second entry point into Due
               Diligence, alongside Finance (see the finance/ routes below and
               DUE_DILIGENCE_APPS). */}
