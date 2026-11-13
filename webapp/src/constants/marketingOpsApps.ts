@@ -187,8 +187,8 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
       // submitting your own lists, `events-review` covers reviewing others'.
       // Neither implies the other — a reviewer holds both groups because the
       // operation's router is gated on `events`. See access_map.yaml.
-      // First, because it is the first step: a raw lead file becomes the filled
-      // List Import Template here, which is what My Submissions then takes. Same
+      // First, because it is the first step: a raw lead file is mapped onto the
+      // template columns here, and the RMM uploads the result to My Submissions. Same
       // `events` capability as My Submissions. Hidden until the
       // `eventsLeadImport` preview flag is on.
       ...(isPreviewEnabled("eventsLeadImport")
@@ -196,7 +196,7 @@ export const MARKETING_OPS_APPS: readonly MenuApp[] = [
             {
               id: "mops-events-lead-import",
               label: "Lead Import",
-              desc: "Convert a raw event lead file — any layout, any language — into the filled List Import Template.",
+              desc: "Map a raw event lead file — any layout, any language — onto the List Import Template columns.",
               requires: ["admin" as const],
               path: "/marketing-ops/events/lead-import",
             },
