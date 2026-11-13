@@ -29,7 +29,9 @@ import { defaultWalletOf, useWallets } from "../api/useWallets";
 export default function WalletBalance(): JSX.Element {
   const wallets = useWallets();
 
-  if (wallets.isPending) {
+  // A balance cached from an earlier visit may be out of date, so it stays
+  // hidden until this visit's own read settles.
+  if (wallets.isPending || (wallets.isFetching && !wallets.isFetchedAfterMount)) {
     return <Skeleton variant="rounded" width={200} height={56} aria-label="Loading your balance" />;
   }
 

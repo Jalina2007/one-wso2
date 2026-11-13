@@ -42,8 +42,9 @@ import ShopPage from "./ShopPage";
 
 const originalConfig = window.config;
 
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
+function renderPage(
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } }),
+) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/store"]}>
@@ -78,6 +79,21 @@ describe("the Shop page", () => {
     renderPage();
     expect(await screen.findByText("202.50 O2C")).toBeInTheDocument();
     expect(http.authedGet).toHaveBeenCalledWith("/wallets", "token");
+  });
+
+  it("hides a balance from an earlier visit until this visit's read arrives", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 } } });
+    client.setQueryData(["swag-store", "shopper", "wallets"], [wallet({ balance: "500.00" })]);
+    let answer: (value: unknown) => void = () => {};
+    http.authedGet.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    renderPage(client);
+
+    expect(screen.queryByText("500.00 O2C")).toBeNull();
+    expect(screen.getByLabelText("Loading your balance")).toBeInTheDocument();
+
+    answer([wallet({ balance: "410.00" })]);
+    expect(await screen.findByText("410.00 O2C")).toBeInTheDocument();
+    expect(screen.queryByText("500.00 O2C")).toBeNull();
   });
 
   it("says so when there is no wallet, rather than showing a zero balance", async () => {
