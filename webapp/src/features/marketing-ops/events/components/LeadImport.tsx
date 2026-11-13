@@ -81,6 +81,8 @@ export default function LeadImport() {
   // The checks that need no reading (type, size) run on pick, so a PDF is refused before
   // anyone presses a button.
   function pick(candidate: File | undefined) {
+    // The lead type and file are fixed while a read is running, so it opens what was chosen.
+    if (reading) return;
     setError(null);
     if (!candidate) return;
     try {
@@ -142,6 +144,7 @@ export default function LeadImport() {
             size="small"
             displayEmpty
             value={status}
+            disabled={reading}
             onChange={(e) => setStatus(e.target.value as string)}
             inputProps={{ "aria-label": "Lead type" }}
             sx={{ minWidth: 280, fontSize: 13 }}
@@ -168,8 +171,11 @@ export default function LeadImport() {
             role="button"
             tabIndex={0}
             aria-label="Choose a lead file"
-            onClick={() => input.current?.click()}
+            aria-disabled={reading}
+            onClick={() => !reading && input.current?.click()}
             onKeyDown={(e) => {
+              // Keys pressed on the Remove button inside belong to that button.
+              if (e.target !== e.currentTarget || reading) return;
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 input.current?.click();
@@ -190,7 +196,8 @@ export default function LeadImport() {
               py: file ? 2 : 4,
               px: 2,
               textAlign: "center",
-              cursor: "pointer",
+              cursor: reading ? "default" : "pointer",
+              opacity: reading ? 0.6 : 1,
               transition: "all .12s",
               "&:hover, &:focus-visible": { borderColor: "primary.main", outline: "none" },
             }}
@@ -216,6 +223,7 @@ export default function LeadImport() {
                 </Box>
                 <Button
                   aria-label="Remove the file"
+                  disabled={reading}
                   sx={{ ...quietBtn, minWidth: 0, p: 0.5 }}
                   onClick={(e) => {
                     e.stopPropagation();
