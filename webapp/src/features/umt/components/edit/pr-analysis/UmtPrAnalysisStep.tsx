@@ -70,6 +70,7 @@ import {
   writePersistedPullRequests,
 } from "../../../lib/umtLocalState";
 import { isFilesAnalysisPrAnalyzed } from "../../../lib/umtEditSteps";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../../lib/umtGrid";
 import { isNotFound } from "../../../lib/umtNotFound";
 import { SectionError } from "../../umtViewSectionPrimitives";
 import UmtAddManualFilesSection from "./UmtAddManualFilesSection";
@@ -451,6 +452,7 @@ export default function UmtPrAnalysisStep({
                 {pullRequests.length > 0 ? (
                   <DataGridComponent
                     autoHeight
+                    {...UMT_ALL_ROWS_GRID_PROPS}
                     columnHeaderHeight={40}
                     disableColumnMenu
                     disableRowSelectionOnClick

@@ -37,10 +37,18 @@ vi.mock("@context/notifications/NotificationsContext", () => ({
 }));
 
 vi.mock("../../api/useAmplifyData", () => ({
-  useAmplifyConfig: () => ({ linkedinOrgUrn: "urn:li:organization:1", privacyNoticeUrl: "https://example.test/privacy", postLinkOrigins: ["https://www.linkedin.com", "https://linkedin.com"] }),
+  useAmplifyConfig: () => ({ linkedinOrgUrn: "urn:li:organization:1", privacyNoticeUrl: "https://example.test/privacy", campaignLinkOrigins: ["https://www.linkedin.com", "https://linkedin.com"] }),
 }));
+const grants = vi.hoisted(() => ({ admin: false }));
+const retryMutate = vi.hoisted(() => vi.fn());
+const sendMutate = vi.hoisted(() => vi.fn());
 vi.mock("../../api/useAmplifyEditorAccess", () => ({
   useAmplifyDashboardAccess: () => ({ hasAccess: true, isResolving: false, retry: vi.fn() }),
+  useAmplifyGrant: () => ({ hasAccess: grants.admin, isResolving: false, retry: vi.fn() }),
+}));
+vi.mock("../../api/useAmplifyMutations", () => ({
+  useRetryAnnouncement: () => ({ mutate: retryMutate, isPending: false, isError: false }),
+  useSendAnnouncement: () => ({ mutate: sendMutate, isPending: false, isError: false }),
 }));
 vi.mock("../../api/useAmplifyDashboards", () => ({
   useDashboardPerson: () => ({
@@ -110,6 +118,68 @@ describe("OperationsBoard", () => {
     expect(screen.getByText("Updated 2:45 PM LK | Updated 5:15 AM EDT | Updated 9:15 AM UTC")).toBeTruthy();
     expect(screen.getByText(/680 employees have never connected/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /remind|retry/i })).toBeNull();
+  });
+
+  describe("a failed Novera announcement", () => {
+    const failed: DashboardOperations = {
+      ...operations,
+      campaigns: [{ ...operations.campaigns[0], announcement: { status: "FAILED" } }],
+    };
+
+    it("turns into RETRY on hover for an admin and re-queues on click", () => {
+      grants.admin = true;
+      retryMutate.mockClear();
+      render(<OperationsBoard data={failed} />);
+      const chip = screen.getByText("Failed after retries");
+      fireEvent.mouseEnter(chip);
+      expect(screen.getByText("RETRY")).toBeTruthy();
+      fireEvent.click(screen.getByText("RETRY"));
+      expect(retryMutate).toHaveBeenCalledWith({ campaignId: operations.campaigns[0].campaignId }, expect.any(Object));
+      fireEvent.mouseLeave(screen.getByText("RETRY"));
+      expect(screen.getByText("Failed after retries")).toBeTruthy();
+    });
+
+    it("tells the admin when the re-queue fails", () => {
+      grants.admin = true;
+      retryMutate.mockClear();
+      showError.mockClear();
+      render(<OperationsBoard data={failed} />);
+      fireEvent.click(screen.getByText("Failed after retries"));
+      const [, options] = retryMutate.mock.calls[0];
+      options.onError(new Error("boom"));
+      expect(showError).toHaveBeenCalledWith("Something went wrong, please try again.");
+    });
+
+    it("stays plain text for anyone without the admin grant", () => {
+      grants.admin = false;
+      render(<OperationsBoard data={failed} />);
+      fireEvent.mouseEnter(screen.getByText("Failed after retries"));
+      expect(screen.queryByText("RETRY")).toBeNull();
+      expect(screen.queryByRole("button", { name: /retry the novera/i })).toBeNull();
+    });
+  });
+
+  describe("a post that was never announced", () => {
+    const none: DashboardOperations = {
+      ...operations,
+      campaigns: [{ ...operations.campaigns[0], announcement: { status: "NONE" } }],
+    };
+
+    it("turns into SEND on hover for an admin and queues on click", () => {
+      grants.admin = true;
+      sendMutate.mockClear();
+      render(<OperationsBoard data={none} />);
+      fireEvent.mouseEnter(screen.getByText("Not announced"));
+      fireEvent.click(screen.getByText("SEND"));
+      expect(sendMutate).toHaveBeenCalledWith({ campaignId: operations.campaigns[0].campaignId }, expect.any(Object));
+    });
+
+    it("stays plain text for anyone without the admin grant", () => {
+      grants.admin = false;
+      render(<OperationsBoard data={none} />);
+      fireEvent.mouseEnter(screen.getByText("Not announced"));
+      expect(screen.queryByText("SEND")).toBeNull();
+    });
   });
 
   it("switches the points tile between month and year, and splits this month's reposts", () => {
@@ -320,16 +390,14 @@ describe("Participation", () => {
     expect(screen.getByText(/910 employees are not connected/)).toBeTruthy();
   });
 
-  it("shows one pill per BU with exactly one selected, and no All BUs pill", () => {
-    const onBu = vi.fn();
-    render(<TeamTable board={board} bus={["Engineering", "Sales"]} bu="Engineering" onBu={onBu} sort="rank" dir="asc" onSort={vi.fn()} />);
-    expect(screen.queryByText("All BUs")).toBeNull();
-    expect(screen.getByRole("button", { name: "Engineering" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Sales" }).getAttribute("aria-pressed")).toBe("false");
+  it("shows the team leaderboard with no BU pills and no BU column", () => {
+    render(<TeamTable board={board} sort="rank" dir="asc" onSort={vi.fn()} />);
+    expect(screen.getByText("Team leaderboard")).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Business unit" })).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "BU" })).toBeNull();
+    expect(screen.queryByText("Engineering")).toBeNull();
     expect(screen.getByText("Digital Engineering")).toBeTruthy();
     expect(screen.getByText(/2 people with 20 points aren't placed/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Sales" }));
-    expect(onBu).toHaveBeenCalledWith("Sales");
   });
 
   it("shows a house leaderboard like the team one, without a BU column", () => {
@@ -344,7 +412,7 @@ describe("Participation", () => {
 
   it("makes every sortable header a button with aria-sort and an arrow on the active one", () => {
     const onSort = vi.fn();
-    render(<TeamTable board={board} bus={["Engineering"]} bu="Engineering" onBu={vi.fn()} sort="points" dir="desc" onSort={onSort} />);
+    render(<TeamTable board={board} sort="points" dir="desc" onSort={onSort} />);
     const points = screen.getByRole("columnheader", { name: /Points/ });
     expect(points.getAttribute("aria-sort")).toBe("descending");
     expect(points.textContent).toContain("↓");

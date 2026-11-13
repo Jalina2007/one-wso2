@@ -72,7 +72,9 @@ export default function CallMeddpiccTab({
           ? "This call is being analysed. The evidence appears here when it's done."
           : coverage?.status === "FAILED"
             ? "MEDDPICC analysis failed for this call."
-            : "No MEDDPICC yet: this call has no transcript to analyse."}
+            : coverage?.status === "EMPTY"
+              ? "No MEDDPICC: this call's transcript is empty, so there was nothing to analyse."
+              : "No MEDDPICC yet: this call has no transcript to analyse."}
       </Typography>
     );
   }

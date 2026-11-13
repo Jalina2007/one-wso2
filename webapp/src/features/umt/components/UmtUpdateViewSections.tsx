@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { Divider, Grid, Stack, Typography } from "@wso2/oxygen-ui";
+import { Box, Divider, Grid, Stack, Typography } from "@wso2/oxygen-ui";
 import type {
   UmtHotfixInfo,
   UmtUpdateDependency,
@@ -132,6 +132,7 @@ export default function UmtUpdateViewSections({
           columns={productColumns}
           rows={update.products ?? []}
           rowKey={(row, index) => `${row.product?.id ?? row.product?.name ?? "product"}-${index}`}
+          alignTop
         />
       </DividedTableSection>
 
@@ -249,12 +250,18 @@ function HotfixSection({ query }: { query: ViewQueryState<UmtHotfixInfo> }) {
 const productColumns: DenseColumn<UmtUpdateProduct>[] = [
   { key: "product", label: "Product", flex: 0.5, render: (row) => displayValue(row.product?.name) },
   { key: "version", label: "Version", flex: 0.5, render: (row) => displayValue(row.product?.version) },
-  { key: "description", label: "Description", render: (row) => displayValue(row.description) },
-  { key: "instruction", label: "Instruction", render: (row) => displayValue(row.instruction) },
+  { key: "description", label: "Description", render: (row) => multilineValue(row.description) },
+  { key: "instruction", label: "Instruction", render: (row) => multilineValue(row.instruction) },
   { key: "test-pr", label: "Test PR", render: (row) => renderLinkValue(row.testPr) },
   {
     key: "ignore-test-reason",
     label: "Ignore Test Reason",
-    render: (row) => displayValue(row.ignoreTestReason),
+    render: (row) => multilineValue(row.ignoreTestReason),
   },
 ];
+
+// Free-text product fields are shown exactly as stored, with their line breaks
+// and leading or trailing whitespace, instead of collapsing into one line.
+function multilineValue(value: string | null | undefined) {
+  return <Box sx={{ whiteSpace: "pre-wrap" }}>{value ?? "N/A"}</Box>;
+}

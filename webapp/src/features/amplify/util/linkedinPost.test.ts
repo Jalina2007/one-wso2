@@ -15,7 +15,9 @@
 // under the License.
 
 import { describe, expect, it } from "vitest";
+import type { Campaign } from "../api/amplifyTypes";
 import {
+  campaignForShareParam,
   closesAtFromDateInput,
   dateInputValue,
   isAllowedLink,
@@ -200,3 +202,56 @@ describe("post links stay on LinkedIn", () => {
   });
 });
 
+
+describe("campaignForShareParam", () => {
+  const campaign = (id: string, resourceUrn: string): Campaign => ({
+    id,
+    resourceUrn,
+    title: `Post ${resourceUrn}`,
+    categoryCode: "PRODUCT",
+    isPriority: false,
+    tags: [],
+    opensAt: "2026-11-01T00:00:00Z",
+    closesAt: "2026-11-30T00:00:00Z",
+    status: "OPEN",
+    version: 1,
+  });
+  const open = [
+    campaign("01a1a76c-b212-77c7-bed8-5ac2ebe4efc6", "urn:li:share:7411000001"),
+    campaign("01a1a76c-b272-7128-894f-e044f9590303", "urn:li:ugcPost:7411000002"),
+  ];
+
+  it("reads a post URL against the origins it is given", () => {
+    const url = "http://localhost:19091/feed/update/urn:li:share:7411000001/";
+    expect(campaignForShareParam(url, open)).toBeNull();
+    expect(campaignForShareParam(url, open, ["http://localhost:19091"])?.id).toBe("01a1a76c-b212-77c7-bed8-5ac2ebe4efc6");
+  });
+
+  it("matches the campaign id Novera's button sends", () => {
+    expect(campaignForShareParam("01a1a76c-b212-77c7-bed8-5ac2ebe4efc6", open)?.id).toBe(
+      "01a1a76c-b212-77c7-bed8-5ac2ebe4efc6",
+    );
+  });
+
+  it("matches a bare LinkedIn post id", () => {
+    expect(campaignForShareParam("7411000001", open)?.id).toBe("01a1a76c-b212-77c7-bed8-5ac2ebe4efc6");
+  });
+
+  it("matches a post URN or a LinkedIn post URL", () => {
+    expect(campaignForShareParam("urn:li:ugcPost:7411000002", open)?.id).toBe(
+      "01a1a76c-b272-7128-894f-e044f9590303",
+    );
+    expect(
+      campaignForShareParam("https://www.linkedin.com/feed/update/urn:li:share:7411000001/", open)?.id,
+    ).toBe("01a1a76c-b212-77c7-bed8-5ac2ebe4efc6");
+  });
+
+  it("returns null for an id no open campaign names, a link off LinkedIn, or nothing", () => {
+    expect(campaignForShareParam("9999", open)).toBeNull();
+    expect(
+      campaignForShareParam("https://evil.example/feed/update/urn:li:share:7411000001/", open),
+    ).toBeNull();
+    expect(campaignForShareParam(null, open)).toBeNull();
+    expect(campaignForShareParam("", open)).toBeNull();
+  });
+});

@@ -36,6 +36,7 @@ export default function LastYearEnd({
   start,
   end,
   fullEnd,
+  earliest,
   onChange,
 }: {
   yearNumber: number;
@@ -43,6 +44,8 @@ export default function LastYearEnd({
   end: string;
   /** The end of a full 12-month year: the latest it can be. */
   fullEnd: string;
+  /** The latest-ending one-off line in the year: it can't end before it (D146). */
+  earliest?: { date: string; productName: string } | null;
   onChange: (end: string) => void;
 }): JSX.Element {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -97,7 +100,7 @@ export default function LastYearEnd({
           </Typography>
           <DateCalendar
             value={parseDateString(end)}
-            minDate={parseDateString(start) ?? undefined}
+            minDate={parseDateString(earliest && earliest.date > start ? earliest.date : start) ?? undefined}
             maxDate={parseDateString(fullEnd) ?? undefined}
             onChange={(d: Date | null) => {
               if (d && !Number.isNaN(d.getTime())) {
@@ -106,9 +109,11 @@ export default function LastYearEnd({
               }
             }}
           />
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} sx={{ px: 1, maxWidth: 320 }}>
             <Typography variant="caption" color="text.secondary">
-              Only the last year can be shorter.
+              {earliest
+                ? `Can't end before ${formatDate(earliest.date)}: ${earliest.productName} runs until then. Change its dates first.`
+                : "Only the last year can be shorter."}
             </Typography>
             {end !== fullEnd ? (
               <Button

@@ -30,7 +30,16 @@ import LegalSection, { type LegalWriting } from "./LegalSection";
  * copy is the generated order form (Document Generation, later). Under a
  * lens, `writing` puts the reviewer's editor in its place (D129).
  */
-export default function QuoteSheet({ sheet, writing }: { sheet: Sheet; writing?: LegalWriting }): JSX.Element {
+export default function QuoteSheet({
+  sheet,
+  writing,
+  showJustification = true,
+}: {
+  sheet: Sheet;
+  writing?: LegalWriting;
+  /** False where the justification is being written, below the sheet (Review, D141). */
+  showJustification?: boolean;
+}): JSX.Element {
   return (
     <Stack spacing={2.5} sx={{ minWidth: 0 }}>
       {/* Who it's for is in the page header (quote page and wizard), not here (C1, 2026-10-14). */}
@@ -41,7 +50,7 @@ export default function QuoteSheet({ sheet, writing }: { sheet: Sheet; writing?:
       <TermsSection sheet={sheet} specialSlot={writing?.special} />
       <LegalSection sheet={sheet} writing={writing} />
       <AddressesSection sheet={sheet} />
-      <JustificationSection sheet={sheet} />
+      {showJustification ? <JustificationSection sheet={sheet} /> : null}
     </Stack>
   );
 }

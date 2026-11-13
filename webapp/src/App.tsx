@@ -148,6 +148,7 @@ import PostBuilderPage from "@features/marketing-ops/design-studio/pages/PostBui
 import MarketingCalendarPage from "@features/marketing-ops/marketing-calendar/pages/MarketingCalendarPage";
 import { marketingCalendarViewRoutes } from "@features/marketing-ops/marketing-calendar/routes";
 import {
+  EventsLeadImportPage,
   EventsMinePage,
   EventsReviewPage,
 } from "@features/marketing-ops/events/pages/EventsPages";
@@ -233,6 +234,7 @@ import { auditRoutes } from "@features/security/grc/modules/audit/routes";
 import { adminRoutes } from "@features/security/grc/modules/admin/routes";
 import { evidenceRoutes } from "@features/security/evidence-portal/routes";
 import { cado2Routes } from "@features/sales/cado2/routes";
+import { swagStoreShopRoutes } from "@features/swag-store/routes";
 import PartnersListPage from "@features/due-diligence/partners/pages/PartnersListPage";
 import PartnerPendingPage from "@features/due-diligence/partners/pages/PartnerPendingPage";
 import PartnerDashboardPage from "@features/due-diligence/partners/pages/PartnerDashboardPage";
@@ -1001,6 +1003,10 @@ export default function App() {
             <Route path="events" element={<EventsSettingsPage />} />
             <Route path="events-notifications" element={<EventsNotificationsPage />} />
           </Route>
+          {/* Events → Lead Import. Held back by the `eventsLeadImport` preview flag. */}
+          {isPreviewEnabled("eventsLeadImport") && (
+            <Route path="marketing-ops/events/lead-import" element={<EventsLeadImportPage />} />
+          )}
           <Route path="marketing-ops/events/mine" element={<EventsMinePage />} />
           <Route path="marketing-ops/events/review" element={<EventsReviewPage />} />
           {/* Event Platform — event agendas, speakers and swag shops, a different
@@ -1048,7 +1054,7 @@ export default function App() {
           {/* Sales → CadO2, the quote tool. Its whole route tree, behind the `cado2`
               preview flag; Cado2Shell resolves access for every page. See
               @features/sales/cado2/routes and docs/ported-apps/cado2.md. */}
-          {isPreviewEnabled("cado2") && cado2Routes}
+          {isPreviewEnabled("quickquote") && cado2Routes}
           {/* Deals — MEDDPICC per Opportunity, from the MEDDPICC backend (shows a
               not-connected state when ONE_WSO2_ECHO_BACKEND_URL is unset). */}
           <Route path="sales/deals" element={<SalesDealsPage />} />
@@ -1136,6 +1142,9 @@ export default function App() {
               <Route path="amplify/connect/callback" element={<LinkedInCallbackPage />} />
             </>
           )}
+          {/* Swag Store's shop, behind its preview flag like the rail entry and
+              the top-bar button. SwagStoreShell resolves access for every page. */}
+          {isPreviewEnabled("swagStore") && swagStoreShopRoutes}
           {/* Legal perspective — currently just a second entry point into Due
               Diligence, alongside Finance (see the finance/ routes below and
               DUE_DILIGENCE_APPS). */}

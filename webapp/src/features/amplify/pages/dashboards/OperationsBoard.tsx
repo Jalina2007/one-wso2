@@ -14,14 +14,52 @@
 // specific language governing permissions and limitations
 
 import { useState } from "react";
+import { useNotifications } from "@context/notifications/NotificationsContext";
 import { Box, Chip, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@wso2/oxygen-ui";
-import type { DashboardOperations } from "../../api/amplifyTypes";
+import type { DashboardCampaignRow, DashboardOperations } from "../../api/amplifyTypes";
 import { useDashboardOperations } from "../../api/useAmplifyDashboards";
 import AmplifyShell from "../../components/AmplifyShell";
 import { Block, BoardState, Empty, PriorityPill, StackedBar, StatCard, StateChip } from "../../components/DashboardParts";
+import { useAmplifyGrant } from "../../api/useAmplifyEditorAccess";
+import { useRetryAnnouncement, useSendAnnouncement } from "../../api/useAmplifyMutations";
+import { describeAmplifyError } from "../../util/amplifyError";
 import { announcementLabel, commentedReposts, plainReposts, updatedStamp, deltaText, num, percentOf, windowText } from "../../util/dashboardFormat";
 
 const ANNOUNCEMENT_TONE = { SENT: "info", QUEUED: "warning", FAILED: "error", NONE: "default" } as const;
+
+/**
+ * The Novera chip. For an admin, a FAILED one turns into RETRY and a "Not announced" one into SEND on hover or
+ * keyboard focus; clicking queues the announcement and the chip reads Queued after the board reloads. Everyone
+ * else, and every other state, sees plain text.
+ */
+function AnnouncementChip({ campaignId, announcement }: { campaignId: string; announcement: DashboardCampaignRow["announcement"] }) {
+  const canAdmin = useAmplifyGrant("CAN_ADMIN").hasAccess;
+  const { showError } = useNotifications();
+  const retry = useRetryAnnouncement();
+  const send = useSendAnnouncement();
+  const [hot, setHot] = useState(false);
+  const status = announcement?.status ?? "NONE";
+  const label = announcementLabel(announcement);
+  const action = status === "FAILED" ? { verb: "RETRY", run: retry } : status === "NONE" ? { verb: "SEND", run: send } : null;
+  if (!action || !canAdmin) return <StateChip label={label} tone={ANNOUNCEMENT_TONE[status]} />;
+  const pending = action.run.isPending;
+  return (
+    <Chip
+      size="small"
+      variant="outlined"
+      color={hot && !pending ? "primary" : ANNOUNCEMENT_TONE[status]}
+      label={pending ? "Queuing…" : hot ? action.verb : label}
+      disabled={pending}
+      onClick={() => action.run.mutate({ campaignId }, { onError: (err) => showError(describeAmplifyError(err)) })}
+      onMouseEnter={() => setHot(true)}
+      onMouseLeave={() => setHot(false)}
+      onFocus={() => setHot(true)}
+      onBlur={() => setHot(false)}
+      title={action.run.isError ? `${action.verb} failed; try again` : "Put this announcement in the queue"}
+      aria-label={`${action.verb === "RETRY" ? "Retry" : "Send"} the Novera announcement. ${label}.`}
+    />
+  );
+}
 
 type PointsPeriod = "month" | "year";
 const POINTS_PERIODS: { key: PointsPeriod; label: string }[] = [
@@ -168,7 +206,7 @@ export function OperationsBoard({ data }: { data: DashboardOperations }) {
                     <TableCell align="right">{num(plainReposts(p))}</TableCell>
                     <TableCell align="right">{num(commentedReposts(p))}</TableCell>
                     <TableCell>
-                      <StateChip label={announcementLabel(p.announcement)} tone={ANNOUNCEMENT_TONE[p.announcement?.status ?? "NONE"]} />
+                      <AnnouncementChip campaignId={p.campaignId} announcement={p.announcement} />
                     </TableCell>
                   </TableRow>
                 ))}

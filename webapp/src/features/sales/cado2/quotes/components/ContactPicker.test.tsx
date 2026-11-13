@@ -144,3 +144,47 @@ describe("ContactPicker — contacts that fail to load", () => {
     expect(retry).toHaveBeenCalled();
   });
 });
+
+// D165: the legal contact often isn't on the opportunity, so it may be entered here.
+function LegalHarness(): JSX.Element {
+  const form = useForm<DraftFormValues>({ defaultValues: emptyDraftForm() });
+  return (
+    <FormProvider {...form}>
+      <ContactPicker
+        name="legalContact"
+        issueField="contacts.legal"
+        label="Legal contact (optional)"
+        opportunityId={OPP}
+        contacts={contacts}
+        loading={false}
+        allowTyped
+      />
+      <LegalValue />
+    </FormProvider>
+  );
+}
+function LegalValue(): JSX.Element {
+  const v = useWatch<DraftFormValues, "legalContact">({ name: "legalContact" });
+  return <p>legal: {[v.mode, v.name, v.email].filter(Boolean).join(" ")}</p>;
+}
+
+describe("ContactPicker — entered here (D165)", () => {
+  it("takes a legal contact typed in, or one chosen from the opportunity instead", async () => {
+    render(<LegalHarness />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Enter an email" }));
+    const card = within(screen.getByLabelText("Legal contact (optional): entered here"));
+    expect(card.queryByLabelText(/Name|Title/)).toBeNull(); // only the email matters
+    await user.type(card.getByLabelText("Email"), "legal@acme.example");
+    expect(screen.getByText("legal: manual legal@acme.example")).toBeInTheDocument();
+
+    await user.click(card.getByRole("button", { name: "Choose from the opportunity instead" }));
+    await user.click(screen.getByRole("radio", { name: "Marco Ruiz" }));
+    expect(screen.getByText(/^legal: salesforce Marco Ruiz/)).toBeInTheDocument();
+  });
+
+  it("offers typing in only where it's allowed", () => {
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: "Enter an email" })).toBeNull();
+  });
+});

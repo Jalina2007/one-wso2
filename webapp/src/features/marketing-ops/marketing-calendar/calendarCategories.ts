@@ -17,7 +17,7 @@
 import { alpha, type ChipProps } from "@wso2/oxygen-ui";
 import type { CalendarCategory } from "./marketingCalendarTypes";
 
-// The four calendar categories in the order the tabs and the legend offer them,
+// The five calendar categories in the order the tabs and the legend offer them,
 // each with the colour its chips use. Theme palette keys where the palette has a
 // fitting hue, so those chips follow the theme and light and dark mode with the
 // rest of the app.
@@ -31,6 +31,11 @@ import type { CalendarCategory } from "./marketingCalendarTypes";
 // #0f172a, and 4.17:1 for white text on it, so one value clears 3:1 in both
 // modes. `dark` is the hover fill; white on it is 6.02:1.
 const EMAIL_VIOLET: CustomHue = { main: "#9B5DE0", dark: "#7C4AB3" };
+
+// Release's rose, a hex for the same reasons. It is the app's Marketing hue in
+// config/perspectiveHues.ts, 60 degrees from Email's violet: 3.79:1 on white,
+// 4.71:1 on #0f172a, and 3.79:1 for white text on it. White on `dark` is 5.55:1.
+const RELEASE_ROSE: CustomHue = { main: "#E04A8F", dark: "#B33B72" };
 
 export interface CustomHue {
   main: string;
@@ -91,6 +96,15 @@ export const CALENDAR_CATEGORIES: readonly CategoryStyle[] = [
     noun: "emails",
     dateLabel: "Send Date",
     color: EMAIL_VIOLET,
+  },
+  {
+    key: "release",
+    segment: "releases",
+    pluralLabel: "Releases",
+    label: "Release",
+    noun: "releases",
+    dateLabel: "Marketing Launch Date",
+    color: RELEASE_ROSE,
   },
 ];
 

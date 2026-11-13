@@ -27,6 +27,11 @@ import { describeAmplifyError } from "../util/amplifyError";
 // Matches the API cap (COMMENTARY_MAX_LENGTH). LinkedIn states no limit of its own; too long returns 400.
 export const COMMENTARY_MAX_LENGTH = 3000;
 
+// Amplify posts each person's shares one at a time, a few minutes apart (amplify-jobs pacing), so a share
+// queued after others can take a while to appear on LinkedIn.
+export const SHARE_QUEUED_MESSAGE =
+  "Queued. Amplify posts your shares on LinkedIn one at a time, a few minutes apart, so this one may take a while.";
+
 /**
  * "Amplify, share this for me." A repost of WSO2's post on the employee's
  * LinkedIn. Text in "Add your thoughts" makes it a REPOST_COMMENTARY; empty
@@ -55,7 +60,7 @@ export default function ShareDialog({ campaign, onClose }: { campaign: Campaign 
       commentary ? { campaignId: campaign.id, kind: "REPOST_COMMENTARY", commentary } : { campaignId: campaign.id, kind: "REPOST" },
       {
         onSuccess: () => {
-          showSuccess("Queued. It goes out on your LinkedIn with the next Amplify run.");
+          showSuccess(SHARE_QUEUED_MESSAGE);
           close();
         },
         onError: (err) => showError(describeAmplifyError(err)),
@@ -88,7 +93,7 @@ export default function ShareDialog({ campaign, onClose }: { campaign: Campaign 
           <Divider />
           <TextField
             label="Add your thoughts (optional)"
-            placeholder="Say why this matters to you. It shows above the repost on your LinkedIn."
+            placeholder="Say why this matters to you, in your own words. It shows above the repost on your LinkedIn."
             value={thoughts}
             onChange={(e) => setThoughts(e.target.value)}
             multiline

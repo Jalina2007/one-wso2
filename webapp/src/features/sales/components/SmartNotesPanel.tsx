@@ -27,8 +27,15 @@ import { describeError } from "../util/salesError";
  * styles and sanitising its markup, to gain bullet glyphs. `white-space: pre-wrap` keeps
  * the line breaks and indentation that carry the structure, which is the part that matters.
  */
-export default function SmartNotesPanel({ meetingId }: { meetingId: number }) {
-  const { data, isLoading, error } = useSmartNotes(meetingId);
+export default function SmartNotesPanel({
+  meetingId,
+  smartNoteId,
+}: {
+  meetingId: number;
+  /** Which smart notes of the call, when it has several; the backend's first when omitted. */
+  smartNoteId?: number;
+}) {
+  const { data, isLoading, error } = useSmartNotes(meetingId, smartNoteId);
 
   // 404 means no notes are attached yet — the ordinary state of a call that just ended, or
   // one where Gemini wasn't taking notes. Not an error.

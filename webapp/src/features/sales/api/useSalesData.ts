@@ -20,7 +20,7 @@
 // cannot serve the previous user's meetings from cache — the list is filtered
 // by the caller's own access, so the rows themselves are user-specific.
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useAsgardeo } from "@asgardeo/react";
 import { authedGet } from "@api/http";
 import { useAccessToken } from "@hooks/useAccessToken";
@@ -195,14 +195,15 @@ export function useMeetingAttachments(meetingId: number | null) {
  * `retry: false` on purpose. The failures here are 404 (playback not configured, or no
  * recording attached yet) and 403 (not your meeting) 
  */
-export function useRecordingPlayback(meetingId: number | null) {
+export function useRecordingPlayback(meetingId: number | null, recordingId?: number) {
   const { getAccessToken, userSub, ready } = useSalesQueryBasis();
   return useQuery<PlaybackUrl>({
-    queryKey: ["sales-playback", userSub, meetingId],
+    // The part is in the key: each recording of a call has its own file and its own URL.
+    queryKey: ["sales-playback", userSub, meetingId, recordingId ?? null],
     enabled: ready && meetingId !== null,
     queryFn: async () =>
       authedGet<PlaybackUrl>(
-        salesServiceUrls.playback(meetingId as number),
+        salesServiceUrls.playback(meetingId as number, recordingId),
         await getAccessToken(),
       ),
     staleTime: 0,
@@ -242,27 +243,58 @@ export function useMeeting(meetingId: number | null) {
  * `retry: false`: the failures are 404 (no timed transcript for this meeting) and 403 (not
  * yours), both final.
  */
-export function useTranscript(meetingId: number | null) {
+export function useTranscript(meetingId: number | null, transcriptId?: number) {
   const { getAccessToken, userSub, ready } = useSalesQueryBasis();
-  return useQuery<Transcript>({
-    queryKey: ["sales-transcript", userSub, meetingId],
-    enabled: ready && meetingId !== null,
-    queryFn: async () =>
-      authedGet<Transcript>(salesServiceUrls.transcript(meetingId as number), await getAccessToken()),
-    // A finished meeting's transcript never changes, so it is worth holding for the visit.
-    staleTime: 30 * 60 * 1000,
-    retry: false,
+  return useQuery<Transcript>(transcriptQuery(getAccessToken, userSub, ready, meetingId, transcriptId));
+}
+
+/**
+ * Every transcript of a call, one query each, in the order given.
+ *
+ * Shares its cache with useTranscript: the same part fetched by the timeline and the
+ * Transcript tab is one request. An empty list asks for the backend's default transcript,
+ * as a meeting from before parts were listed had only that one.
+ */
+export function useTranscripts(meetingId: number | null, transcriptIds: readonly number[]) {
+  const { getAccessToken, userSub, ready } = useSalesQueryBasis();
+  const ids: (number | undefined)[] = transcriptIds.length > 0 ? [...transcriptIds] : [undefined];
+  return useQueries({
+    queries: ids.map((id) => transcriptQuery(getAccessToken, userSub, ready, meetingId, id)),
   });
 }
 
-/** The smart notes, as plain text. Same gating and reasoning as useTranscript. */
-export function useSmartNotes(meetingId: number | null) {
-  const { getAccessToken, userSub, ready } = useSalesQueryBasis();
-  return useQuery<SmartNotes>({
-    queryKey: ["sales-smart-notes", userSub, meetingId],
+function transcriptQuery(
+  getAccessToken: () => Promise<string>,
+  userSub: string | undefined,
+  ready: boolean,
+  meetingId: number | null,
+  transcriptId: number | undefined,
+) {
+  return {
+    queryKey: ["sales-transcript", userSub, meetingId, transcriptId ?? null],
     enabled: ready && meetingId !== null,
     queryFn: async () =>
-      authedGet<SmartNotes>(salesServiceUrls.smartNotes(meetingId as number), await getAccessToken()),
+      authedGet<Transcript>(
+        salesServiceUrls.transcript(meetingId as number, transcriptId),
+        await getAccessToken(),
+      ),
+    // A finished meeting's transcript never changes, so it is worth holding for the visit.
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  };
+}
+
+/** One smart notes of the call, as plain text. Same gating and reasoning as useTranscript. */
+export function useSmartNotes(meetingId: number | null, smartNoteId?: number) {
+  const { getAccessToken, userSub, ready } = useSalesQueryBasis();
+  return useQuery<SmartNotes>({
+    queryKey: ["sales-smart-notes", userSub, meetingId, smartNoteId ?? null],
+    enabled: ready && meetingId !== null,
+    queryFn: async () =>
+      authedGet<SmartNotes>(
+        salesServiceUrls.smartNotes(meetingId as number, smartNoteId),
+        await getAccessToken(),
+      ),
     staleTime: 30 * 60 * 1000,
     retry: false,
   });

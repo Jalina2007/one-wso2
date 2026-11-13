@@ -16,7 +16,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { QuoteListItem } from "@features/sales/cado2/quotes/api/quoteTypes";
-import { changedAgo, filterQuotes, groupQuotes, sortQuotes } from "./quoteListModel";
+import { changedAgo, groupQuotes } from "./quoteListModel";
 
 const now = new Date("2026-10-01T12:00:00Z");
 const q = (id: number, over: Partial<QuoteListItem>): QuoteListItem => ({
@@ -38,25 +38,8 @@ const q = (id: number, over: Partial<QuoteListItem>): QuoteListItem => ({
   updatedAt: "2026-10-01T11:00:00Z",
   ...over,
 });
-const items = [
-  q(1, {}),
-  q(2, { status: "SUBMITTED", expiryDate: "2026-10-05", accountName: "Northwind Logistics", opportunityName: "API Platform 2027" }),
-  q(3, { status: "SUBMITTED", expiryDate: "2026-10-31" }),
-  q(4, { status: "SUBMITTED", expiryDate: "2026-09-20" }),
-  q(5, { status: "RECALLED" }),
-  q(6, { status: "CLOSED" }),
-  q(7, { status: "APPROVED", expiryDate: "2026-10-03" }),
-  q(8, { status: "RETURNED" }),
-];
 
 describe("My Quotes model", () => {
-  it("searches quote number, account and opportunity, ignoring case", () => {
-    expect(filterQuotes(items, "northWIND").map((x) => x.id)).toEqual([2]);
-    expect(filterQuotes(items, "api platform").map((x) => x.id)).toEqual([2]);
-    expect(filterQuotes(items, "Q-26-00005").map((x) => x.id)).toEqual([5]);
-    expect(filterQuotes(items, "  ")).toHaveLength(8);
-  });
-
   it("says when a quote last changed", () => {
     expect(changedAgo("2026-10-01T11:59:40Z", now)).toBe("just now");
     expect(changedAgo("2026-10-01T11:55:00Z", now)).toBe("5 min ago");
@@ -68,11 +51,6 @@ describe("My Quotes model", () => {
 
 // D70: the Quotes page.
 describe("Quotes page model", () => {
-  it("searches owners too", () => {
-    const mixed = [q(1, {}), q(2, { ownerEmail: "nimesha@wso2.com" })];
-    expect(filterQuotes(mixed, "nimesha").map((x) => x.id)).toEqual([2]);
-  });
-
   it("groups by account, then opportunity, in list order, naming each opportunity's primary quote", () => {
     const groups = groupQuotes([
       q(1, {}),
@@ -90,21 +68,5 @@ describe("Quotes page model", () => {
       ["Acme IAM", [3], 3],
     ]);
     expect(groups[1].opportunities[0].primary).toBeUndefined();
-  });
-});
-
-describe("sortQuotes", () => {
-  const rows = [
-    q(1, { createdAt: "2026-10-03T00:00:00Z", accountName: "beta" }),
-    q(2, { createdAt: "2026-10-01T00:00:00Z", accountName: "Alpha" }),
-    q(3, { createdAt: "2026-10-02T00:00:00Z", accountName: "alpha" }),
-  ];
-  const ids = (s: Parameters<typeof sortQuotes>[1]) => sortQuotes(rows, s).map((x) => x.id);
-
-  it("sorts either way on a column; text ignores case and ties keep the list's order", () => {
-    expect(ids({ key: "created", dir: "asc" })).toEqual([2, 3, 1]);
-    expect(ids({ key: "created", dir: "desc" })).toEqual([1, 3, 2]);
-    expect(ids({ key: "account", dir: "asc" })).toEqual([2, 3, 1]);
-    expect(ids({ key: "account", dir: "desc" })).toEqual([1, 2, 3]);
   });
 });

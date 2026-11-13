@@ -20,13 +20,14 @@
 
 import type {
   AuditEvent,
+  QuoteView,
   ContactView,
   AddressView,
   DraftResponse,
   OpportunityQuote,
   VersionStatus,
 } from "@features/sales/cado2/quotes/api/quoteTypes";
-import { BILLING_LABEL, durationText, formatDate } from "@features/sales/cado2/quotes/form/draftForm";
+import { BILLING_LABEL, durationText, formatDate, commissionRatesText } from "@features/sales/cado2/quotes/form/draftForm";
 import { formatMoney } from "@features/sales/cado2/utils/money";
 import { legalPlainText } from "@features/sales/cado2/utils/legalRichText";
 import { roleLabel } from "@features/sales/cado2/approvals/model/approvalText";
@@ -134,8 +135,14 @@ export function compareVersions(a: DraftResponse, b: DraftResponse): CompareRow[
     (v.subscriptionStartDate && v.subscriptionEndDate && durationText(v.subscriptionStartDate, v.subscriptionEndDate)) || DASH;
   add("Products", "Subscription term", termText(va), termText(vb));
   add("Products", "End date", formatDate(va.subscriptionEndDate), formatDate(vb.subscriptionEndDate));
-  const commission = (p: string | null | undefined) => (p ? `${Number(p)}%` : DASH);
-  add("Products", "Partner commission", commission(va.partnerCommissionPercent), commission(vb.partnerCommissionPercent));
+  // One rate, or a rate per year (D151).
+  const commission = (v: typeof va) =>
+    v.partnerCommissionByYear?.length
+      ? commissionRatesText(v.partnerCommissionByYear)
+      : v.partnerCommissionPercent
+        ? `${Number(v.partnerCommissionPercent)}%`
+        : DASH;
+  add("Products", "Partner commission", commission(va), commission(vb));
 
   const la = keyed(va.lines);
   const lb = keyed(vb.lines);
@@ -166,6 +173,7 @@ export function compareVersions(a: DraftResponse, b: DraftResponse): CompareRow[
   add("Commercials", "Ship to", address(a, "SHIP_TO"), address(b, "SHIP_TO"));
   add("Commercials", "Billing contact", contact(a, "BILLING"), contact(b, "BILLING"));
   add("Commercials", "Security contact", contact(a, "SECURITY"), contact(b, "SECURITY"));
+  add("Commercials", "Legal contact", contact(a, "LEGAL"), contact(b, "LEGAL"));
   add("Commercials", "Justification", text(va.justification), text(vb.justification));
   // Section 04: standard, or non-standard written by Legal; then the partner
   // agreement the AM chose, and the special terms.
@@ -222,6 +230,18 @@ export function groupHistory(events: readonly AuditEvent[]): HistoryEntry[] {
 const roleOf = (meta: Record<string, unknown>) => (typeof meta.role === "string" ? roleLabel(meta.role) : "An approver");
 
 /** A primary quote named for others (D68): "Q-26-00031 (nimesha@wso2.com)", or "A draft by …" before its first submit. */
+/**
+ * Whether this version of the quote was synced to Salesforce, so it can't be
+ * deleted (2026-11-11): its changes to the opportunity would be left with no
+ * trace. A later draft that was never synced still can.
+ */
+export function syncedDraft(q: Pick<QuoteView, "sfSyncedAt" | "sfSyncedVersion">, versionNumber: number): boolean {
+  return Boolean(q.sfSyncedAt) && (q.sfSyncedVersion == null || q.sfSyncedVersion === versionNumber);
+}
+
+/** Why a synced draft can't be deleted, as the menu says it. */
+export const SYNCED_DRAFT_NOTE = "Synced to Salesforce: close the quote instead";
+
 export function primaryLabel(q: Pick<OpportunityQuote, "quoteNumber" | "ownerEmail">): string {
   return q.quoteNumber ? `${q.quoteNumber} (${q.ownerEmail})` : `A draft by ${q.ownerEmail}`;
 }
@@ -323,8 +343,20 @@ function eventText({ event: e, count }: HistoryEntry): string {
     }
     // D128: written by Deal Desk during its approval.
     case "SPECIAL_TERMS_WRITTEN":
+      // D139: Deal Desk's override (metadata.override); before it, D128's writing (metadata.specialTerms).
+      if (meta.override === false) return `Deal Desk went back to the AM's special terms on ${v.toLowerCase()}`;
+      if (meta.override === true) return `Deal Desk overrode the special terms of ${v.toLowerCase()}`;
       return meta.specialTerms === false ? `Deal Desk removed the special terms of ${v.toLowerCase()}` : `Deal Desk wrote the special terms of ${v.toLowerCase()}`;
-    default:
-      return e.eventType;
+    case "LEGAL_TERMS_WRITTEN": {
+      // Which texts Legal wrote: the governing terms of each product type, and the special terms.
+      const parts = [meta.onPrem === true ? "on-premises terms" : "", meta.saas === true ? "SaaS terms" : "", meta.special === true ? "special terms" : ""].filter(Boolean);
+      const what = parts.length === 0 ? "terms" : parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+      return `Legal wrote the ${what} of ${v.toLowerCase()}`;
+    }
+    default: {
+      // Never a raw code: an event this screen doesn't know yet, "SOME_NEW_EVENT", reads "Some new event".
+      const code: string = e.eventType;
+      return code.charAt(0) + code.slice(1).toLowerCase().replace(/_/g, " ");
+    }
   }
 }

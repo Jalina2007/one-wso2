@@ -56,7 +56,7 @@ describe("the All view", () => {
   });
 
   it("writes no ?show= when every category is on, and keeps the legend's order otherwise", () => {
-    expect(showParamValue(["email", "content", "social", "event"])).toBeNull();
+    expect(showParamValue(["email", "content", "social", "event", "release"])).toBeNull();
     expect(showParamValue(["email", "content"])).toBe("content,email");
   });
 });
@@ -109,6 +109,14 @@ describe("a type tab", () => {
   it("treats a value found only in the data as a known option", () => {
     expect(shown("email", "region=oceania")).toEqual(["83:email"]);
   });
+
+  it("filters releases by BU, product name, release type and tier", () => {
+    expect(shown("release", "")).toEqual(["88:release", "89:release", "91:release"]);
+    expect(shown("release", "bu=Choreo,Integration")).toEqual(["89:release", "91:release"]);
+    expect(shown("release", "product=API Manager")).toEqual(["88:release"]);
+    expect(shown("release", "release-type=LTS")).toEqual(["88:release", "91:release"]);
+    expect(shown("release", "release-type=LTS&tier=Tier 4")).toEqual(["91:release"]);
+  });
 });
 
 describe("filter options", () => {
@@ -121,6 +129,11 @@ describe("filter options", () => {
   it("keep the fixed list when the data has nothing new", () => {
     const handle = CATEGORY_FILTERS.social.find((filter) => filter.param === "handle")!;
     expect(filterOptions(handle, SAMPLE_ITEMS)).toEqual(["WSO2", "OpenChoreo"]);
+  });
+
+  it("offer the month's product names, which have no fixed list", () => {
+    const product = CATEGORY_FILTERS.release.find((filter) => filter.param === "product")!;
+    expect(filterOptions(product, SAMPLE_ITEMS)).toEqual(["API Manager", "Choreo", "Integrator"]);
   });
 
   it("come from the tab's own items", () => {

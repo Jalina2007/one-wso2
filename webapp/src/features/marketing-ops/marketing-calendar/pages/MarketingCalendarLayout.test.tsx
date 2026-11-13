@@ -75,7 +75,7 @@ describe("tabs", () => {
   it("offers All and one tab per category, All lit at the calendar's own path", () => {
     renderCalendar(`${MARKETING_CALENDAR_PATH}?month=2026-11`);
     const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
-    expect(tabs).toEqual(["All", "Events", "Content", "Social", "Email"]);
+    expect(tabs).toEqual(["All", "Events", "Content", "Social", "Email", "Releases"]);
     expect(screen.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
   });
 
@@ -136,10 +136,10 @@ describe("the All view's legend (?show=)", () => {
     expect(onGrid(SOCIAL_POST)).toBeNull();
   });
 
-  it("writes a toggle back to the URL, and drops ?show= once all four are on", async () => {
+  it("writes a toggle back to the URL, and drops ?show= once every category is on", async () => {
     const user = renderCalendar(`${MARKETING_CALENDAR_PATH}?month=2026-11`);
     await user.click(screen.getByRole("button", { name: "Events" }));
-    expect(url()).toBe(`${MARKETING_CALENDAR_PATH}?month=2026-11&show=content,social,email`);
+    expect(url()).toBe(`${MARKETING_CALENDAR_PATH}?month=2026-11&show=content,social,email,release`);
     await user.click(screen.getByRole("button", { name: "Events" }));
     expect(url()).toBe(`${MARKETING_CALENDAR_PATH}?month=2026-11`);
   });

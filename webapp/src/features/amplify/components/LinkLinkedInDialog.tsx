@@ -54,7 +54,7 @@ export default function LinkLinkedInDialog({
   const start = useStartLinkedInConnect();
   const decline = useDeclineLinkedInConsent();
   const { showError } = useNotifications();
-  const { privacyNoticeUrl, postLinkOrigins } = useAmplifyConfig();
+  const { privacyNoticeUrl, campaignLinkOrigins } = useAmplifyConfig();
   const [declined, setDeclined] = useState(false);
   const [profileUrl, setProfileUrl] = useState("");
   const busy = start.isPending || decline.isPending;
@@ -78,7 +78,7 @@ export default function LinkLinkedInDialog({
       {
         onSuccess: (auth) => {
           // Only ever follow a LinkedIn (or, in dev, the listed mock) sign-in page.
-          if (auth?.authorizationUrl && isAllowedLink(auth.authorizationUrl, postLinkOrigins)) window.location.assign(auth.authorizationUrl);
+          if (auth?.authorizationUrl && isAllowedLink(auth.authorizationUrl, campaignLinkOrigins)) window.location.assign(auth.authorizationUrl);
           else showError("Something went wrong, please try again.");
         },
         onError: (err) => showError(describeAmplifyError(err)),

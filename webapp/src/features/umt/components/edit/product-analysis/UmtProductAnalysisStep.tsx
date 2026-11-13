@@ -53,6 +53,7 @@ import { useUmtProductAnalysis } from "../../../api/useUmtUpdateViewData";
 import { UmtPartialProductAnalysisSaveError, useUmtSaveProductAnalysis } from "../../../api/useUmtProductAnalysis";
 import { groupFileOperationsByType } from "../../../lib/umtPrAnalysis";
 import { umtLifecycleState } from "../../../lib/umtLifecycleState";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -389,6 +390,7 @@ export default function UmtProductAnalysisStep({
           <Typography variant="h6">Added Products</Typography>
           <DataGridComponent
             autoHeight
+            {...UMT_ALL_ROWS_GRID_PROPS}
             columnHeaderHeight={40}
             disableColumnMenu
             disableColumnResize
@@ -641,6 +643,7 @@ function FileTable({ rows }: { rows: UmtFileOperation[] }) {
     <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden" }}>
       <DataGridComponent
         autoHeight
+        {...UMT_ALL_ROWS_GRID_PROPS}
         columnHeaderHeight={40}
         columns={gridColumns}
         disableColumnMenu

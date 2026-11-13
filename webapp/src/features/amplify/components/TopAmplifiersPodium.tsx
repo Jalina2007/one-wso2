@@ -15,7 +15,7 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Avatar, Box, Typography } from "@wso2/oxygen-ui";
+import { Avatar, Box, Tooltip, Typography } from "@wso2/oxygen-ui";
 
 export interface Amplifier {
   name: string;
@@ -23,6 +23,18 @@ export interface Amplifier {
   avatarUrl?: string;
   /** Shown in place of the plain name, e.g. a link that opens the person's popup. */
   nameNode?: ReactNode;
+  /** When they reached their points (ISO time). Sent only to PO, Marketing and Admin; shown on hover over the points. */
+  reachedAt?: string | null;
+}
+
+/** "Reached 45 pts: Nov 10, 2026, 2:36:49 AM CST (2026-11-10 08:36:49 UTC)", or "" when the time is missing or bad. */
+function reachedLabel(points: number, reachedAt?: string | null): string {
+  if (!reachedAt) return "";
+  const d = new Date(reachedAt);
+  if (Number.isNaN(d.getTime())) return "";
+  const local = d.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "long" });
+  const utc = d.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+  return `Reached ${points.toLocaleString()} pts: ${local} (${utc})`;
 }
 
 interface TopAmplifiersPodiumProps {
@@ -109,6 +121,7 @@ function PodiumSlot({ rank, person }: { rank: Rank; person: Amplifier }) {
   const medal = MEDALS[rank];
   const size = AVATAR_SIZE[rank];
   const ringWidth = rank === 1 ? 6 : 5;
+  const reached = reachedLabel(person.points, person.reachedAt);
   const parts = person.name.trim().split(/\s+/).filter(Boolean);
   const initials =
     ((parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "")).toUpperCase() || "?";
@@ -168,28 +181,33 @@ function PodiumSlot({ rank, person }: { rank: Rank; person: Amplifier }) {
         {person.nameNode ?? person.name}
       </Typography>
 
-      {/* Points: the hero number */}
-      <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.5, mb: 1.5 }}>
-        <Typography
-          component="span"
-          sx={{
-            fontSize: rank === 1 ? { xs: 40, sm: 64 } : { xs: 30, sm: 44 },
-            fontWeight: 800,
-            lineHeight: 1,
-            letterSpacing: "-0.02em",
-            color: medal.solid,
-            fontVariantNumeric: "tabular-nums",
-          }}
+      {/* Points: the hero number. PO, Marketing and Admin get the time they reached it on hover. */}
+      <Tooltip title={reached} disableHoverListener={!reached} arrow placement="top">
+        <Box
+          tabIndex={reached ? 0 : undefined}
+          sx={{ display: "flex", alignItems: "baseline", gap: 0.5, mb: 1.5, cursor: reached ? "help" : undefined }}
         >
-          {person.points.toLocaleString()}
-        </Typography>
-        <Typography
-          component="span"
-          sx={{ fontSize: { xs: 12, sm: 14 }, color: "text.secondary" }}
-        >
-          pts
-        </Typography>
-      </Box>
+          <Typography
+            component="span"
+            sx={{
+              fontSize: rank === 1 ? { xs: 40, sm: 64 } : { xs: 30, sm: 44 },
+              fontWeight: 800,
+              lineHeight: 1,
+              letterSpacing: "-0.02em",
+              color: medal.solid,
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {person.points.toLocaleString()}
+          </Typography>
+          <Typography
+            component="span"
+            sx={{ fontSize: { xs: 12, sm: 14 }, color: "text.secondary" }}
+          >
+            pts
+          </Typography>
+        </Box>
+      </Tooltip>
 
       {/* Pedestal */}
       <Box

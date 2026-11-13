@@ -19,9 +19,9 @@ import type { CalendarItem, CalendarItemsResponse } from "../marketingCalendarTy
 // Items copied from a real GET /api/marketing-calendar/items response for the
 // November 2026 grid (26 Oct to 6 Dec), against the local test project. Chosen to
 // cover each category's fields, the gaps (an event with no dates, a social post
-// with no details, an email with no BU), a Salesforce Campaign as a URL and as
-// text, several BUs and Regions on one item, and values missing from the fixed
-// option lists (BU "NEW", Region "oceania").
+// with no details, an email with no BU, a release with no website date), a
+// Salesforce Campaign as a URL and as text, several BUs and Regions on one item,
+// and values missing from the fixed option lists (BU "NEW", Region "oceania").
 
 export const SAMPLE_ITEMS: CalendarItem[] = [
   {
@@ -231,6 +231,59 @@ export const SAMPLE_ITEMS: CalendarItem[] = [
       sender: "WSO2 BU team",
       bodyCopy:
         "Hi [Name],\n\nFake body copy for calendar testing.\nIt runs over several lines.\n\nBest regards,\nThe WSO2 Team",
+    },
+    status: "Planned",
+  },
+  {
+    id: "Plan2-Go/marketing-team#88:release",
+    title: "[Release-LTS] API Manager 4.6",
+    url: "https://github.com/Plan2-Go/marketing-team/issues/88",
+    category: "release",
+    date: "2026-11-24",
+    state: "open",
+    bu: ["API"],
+    region: ["Global"],
+    details: {
+      productName: "API Manager",
+      version: "4.6",
+      releaseType: "LTS",
+      tier: "Tier 1",
+      websiteDate: "2026-11-19",
+    },
+    status: "Planned",
+  },
+  {
+    id: "Plan2-Go/marketing-team#89:release",
+    title: "[Release-STS] Choreo 2.1",
+    url: "https://github.com/Plan2-Go/marketing-team/issues/89",
+    category: "release",
+    date: "2026-11-09",
+    state: "open",
+    bu: ["Choreo"],
+    region: ["Global"],
+    details: {
+      productName: "Choreo",
+      version: "2.1",
+      releaseType: "STS",
+      tier: "Tier 3",
+      websiteDate: "2026-11-05",
+    },
+    status: "Planned",
+  },
+  {
+    id: "Plan2-Go/marketing-team#91:release",
+    title: "[Release-LTS] Integrator 5.2",
+    url: "https://github.com/Plan2-Go/marketing-team/issues/91",
+    category: "release",
+    date: "2026-12-01",
+    state: "open",
+    bu: ["Integration"],
+    region: ["Europe"],
+    details: {
+      productName: "Integrator",
+      version: "5.2",
+      releaseType: "LTS",
+      tier: "Tier 4",
     },
     status: "Planned",
   },

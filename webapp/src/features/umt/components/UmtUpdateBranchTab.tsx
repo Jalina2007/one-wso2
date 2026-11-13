@@ -58,6 +58,7 @@ import {
   umtReleaseTag,
 } from "../lib/umtBranches";
 import { umtIssueLink } from "../lib/umtIssueLink";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -453,6 +454,7 @@ function BranchGrid({
       <DataGridComponent
         aria-label={ariaLabel}
         autoHeight
+        {...UMT_ALL_ROWS_GRID_PROPS}
         columnHeaderHeight={40}
         columns={columns}
         columnVisibilityModel={columnVisibilityModel}

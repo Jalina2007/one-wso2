@@ -36,10 +36,9 @@ export const ADMIN_SECTION_GROUPS: readonly AdminSectionGroup[] = [
     // What can be sold, and at what price.
     label: "Products & Pricing",
     sections: [
-      { id: "product-categories", label: "Product Categories" },
-      { id: "product-bundles", label: "Product Bundles" },
+      { id: "product-classifications", label: "Product Classifications" },
+      { id: "support-plans", label: "Support Plans" },
       { id: "pricing-formulas", label: "Pricing Formulas" },
-      { id: "currencies", label: "Currencies" },
     ],
   },
   {

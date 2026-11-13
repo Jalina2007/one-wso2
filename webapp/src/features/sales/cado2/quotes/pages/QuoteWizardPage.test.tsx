@@ -31,6 +31,8 @@ const mutation = () => ({ mutateAsync: vi.fn(), reset: vi.fn(), isPending: false
 const save = mutation();
 const submit = mutation();
 const sync = mutation();
+// What a sync would change (D138); set per test.
+const syncPreview = { ...idle(), data: undefined as unknown };
 const deleteDraft = { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null };
 
 // Mocked so the wizard is tested without Asgardeo, the network or window.config.
@@ -53,6 +55,8 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => {
     useOpportunityQuotes: () => idle(),
     useAccountOpportunities: () => idle(),
     useOpportunityContacts: () => idle(),
+    usePreviousOpportunityLines: () => [],
+    useOpportunityState: () => idle(),
     useProducts: () => idle(),
     usePricebooks: () => ({
       ...idle(),
@@ -73,11 +77,14 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => {
       },
     }),
     useQuoteSettings: () => ({ ...idle(), data: { validityDays: 30 } }),
+    useProductsByIds: () => ({ ...idle(), data: [] }),
+    usePricingFormulas: () => ({ ...idle(), data: [] }),
     usePricingPreview: () => pricing,
     useQuoteVersion: () => version,
     useSaveDraft: () => save,
     useSubmitVersion: () => submit,
     useSyncToSalesforce: () => sync,
+    useSyncPreview: () => syncPreview,
     useDeleteDraft: () => deleteDraft,
   };
 });
@@ -86,18 +93,12 @@ const approvals = { data: undefined as unknown, isFetching: false, error: null }
 vi.mock("@features/sales/cado2/utils/scroll", () => ({ scrollMainToTop: vi.fn() }));
 vi.mock("@features/sales/cado2/approvals/api/useApprovalApi", () => ({ useApprovalPreview: () => approvals }));
 
-/** Picks an item from the header's "⋯ More actions" (2026-10-13). */
-async function pickAction(user: ReturnType<typeof userEvent.setup>, name: string): Promise<void> {
-  await user.click(screen.getByRole("button", { name: "More actions" }));
-  await user.click(screen.getByRole("menuitem", { name: new RegExp(`^${name}`) }));
-}
-
 function renderWizard() {
   return render(
     <Cado2ToastProvider>
-      <MemoryRouter initialEntries={["/sales/cado2/quotes/5/versions/1/edit"]}>
+      <MemoryRouter initialEntries={["/sales/quickquote/quotes/5/versions/1/edit"]}>
         <Routes>
-          <Route path="sales/cado2/quotes/:quoteId/versions/:version/edit" element={<QuoteWizardPage />} />
+          <Route path="sales/quickquote/quotes/:quoteId/versions/:version/edit" element={<QuoteWizardPage />} />
         </Routes>
       </MemoryRouter>
     </Cado2ToastProvider>,
@@ -108,10 +109,10 @@ function renderWizard() {
 function renderAt() {
   return render(
     <Cado2ToastProvider>
-      <MemoryRouter initialEntries={["/sales/cado2/quotes/5/versions/1/edit"]}>
+      <MemoryRouter initialEntries={["/sales/quickquote/quotes/5/versions/1/edit"]}>
         <Routes>
-          <Route path="sales/cado2/quotes/:quoteId/versions/:version/edit" element={<QuoteWizardPage />} />
-          <Route path="sales/cado2/quotes/:quoteId/:tab" element={<LandedOn />} />
+          <Route path="sales/quickquote/quotes/:quoteId/versions/:version/edit" element={<QuoteWizardPage />} />
+          <Route path="sales/quickquote/quotes/:quoteId/:tab" element={<LandedOn />} />
         </Routes>
       </MemoryRouter>
     </Cado2ToastProvider>,
@@ -131,6 +132,7 @@ beforeEach(() => {
   Object.assign(save, mutation());
   Object.assign(submit, mutation());
   Object.assign(sync, mutation());
+  Object.assign(syncPreview, { data: undefined, isPending: false, error: null });
 });
 
 describe("QuoteWizardPage — drafts", () => {
@@ -142,7 +144,7 @@ describe("QuoteWizardPage — drafts", () => {
     expect(screen.getByText("Draft · Version 1")).toBeInTheDocument(); // a draft: no number yet
     expect(screen.getByRole("heading", { level: 1, name: "Acme Corp" })).toBeInTheDocument();
     expect(screen.getByText("Draft")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Back to quote/ })).toHaveAttribute("href", "/sales/cado2/quotes/5/quote");
+    expect(screen.getByRole("link", { name: /Back to quote/ })).toHaveAttribute("href", "/sales/quickquote/quotes/5/quote");
     const summary = within(screen.getByRole("complementary", { name: "Quote summary" }));
     expect(summary.getByText("Acme Corp")).toBeInTheDocument();
     expect(summary.getByText("Acme APIM renewal")).toBeInTheDocument();
@@ -365,7 +367,7 @@ describe("QuoteWizardPage — review and submit", () => {
 
     expect(save.mutateAsync).not.toHaveBeenCalled();
     expect(submit.mutateAsync).toHaveBeenCalledWith({ quoteId: 5, version: 1, expectedUpdatedAt: "2026-09-25T10:00:00.123Z" });
-    expect(await screen.findByText("quote page /sales/cado2/quotes/5/quote")).toBeInTheDocument();
+    expect(await screen.findByText("quote page /sales/quickquote/quotes/5/quote")).toBeInTheDocument();
     expect(await screen.findByRole("status")).toHaveTextContent("Version 1 submitted for approval");
   });
 
@@ -432,7 +434,7 @@ describe("QuoteWizardPage — review and submit", () => {
     Object.assign(version, { data: submitted });
     renderAt();
 
-    expect(screen.getByText("quote page /sales/cado2/quotes/5/quote")).toBeInTheDocument();
+    expect(screen.getByText("quote page /sales/quickquote/quotes/5/quote")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
   });
 
@@ -447,7 +449,7 @@ describe("QuoteWizardPage — review and submit", () => {
     });
     renderAt();
 
-    expect(screen.getByText("quote page /sales/cado2/quotes/5/quote?version=1")).toBeInTheDocument();
+    expect(screen.getByText("quote page /sales/quickquote/quotes/5/quote?version=1")).toBeInTheDocument();
   });
 });
 
@@ -455,16 +457,16 @@ describe("QuoteWizardPage — new quote", () => {
   it("shows one status label and asks for the account first", () => {
     Object.assign(version, { data: undefined, isPending: false });
     render(
-      <MemoryRouter initialEntries={["/sales/cado2/quotes/new"]}>
+      <MemoryRouter initialEntries={["/sales/quickquote/quotes/new"]}>
         <Routes>
-          <Route path="sales/cado2/quotes/new" element={<QuoteWizardPage />} />
+          <Route path="sales/quickquote/quotes/new" element={<QuoteWizardPage />} />
         </Routes>
       </MemoryRouter>,
     );
 
     expect(screen.getByRole("heading", { level: 1, name: "New Quote" })).toBeInTheDocument();
     expect(screen.getByText("Editing")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Quotes/ })).toHaveAttribute("href", "/sales/cado2/quotes");
+    expect(screen.getByRole("link", { name: /Quotes/ })).toHaveAttribute("href", "/sales/quickquote/quotes");
     expect(screen.queryByText(/Start by choosing/)).toBeNull(); // no hint in the title
     expect(screen.getByText("Choose the Salesforce account this quote is for.")).toBeInTheDocument();
     expect(screen.getByText("Not saved yet")).toBeInTheDocument();
@@ -505,9 +507,9 @@ describe("QuoteWizardPage — delete a draft", () => {
   it("has no Delete draft before the first save, or on a submitted version", () => {
     Object.assign(version, { data: undefined, isPending: false });
     render(
-      <MemoryRouter initialEntries={["/sales/cado2/quotes/new"]}>
+      <MemoryRouter initialEntries={["/sales/quickquote/quotes/new"]}>
         <Routes>
-          <Route path="sales/cado2/quotes/new" element={<QuoteWizardPage />} />
+          <Route path="sales/quickquote/quotes/new" element={<QuoteWizardPage />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -520,7 +522,7 @@ describe("QuoteWizardPage — lifecycle", () => {
     Object.assign(version, { data: { ...submitted, version: { ...submitted.version, status: "RECALLED" } } });
     renderAt();
 
-    expect(screen.getByText("quote page /sales/cado2/quotes/5/quote")).toBeInTheDocument();
+    expect(screen.getByText("quote page /sales/quickquote/quotes/5/quote")).toBeInTheDocument();
   });
 
   it("says where a revised draft was copied from", () => {
@@ -535,9 +537,9 @@ describe("QuoteWizardPage — lifecycle", () => {
     Object.assign(version, { data: ready });
     render(
       <Cado2ToastProvider>
-        <MemoryRouter initialEntries={[{ pathname: "/sales/cado2/quotes/5/versions/1/edit", state: { clonedFrom: "Q-26-00003 v2" } }]}>
+        <MemoryRouter initialEntries={[{ pathname: "/sales/quickquote/quotes/5/versions/1/edit", state: { clonedFrom: "Q-26-00003 v2" } }]}>
           <Routes>
-            <Route path="sales/cado2/quotes/:quoteId/versions/:version/edit" element={<QuoteWizardPage />} />
+            <Route path="sales/quickquote/quotes/:quoteId/versions/:version/edit" element={<QuoteWizardPage />} />
           </Routes>
         </MemoryRouter>
       </Cado2ToastProvider>,
@@ -592,8 +594,41 @@ describe("QuoteWizardPage — unsaved changes when leaving", () => {
 });
 
 // D77: the primary quote's "Sync to Salesforce" on Products & Pricing.
+// D141: the justification is written on Review, just above Submit; required
+// with a discount (D58), optional otherwise.
+describe("QuoteWizardPage — justification", () => {
+  it("is asked for on Review, and holds Submit while a discounted quote has none", async () => {
+    Object.assign(version, { data: { ...ready, version: { ...ready.version, justification: null } } });
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    const field = screen.getByRole("textbox", { name: /^Justification/ });
+    expect(field).toBeRequired();
+    // Written here, so the sheet above doesn't show a second, read-only copy.
+    expect(screen.queryByText("None given")).toBeNull();
+    expect(screen.getByText(/Required: a line has a discount/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Submit version 1" })).toBeDisabled();
+    expect(screen.getByText("Write the justification first")).toBeInTheDocument();
+
+    await user.type(field, "Competitive deal");
+    expect(screen.getByRole("button", { name: "Submit version 1" })).toBeEnabled();
+  });
+});
+
 describe("QuoteWizardPage — Salesforce sync", () => {
-  const primary = { ...ready, quote: { ...ready.quote, isPrimary: true, canSync: true, sfSyncedAt: null } };
+  const primary = { ...ready, quote: { ...ready.quote, isPrimary: true, canSync: true, syncSwitchOn: true, sfSyncedAt: null } };
+  // What a sync would change (D138): the subscription end, one product changed, one removed.
+  const changes = {
+    opportunityName: "Acme renewal",
+    currency: "USD",
+    opportunity: [{ field: "subsEndDate", before: "2027-10-31", after: "2028-10-31", changed: true }],
+    products: [
+      { productName: "API Manager", change: "CHANGED", fields: [{ field: "salesPrice", before: "25000.00", after: "30000.00", changed: true }] },
+      { productName: "Identity Server", change: "REMOVED", fields: [] },
+      { productName: "Micro Integrator", change: "UNCHANGED", fields: [] },
+    ],
+    changes: 3,
+  };
 
   async function openTermAndProducts() {
     const user = userEvent.setup();
@@ -602,49 +637,99 @@ describe("QuoteWizardPage — Salesforce sync", () => {
     return user;
   }
 
-  it("syncs the saved primary draft, and says when it was last synced", async () => {
+  // D137: a button of its own beside Save draft, with when it was last synced.
+  it("shows what changes in Salesforce, then syncs the saved primary draft", async () => {
     Object.assign(version, { data: primary });
+    syncPreview.data = changes;
     sync.mutateAsync.mockResolvedValue({
       ...primary,
       quote: { ...primary.quote, sfSyncedAt: "2026-10-13T10:42:00Z", sfSyncedByEmail: "rep@wso2.com", sfSyncedVersion: 1 },
     });
     const user = await openTermAndProducts();
-    // In the header's "⋯", with when it was last synced (2026-10-13).
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.getByRole("menuitem", { name: /Sync to Salesforce/ })).toHaveTextContent("Not synced yet");
-    await user.click(screen.getByRole("menuitem", { name: /Sync to Salesforce/ }));
-    // It asks first, saying Salesforce will be made to match the quote.
+    expect(screen.getByText("Not synced yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sync to Salesforce" })).toHaveTextContent("Sync to SF");
+    await user.click(screen.getByRole("button", { name: "Sync to Salesforce" }));
+
     const dialog = within(screen.getByRole("dialog", { name: "Sync to Salesforce?" }));
-    expect(dialog.getByText(/products on it that aren.t on this quote are removed in\s+Salesforce/)).toBeInTheDocument();
+    expect(dialog.getByText("Subscription end")).toBeInTheDocument();
+    expect(dialog.getByText("31 Oct 2027")).toBeInTheDocument();
+    expect(dialog.getByText("31 Oct 2028")).toBeInTheDocument();
+    expect(dialog.getByText("API Manager")).toBeInTheDocument();
+    expect(dialog.getByText("USD 25,000.00")).toBeInTheDocument();
+    expect(dialog.getByText("Not on the quote")).toBeInTheDocument();
+    expect(dialog.queryByText("Micro Integrator")).toBeNull();
+    await user.click(dialog.getByRole("button", { name: "1 product with no change" }));
+    expect(dialog.getByText("Micro Integrator")).toBeInTheDocument();
     expect(sync.mutateAsync).not.toHaveBeenCalled();
-    await user.click(dialog.getByRole("button", { name: "Sync" }));
+    await user.click(dialog.getByRole("button", { name: "Sync 3 changes" }));
 
     expect(save.mutateAsync).not.toHaveBeenCalled(); // nothing changed: nothing to save first
-    expect(sync.mutateAsync).toHaveBeenCalledWith({
-      quoteId: primary.quote.id,
-      version: 1,
-      expectedUpdatedAt: primary.version.updatedAt,
-    });
+    expect(sync.mutateAsync).toHaveBeenCalledWith({ quoteId: primary.quote.id, version: 1, expectedUpdatedAt: primary.version.updatedAt });
     expect(await screen.findByRole("status")).toHaveTextContent("Synced to Salesforce"); // a toast
   });
 
-  it("syncs nothing when the AM cancels", async () => {
+  // 2026-11-08: a preview refused with a reason shows the reason, not "couldn't read".
+  it("says what to fix when Salesforce can't be synced yet", async () => {
     Object.assign(version, { data: primary });
+    Object.assign(syncPreview, {
+      error: new HttpError(
+        "/quotes/5/versions/1/sync/preview",
+        422,
+        JSON.stringify({ message: "This version can't be submitted yet", issues: [{ field: "lines", message: "Add products before syncing to Salesforce" }] }),
+      ),
+    });
     const user = await openTermAndProducts();
-    await pickAction(user, "Sync to Salesforce");
-    await user.click(within(screen.getByRole("dialog", { name: "Sync to Salesforce?" })).getByRole("button", { name: "Cancel" }));
-    expect(sync.mutateAsync).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Sync to Salesforce" }));
+
+    const dialog = within(screen.getByRole("dialog", { name: "Sync to Salesforce?" }));
+    expect(dialog.getByText("Add products before syncing to Salesforce.")).toBeInTheDocument();
+    expect(dialog.queryByText(/Couldn't read/)).toBeNull();
+    expect(dialog.getByRole("button", { name: "Sync" })).toBeDisabled();
   });
 
-  it("isn't offered on a quote that can't be synced", async () => {
-    Object.assign(version, { data: ready });
+  it("syncs nothing when the AM cancels, or when nothing would change", async () => {
+    Object.assign(version, { data: primary });
+    syncPreview.data = changes;
     const user = await openTermAndProducts();
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(screen.queryByRole("menuitem", { name: /Sync to Salesforce/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Sync to Salesforce" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Sync to Salesforce?" })).getByRole("button", { name: "Cancel" }));
+    expect(sync.mutateAsync).not.toHaveBeenCalled();
+
+    syncPreview.data = { ...changes, opportunity: [], products: [], changes: 0 };
+    await user.click(await screen.findByRole("button", { name: "Sync to Salesforce" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Sync to Salesforce?" }));
+    expect(dialog.getByText(/Salesforce already matches this quote/)).toBeInTheDocument();
+    expect(dialog.getByRole("button", { name: "Sync" })).toBeDisabled();
+  });
+
+  it("is greyed on a quote that isn't primary, saying why; absent with the sync off", async () => {
+    Object.assign(version, { data: { ...ready, quote: { ...ready.quote, syncSwitchOn: true, canSync: false } } });
+    await openTermAndProducts();
+    expect(screen.getByRole("button", { name: "Sync to Salesforce" })).toBeDisabled();
+    expect(screen.getByText("Only the primary quote syncs. Mark it primary on Overview.")).toBeInTheDocument();
+  });
+
+  // 2026-11-08: nothing to sync on Overview; greyed until the quote has products.
+  it("isn't on Overview, and waits for products, saying so", async () => {
+    Object.assign(version, { data: { ...primary, version: { ...primary.version, lines: [] } } });
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(screen.getByRole("button", { name: "Overview" }));
+    expect(screen.queryByRole("button", { name: "Sync to Salesforce" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Products & Pricing" }));
+    expect(screen.getByRole("button", { name: "Sync to Salesforce" })).toBeDisabled();
+    expect(screen.getByText("Add products first")).toBeInTheDocument();
+  });
+
+  it("isn't offered when the sync is switched off", async () => {
+    Object.assign(version, { data: ready });
+    await openTermAndProducts();
+    expect(screen.queryByRole("button", { name: "Sync to Salesforce" })).toBeNull();
   });
 
   it("says why when Salesforce refuses, and that nothing changed there", async () => {
     Object.assign(version, { data: primary });
+    syncPreview.data = changes;
     const body = {
       message: "Salesforce refused the sync, so nothing was changed there",
       issues: [{ field: "salesforce", message: "Closed Won opportunities can't be edited" }],
@@ -652,10 +737,25 @@ describe("QuoteWizardPage — Salesforce sync", () => {
     sync.mutateAsync.mockRejectedValue(new HttpError("u", 422, JSON.stringify(body)));
     const user = await openTermAndProducts();
 
-    await pickAction(user, "Sync to Salesforce");
-    await user.click(within(screen.getByRole("dialog", { name: "Sync to Salesforce?" })).getByRole("button", { name: "Sync" }));
+    await user.click(screen.getByRole("button", { name: "Sync to Salesforce" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Sync to Salesforce?" })).getByRole("button", { name: "Sync 3 changes" }));
 
     expect(await screen.findByText(/Salesforce refused the sync, so nothing changed there:/)).toBeInTheDocument();
     expect(screen.getAllByText(/Closed Won opportunities can't be edited/).length).toBeGreaterThan(0);
+  });
+
+  // D138: the submit dialog of a primary quote says it syncs, with the changes folded.
+  it("says in the submit dialog that submitting updates Salesforce", async () => {
+    Object.assign(version, { data: primary });
+    syncPreview.data = changes;
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(screen.getByRole("button", { name: "Review" }));
+    await user.click(screen.getByRole("button", { name: "Submit version 1" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Submit version 1?" }));
+    expect(dialog.getByText(/Submitting also updates the Salesforce opportunity: 3 changes/)).toBeInTheDocument();
+    expect(dialog.queryByText("Identity Server")).toBeNull();
+    await user.click(dialog.getByRole("button", { name: "See changes" }));
+    expect(dialog.getByText("Identity Server")).toBeInTheDocument();
   });
 });

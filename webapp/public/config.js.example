@@ -62,11 +62,17 @@ window.config = {
   // ONE_WSO2_REVOPS_BACKEND_URL: "<your-sales-meetings-backend-url>",
 
   // CadO2 quote tool backend — powers Sales → CadO2 (quotes, approvals and
-  // their admin). Shown only while `cado2` is on in ONE_WSO2_PREVIEW_FEATURES
+  // their admin). Shown only while `quickquote` is on in ONE_WSO2_PREVIEW_FEATURES
   // below. With the flag on and this unset, CadO2's pages say "not connected"
   // and make no requests. Salesforce record links use
   // ONE_WSO2_SALESFORCE_BASE_URL.
   // ONE_WSO2_CADO2_BACKEND_URL: "<your-cado2-backend-url>",
+
+  // Swag Store backend — the store where employees spend O2C coins on WSO2
+  // swag. Shown only while `swagStore` is on in ONE_WSO2_PREVIEW_FEATURES
+  // below. Include the version segment. For a local backend on port 8080, use
+  // "/swag-store-backend" (the dev server's proxy).
+  // ONE_WSO2_SWAG_STORE_BACKEND_URL: "<your-swag-store-backend-url>",
 
   // Pitstop backend that serves Smart Search — powers Sales → Library, the
   // plain-language search over Pitstop's content. Include the version segment.
@@ -199,6 +205,10 @@ window.config = {
   // sandbox org.
   // ONE_WSO2_SALESFORCE_BASE_URL: "https://wso2.lightning.force.com",
 
+  // Image URL used in the generated email signature. Optional — when unset or
+  // blank, the built-in default is used.
+  // ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL: "<your-image-url>",
+
   // Idle handling. Defaults to false. The "Are you still there?" dialog
   // appears after 25 minutes of inactivity either way; this decides only what
   // happens if it is ignored. False leaves it waiting and the session alive;
@@ -215,6 +225,6 @@ window.config = {
   // Each entry is deleted when its feature ships — a list that only grows
   // stops describing anything.
   //
-  // ONE_WSO2_PREVIEW_FEATURES: { infra: false, cado2: false, nda: false, amplify: false, marketingCalendar: false },
+  // ONE_WSO2_PREVIEW_FEATURES: { infra: false, quickquote: false, nda: false, amplify: false, marketingCalendar: false, eventsLeadImport: false, swagStore: false },
 
 };

@@ -46,7 +46,8 @@ describe("sheetFromVersion", () => {
       pricingRulesVersion: "2026-09-M9",
     });
     // Billing, then security.
-    expect(s.contacts).toHaveLength(2);
+    expect(s.contacts).toHaveLength(3);
+    expect(s.contacts[2]).toBeNull(); // no legal contact (D165)
     expect(s.contacts[0]).toMatchObject({ name: "Jane Payables", source: "MANUAL" });
     expect(s.contacts[1]).toMatchObject({ name: "Marco Ruiz", title: "Head of IT", source: "SALESFORCE" });
     expect(s.billTo).toEqual({ companyName: "Acme Reseller Ltd", lines: ["1 Partner Way", "London, EC1A 1AA", "United Kingdom"], taxId: "GB123" });
@@ -95,11 +96,11 @@ describe("sheetFromForm", () => {
     // The same years; the form's amounts wait for the live preview.
     const dates = (s: typeof saved) => s.contractYears.map(({ number, start, end }) => ({ number, start, end }));
     expect(dates(fromForm)).toEqual(dates(saved));
-    expect(fromForm.contacts.map((c) => c?.name ?? null)).toEqual(["Jane Payables", "Marco Ruiz"]);
+    expect(fromForm.contacts.map((c) => c?.name ?? null)).toEqual(["Jane Payables", "Marco Ruiz", null]);
     expect(fromForm.previousOpportunityCount).toBe(1);
   });
 
-  it("takes a formula line's price and explanation from the preview, with no discount (D81)", () => {
+  it("takes a formula line's price and explanation from the preview, and keeps its discount (D81, D149)", () => {
     const form = fromVersion(fullPartnerQuote);
     const preview = {
       rulesVersion: "2026-09-M9",
@@ -123,7 +124,7 @@ describe("sheetFromForm", () => {
     const line = sheetFromForm(form, preview, null).lines[0];
     expect(line).toMatchObject({
       unitPrice: "25000.00",
-      discountPercent: "0",
+      discountPercent: String(Number(form.lines[0].discount || "0")),
       formula: { version: "v3 · 15 Oct 2026", explanation: "max(25,000, 648)" },
     });
 
@@ -134,7 +135,7 @@ describe("sheetFromForm", () => {
 
   it("marks what isn't chosen yet", () => {
     const s = sheetFromForm(emptyDraftForm(), null, null);
-    expect(s.contacts).toEqual([null, null]);
+    expect(s.contacts).toEqual([null, null, null]);
     expect(s.billTo).toBeNull();
     expect(s.legalEntity).toBeNull();
     expect(s.totals).toBeNull();

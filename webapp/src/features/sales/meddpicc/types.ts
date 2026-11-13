@@ -80,8 +80,11 @@ export interface EvidenceQuote {
 
 // ---- POST /meetings/coverage ------------------------------------------------
 
-/** NONE: the meeting has no transcript yet. */
-export type CoverageStatus = "NONE" | "PENDING" | "RUNNING" | "DONE" | "FAILED";
+/**
+ * NONE: the meeting has no transcript yet. EMPTY: its transcript has no lines, so there
+ * was nothing to analyse -- not a failure, and not retried. FAILED: the analysis failed.
+ */
+export type CoverageStatus = "NONE" | "PENDING" | "RUNNING" | "DONE" | "FAILED" | "EMPTY";
 
 export interface MeetingCoverage {
   meetingId: number;

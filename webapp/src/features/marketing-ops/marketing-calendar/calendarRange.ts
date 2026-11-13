@@ -20,14 +20,15 @@
 //
 // - With no `from` and no `to`, the list covers the month in `?month=`.
 // - A range applies only when both dates are real days, From is on or before
-//   To, and it spans at most MAX_RANGE_DAYS (a whole leap year). Anything else
+//   To, and it spans at most MAX_RANGE_DAYS, the backend's own cap (it reads
+//   every day live from GitHub, so it refuses longer ranges). Anything else
 //   falls back to the month and says why, so a bad link still shows something.
 //
 // Civil dates throughout, stepped through Date.UTC as calendarDates does.
 
 import { isoDate, type CalendarMonth, type CivilDate } from "./calendarDates";
 
-export const MAX_RANGE_DAYS = 366;
+export const MAX_RANGE_DAYS = 92;
 
 const DAY_MS = 86_400_000;
 

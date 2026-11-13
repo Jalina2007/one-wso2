@@ -27,7 +27,7 @@ import { ProductListPaper, ProductOption } from "@features/sales/cado2/component
 import { useFormulaProducts } from "@features/sales/cado2/admin/pricing-formulas/api/usePricingFormulaAdmin";
 
 // The Admin's Salesforce product pickers, any currency or price book: used by
-// the pricing formula editor (D81) and the product bundles page.
+// the pricing formula editor (D81) and Admin → Support Plans (D155).
 
 /** A product in a list: a formula's chosen product may lack a description. */
 type ListedProduct = FormulaProduct & { readonly description?: string | null };

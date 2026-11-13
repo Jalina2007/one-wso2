@@ -23,7 +23,7 @@
 // their order and the layout live in CalendarItemDrawer. Empty values are left
 // out rather than sent as "".
 
-export type CalendarCategory = "event" | "content" | "social" | "email";
+export type CalendarCategory = "event" | "content" | "social" | "email" | "release";
 
 interface CalendarItemCommon {
   // "<owner>/<repo>#<number>:<category>"
@@ -34,6 +34,10 @@ interface CalendarItemCommon {
   // A civil date, YYYY-MM-DD: the Due Date, or for an event with none, its
   // Event start date.
   date: string;
+  // Only on an event over several days: its Event end date, the last day it runs
+  // (included), always after `date`. Such an event is sent when any of its days is
+  // in the requested range, so `date` can be before the range's first day.
+  endDate?: string;
   state: "open" | "closed";
   // The project's Status, e.g. "Planned".
   status?: string;
@@ -74,12 +78,25 @@ export interface EmailDetails {
   bodyCopy?: string;
 }
 
+export interface ReleaseDetails {
+  productName?: string;
+  version?: string;
+  // "STS" or "LTS".
+  releaseType?: string;
+  // "Tier 1" to "Tier 4".
+  tier?: string;
+  // YYYY-MM-DD, from the issue body. The release's calendar date is its Due
+  // Date, which the template sets to the marketing launch date.
+  websiteDate?: string;
+}
+
 export type CalendarItem = CalendarItemCommon &
   (
     | { category: "content"; details: ContentDetails }
     | { category: "event"; details: EventDetails }
     | { category: "social"; details: SocialDetails }
     | { category: "email"; details: EmailDetails }
+    | { category: "release"; details: ReleaseDetails }
   );
 
 /** One category's items, with that category's `details`. */

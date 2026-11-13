@@ -16,7 +16,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 vi.mock("@api/http", () => ({
@@ -28,7 +28,13 @@ vi.mock("@hooks/useAccessToken", () => ({ useAccessToken: () => async () => "tok
 vi.mock("@hooks/useAsgardeoSub", () => ({ useAsgardeoSub: () => ({ state: { status: "ready", sub: "sub-1" } }) }));
 
 import { authedDelete, authedPost } from "@api/http";
-import { useRegisterCampaign, useRemoveLinkedInConnection } from "./useAmplifyMutations";
+import {
+  useArchiveCampaign,
+  useRegisterCampaign,
+  useRemoveLinkedInConnection,
+  useRetryAnnouncement,
+  useSendAnnouncement,
+} from "./useAmplifyMutations";
 import type { CampaignDraft } from "./amplifyTypes";
 
 // The app's QueryClient sets refetchOnMount: false, so a list that no page is showing must be refetched by the
@@ -90,5 +96,65 @@ describe("removing the LinkedIn connection", () => {
 
     expect(vi.mocked(authedDelete).mock.calls[0][0]).toMatch(/\/connections\/linkedin$/);
     expect(loadMe).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("deleting a post", () => {
+  it("sends DELETE for the campaign and refetches the campaigns lists", async () => {
+    vi.clearAllMocks();
+    const qc = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const loadList = vi.fn(async () => ({ items: [] }));
+    await qc.fetchQuery({ queryKey: ["amplify", "campaigns", "sub-1", "open"], queryFn: loadList });
+
+    const { result } = renderHook(() => useArchiveCampaign(), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ id: "c-1" });
+    });
+
+    expect(vi.mocked(authedDelete).mock.calls[0][0]).toContain("c-1");
+    expect(loadList).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("re-queuing an announcement", () => {
+  it.each([
+    ["retry", useRetryAnnouncement],
+    ["send", useSendAnnouncement],
+  ])("%s shows the post as Queued at once and reloads the Operations board", async (_name, useHook) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { refetchOnMount: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const board = (status: "FAILED" | "NONE") => ({
+      campaigns: [
+        { campaignId: "c1", announcement: { status } },
+        { campaignId: "c2", announcement: { status: "SENT" } },
+      ],
+    });
+    type Board = ReturnType<typeof board>;
+    // The first load seeds the cache; the refetch the mutation triggers waits on `release`, so the cache can be read
+    // while the board is still reloading.
+    let release: (b: Board) => void = () => {};
+    const load = vi
+      .fn<() => Promise<Board>>()
+      .mockResolvedValueOnce(board("FAILED"))
+      .mockImplementationOnce(() => new Promise<Board>((resolve) => (release = resolve)));
+    const key = ["amplify", "dashboard-operations", "sub-1"];
+    await qc.fetchQuery({ queryKey: key, queryFn: load });
+    const { result } = renderHook(() => useHook(), { wrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ campaignId: "c1" });
+    });
+    // POST accepted, refetch still pending: c1 already reads QUEUED, c2 is untouched.
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    const queued = qc.getQueryData<Board>(key);
+    expect(queued?.campaigns[0].announcement.status).toBe("QUEUED");
+    expect(queued?.campaigns[1].announcement.status).toBe("SENT");
+    // The refetch then replaces it with the server's answer.
+    await act(async () => release({ campaigns: [{ campaignId: "c1", announcement: { status: "SENT" } }, { campaignId: "c2", announcement: { status: "SENT" } }] }));
+    await waitFor(() => expect(qc.getQueryData<Board>(key)?.campaigns[0].announcement.status).toBe("SENT"));
   });
 });

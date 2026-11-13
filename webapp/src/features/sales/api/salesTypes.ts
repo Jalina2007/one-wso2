@@ -72,6 +72,30 @@ export interface Meeting {
   leadId?: string | null;
   /** The lead's company, denormalised at link time. */
   leadCompany?: string | null;
+
+  // ---- Every part of the call ----------------------------------------------
+  // A call produces a new recording, transcript or smart notes each time one is
+  // stopped and restarted. Only on the single-meeting route; absent from the list.
+
+  /** Every recording of the call, in the order they happened. */
+  recordings?: MeetingPart[];
+  /** Every transcript of the call, in order. */
+  transcripts?: MeetingPart[];
+  /** Every smart notes of the call, in order. */
+  smartNotes?: MeetingPart[];
+}
+
+/** One recording, transcript or smart notes of a call. Pass its id to open that part. */
+export interface MeetingPart {
+  id: number;
+  /**
+   * When the part itself started, RFC 3339 UTC. Null for a part Meet no longer has times
+   * for -- it keeps them 30 days -- whose order still comes from the list.
+   */
+  startTime: string | null;
+  endTime: string | null;
+  /** Only an ATTACHED part can be opened. */
+  state: "PENDING" | "ATTACHED" | "FAILED";
 }
 
 /**

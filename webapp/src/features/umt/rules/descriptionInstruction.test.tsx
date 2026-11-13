@@ -300,3 +300,30 @@ describe("hotfix description", () => {
     expect(body.map((row) => row.description)).toEqual([DESCRIBED.description, DESCRIBED.description]);
   });
 });
+
+describe("description and instruction table", () => {
+  const DESCRIPTION = "\nFixes the token refresh.\n  Also fixes logout.\n";
+  const INSTRUCTION = "1. Stop the server.\n2. Apply the update.";
+  const MULTILINE: UmtUpdateProduct = { ...DESCRIBED, description: DESCRIPTION, instruction: INSTRUCTION };
+  // Matches a cell's text exactly, without the default trim and whitespace
+  // collapsing, so line breaks and edge whitespace are part of the match.
+  const exactText = { normalizer: (text: string) => text };
+
+  it("shows each description and instruction as stored, line breaks kept", () => {
+    renderForm(makeUpdate({ products: [MULTILINE] }));
+    const grid = within(screen.getByRole("grid"));
+
+    expect(grid.getByText(DESCRIPTION, exactText)).toHaveStyle({ whiteSpace: "pre-wrap" });
+    expect(grid.getByText(INSTRUCTION, exactText)).toHaveStyle({ whiteSpace: "pre-wrap" });
+  });
+
+  it("aligns its cells to the top of the row", () => {
+    renderForm(makeUpdate({ products: [MULTILINE] }));
+    const grid = within(screen.getByRole("grid"));
+
+    expect(grid.getByText("wso2am")).toHaveStyle({ justifyContent: "flex-start" });
+    expect(grid.getByRole("button", { name: "Delete row" }).parentElement).toHaveStyle({
+      justifyContent: "flex-start",
+    });
+  });
+});

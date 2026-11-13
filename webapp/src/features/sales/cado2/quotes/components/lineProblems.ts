@@ -17,14 +17,11 @@
 /** Checks the dialog's values the way the backend will. */
 export function lineProblems(v: {
   pricebookEntryId: string;
-  /** Empty only when the product isn't mapped and the rep hasn't chosen. */
-  category?: string;
   quantity: string;
   discount: string;
 }): Record<string, string> {
   const p: Record<string, string> = {};
   if (!v.pricebookEntryId) p.product = "Choose a product and a price book";
-  if (v.category === "") p.category = "Choose the category";
   if (!/^\d+$/.test(v.quantity.trim()) || Number(v.quantity) < 1) p.quantity = "Use a whole number of at least 1";
   const d = v.discount.trim() || "0";
   if (!/^\d{1,3}(\.\d{1,2})?$/.test(d) || Number(d) > 100) p.discount = "Use 0 to 100, with at most 2 decimals";

@@ -129,9 +129,9 @@ describe("PricingFormulasPage", () => {
         expression: "max($1, $2 * $3)",
         unitOfMeasure: "Annual, higher of 25,000 or 10% of subscription",
         bindings: [
-          { name: "$1", kind: "VALUE", value: "30000", productIds: [] },
-          { name: "$2", kind: "VALUE", value: "10%", productIds: [] },
-          { name: "$3", kind: "PRODUCTS", value: "", productIds: ["01tGATEWAY00000AAA"] },
+          { name: "$1", kind: "VALUE", value: "30000", productIds: [], category: "" },
+          { name: "$2", kind: "VALUE", value: "10%", productIds: [], category: "" },
+          { name: "$3", kind: "PRODUCTS", value: "", productIds: ["01tGATEWAY00000AAA"], category: "" },
         ],
       },
       expect.anything(),
@@ -163,13 +163,36 @@ describe("PricingFormulasPage", () => {
     expect(tryIt.mutate).toHaveBeenLastCalledWith({
       expression: "min($1, $2 * QTY)",
       bindings: [
-        { name: "$1", kind: "VALUE", value: "5000", productIds: [] },
-        { name: "$2", kind: "PRODUCTS", value: "", productIds: [] },
+        { name: "$1", kind: "VALUE", value: "5000", productIds: [], category: "" },
+        { name: "$2", kind: "PRODUCTS", value: "", productIds: [], category: "" },
       ],
       samples: { $2: "1000" },
       quantity: 3,
       listPrice: "",
     });
+  });
+
+  // D153: a placeholder can add up a category's lines, e.g. 10% of the year's Subscription.
+  it("binds a placeholder to a category, with a sample total to try it", async () => {
+    Object.assign(formulas, { isPending: false, data: [] });
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "New Formula" }));
+    const dialog = within(screen.getByRole("dialog", { name: "New formula" }));
+    await user.type(dialog.getByRole("textbox", { name: "Formula" }), "$1");
+    await user.click(within(dialog.getByRole("group", { name: "What $1 is" })).getByRole("button", { name: "Category" }));
+    await user.click(dialog.getByRole("combobox", { name: "Category of $1" }));
+    await user.click(screen.getByRole("option", { name: "Subscription" }));
+    expect(dialog.getByText(/The year's Subscription lines, after their discount/)).toBeInTheDocument();
+
+    await user.type(dialog.getByRole("textbox", { name: "Sample total for $1" }), "320000");
+    await user.click(dialog.getByRole("button", { name: "Try it" }));
+    expect(tryIt.mutate).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        bindings: [{ name: "$1", kind: "CATEGORY", value: "", productIds: [], category: "SUBSCRIPTION" }],
+        samples: { $1: "320000" },
+      }),
+    );
   });
 
   it("lists products as the Add line dialog does: on opening, with their code, a page at a time (2026-10-15)", async () => {
@@ -221,12 +244,12 @@ describe("PricingFormulasPage", () => {
     renderPage();
     expect(screen.getByRole("link", { name: "WSO2 Enterprise Support" })).toHaveAttribute(
       "href",
-      "/sales/cado2/admin/pricing-formulas/01tSUPPORT00000AAA",
+      "/sales/quickquote/admin/pricing-formulas/01tSUPPORT00000AAA",
     );
     expect(screen.getByText("Removed Formulas (1)")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Old Support" })).toBeNull();
     await userEvent.setup().click(screen.getByRole("button", { name: "Show" }));
-    expect(screen.getByRole("link", { name: "Old Support" })).toHaveAttribute("href", "/sales/cado2/admin/pricing-formulas/01tOTHER000000AAA");
+    expect(screen.getByRole("link", { name: "Old Support" })).toHaveAttribute("href", "/sales/quickquote/admin/pricing-formulas/01tOTHER000000AAA");
     expect(screen.getByText("removed in v3 · 15 Oct 2026")).toBeInTheDocument();
   });
 });

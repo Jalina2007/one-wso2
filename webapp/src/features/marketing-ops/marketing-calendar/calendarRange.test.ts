@@ -75,13 +75,11 @@ describe("resolveRange", () => {
     });
   });
 
-  it("allows up to 366 days, both ends included, and no more", () => {
-    // 2028 is a leap year: its whole year is 366 days.
-    expect(resolveRange("2028-01-01", "2028-12-31", NOVEMBER).errors).toEqual({});
-    expect(resolveRange("2026-01-01", "2027-01-01", NOVEMBER).errors).toEqual({});
-    expect(resolveRange("2026-01-01", "2027-01-02", NOVEMBER)).toEqual({
+  it("allows up to 92 days, both ends included, and no more, as the backend does", () => {
+    expect(resolveRange("2026-11-01", "2027-01-31", NOVEMBER).errors).toEqual({});
+    expect(resolveRange("2026-11-01", "2027-02-01", NOVEMBER)).toEqual({
       range: NOVEMBER_RANGE,
-      errors: { to: "At most 366 days" },
+      errors: { to: "At most 92 days" },
     });
   });
 });

@@ -70,6 +70,7 @@ export default function ProductsSection({ sheet }: { sheet: QuoteSheet }): JSX.E
             lines={sheet.lines}
             currency={sheet.currency}
             commissionPercent={sheet.partnerCommissionPercent}
+            commissionRates={sheet.partnerCommissionRates}
             yearCount={years.length}
           />
         </>

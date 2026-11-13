@@ -144,7 +144,7 @@ describe("the cado2 adapter's claim", () => {
 
   it("is in play for Sales only while the preview flag is on", () => {
     const saved = window.config;
-    window.config = { ...(saved ?? {}), ONE_WSO2_PREVIEW_FEATURES: { cado2: true } } as Window["config"];
+    window.config = { ...(saved ?? {}), ONE_WSO2_PREVIEW_FEATURES: { quickquote: true } } as Window["config"];
     expect(claimsForPerspective("sales")).toContain("cado2");
     expect(claimsForPerspective("finance")).not.toContain("cado2");
     window.config = { ...(saved ?? {}), ONE_WSO2_PREVIEW_FEATURES: {} } as Window["config"];

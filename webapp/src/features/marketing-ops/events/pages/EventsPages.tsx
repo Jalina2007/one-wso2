@@ -17,11 +17,14 @@
 import { useState } from "react";
 import { MARKETING_OPS_EYEBROW } from "@constants/marketingOpsApps";
 import MarketingOpsShell from "../../components/MarketingOpsShell";
+import LeadImport from "../components/LeadImport";
+import LeadImportRun from "../components/LeadImportRun";
 import MySubmissions from "../components/MySubmissions";
 import { ReviewDetail, ReviewQueue } from "../components/Review";
 import SubmissionWorkspace from "../components/SubmissionWorkspace";
 
-// The two Events routes: your own submissions, and the review queue.
+// The Events routes: converting a raw lead file, your own submissions, and the review
+// queue.
 //
 // Opening one list is TRANSIENT STATE layered over the route rather than a route of
 // its own — the same shape Email Workbench's editor uses, and for the same reason. The
@@ -72,6 +75,33 @@ export function EventsReviewPage() {
         <ReviewDetail id={openId} onBack={() => setOpenId(null)} />
       ) : (
         <ReviewQueue onOpen={setOpenId} />
+      )}
+    </MarketingOpsShell>
+  );
+}
+
+// ---- Lead import ------------------------------------------------------------------
+//
+// Same transient-state shape. The run itself lives on the server (two hours), so
+// leaving and coming back through Recently converted loses nothing.
+
+export function EventsLeadImportPage() {
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  return (
+    <MarketingOpsShell
+      eyebrow={MARKETING_OPS_EYEBROW.events}
+      title="Lead Import"
+      subtitle={
+        openId
+          ? undefined
+          : "Turn a raw event lead file into the filled List Import Template, ready to submit."
+      }
+    >
+      {openId ? (
+        <LeadImportRun id={openId} onBack={() => setOpenId(null)} />
+      ) : (
+        <LeadImport onOpen={setOpenId} />
       )}
     </MarketingOpsShell>
   );

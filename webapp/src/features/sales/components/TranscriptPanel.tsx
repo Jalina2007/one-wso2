@@ -18,6 +18,8 @@ import { useMemo, useState } from "react";
 import {
   Alert,
   Box,
+  Chip,
+  Divider,
   InputAdornment,
   Skeleton,
   TextField,
@@ -25,9 +27,24 @@ import {
 } from "@wso2/oxygen-ui";
 import { SearchIcon } from "@wso2/oxygen-ui-icons-react";
 import { HttpError } from "@api/http";
-import { formatOffset } from "../api/salesTypes";
-import { useTranscript } from "../api/useSalesData";
+import { formatOffset, type TranscriptLine } from "../api/salesTypes";
+import type { LinePlace } from "../util/meetingParts";
 import { describeError } from "../util/salesError";
+
+/** One line, and where it falls in the recordings: null when said while nothing recorded. */
+export interface PlacedLine {
+  line: TranscriptLine;
+  place: LinePlace | null;
+}
+
+/** One transcript of the call -- a call holds one per time transcription was started. */
+export interface TranscriptSection {
+  /** Heading above it, when the call has several transcripts. */
+  label: string | null;
+  lines: PlacedLine[];
+  isLoading: boolean;
+  error: unknown;
+}
 
 /**
  * The conversation, with every line a way into the recording.
@@ -35,47 +52,59 @@ import { describeError } from "../util/salesError";
  * Clicking a line seeks the video to where it was said. That is the whole reason the player
  * is a native <video> rather than a Drive iframe: an iframe would show the recording but
  * expose no way to set its position, so this interaction would be impossible.
+ *
+ * A call can hold several transcripts and several recordings, and they need not line up --
+ * recording and transcription are stopped and started separately. Every transcript is shown
+ * in order, and a line opens whichever recording it was spoken during, switching to it if
+ * another is playing. A line said while nothing was recording is marked so.
  */
 export default function TranscriptPanel({
-  meetingId,
+  sections,
+  selectedRecordingId,
   onSeek,
   currentTime,
 }: {
-  meetingId: number;
-  onSeek: (seconds: number) => void;
-  /** Player position, so the line being spoken can be marked. */
+  sections: TranscriptSection[];
+  /** The recording being played, so the line being spoken can be marked. */
+  selectedRecordingId: number | null;
+  onSeek: (place: LinePlace) => void;
+  /** Player position, in the selected recording. */
   currentTime: number;
 }) {
-  const { data, isLoading, error } = useTranscript(meetingId);
   const [query, setQuery] = useState("");
-
-  // Memoised, not `data?.lines ?? []` inline: that allocates a fresh array every render,
-  // which would make both memos below recompute on every keystroke and every tick of the
-  // player's time update — over a transcript that can run to thousands of lines.
-  const lines = useMemo(() => data?.lines ?? [], [data]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return lines;
-    return lines.filter(
-      (l) => l.text.toLowerCase().includes(q) || l.speaker.toLowerCase().includes(q),
+    if (!q) return sections;
+    return sections.map((section) => ({
+      ...section,
+      lines: section.lines.filter(
+        ({ line }) => line.text.toLowerCase().includes(q) || line.speaker.toLowerCase().includes(q),
+      ),
+    }));
+  }, [sections, query]);
+
+  // The line being spoken now: the last one placed on the playing recording at or before
+  // the playhead. Keyed by section and line, since lines from different transcripts mix.
+  const activeKey = useMemo(() => {
+    let key: string | null = null;
+    sections.forEach((section, s) =>
+      section.lines.forEach(({ place }, i) => {
+        if (place && place.recordingId === selectedRecordingId && place.offsetSeconds <= currentTime) {
+          key = `${s}-${i}`;
+        }
+      }),
     );
-  }, [lines, query]);
+    return key;
+  }, [sections, selectedRecordingId, currentTime]);
 
-  // The line being spoken now: the last one that started at or before the playhead. Found
-  // by scanning back from the end rather than forward, since a transcript is ordered and
-  // the answer is nearly always near where playback is.
-  const activeIndex = useMemo(() => {
-    for (let i = lines.length - 1; i >= 0; i -= 1) {
-      if (lines[i].offsetSeconds <= currentTime) return i;
-    }
-    return -1;
-  }, [lines, currentTime]);
-
+  const noTimedTranscript = sections.every(
+    (section) => section.error instanceof HttpError && section.error.status === 404,
+  );
   // 404 means this meeting has no TIMED transcript — it predates the resource name being
   // stored, so only the Drive document exists. Said plainly rather than as an error,
   // because nothing is broken.
-  if (error instanceof HttpError && error.status === 404) {
+  if (noTimedTranscript) {
     return (
       <Alert severity="info">
         No synchronised transcript for this meeting. Older recordings only have the
@@ -83,8 +112,7 @@ export default function TranscriptPanel({
       </Alert>
     );
   }
-  if (error) return <Alert severity="error">{describeError(error)}</Alert>;
-  if (isLoading) {
+  if (sections.every((section) => section.isLoading)) {
     return (
       <Box>
         {[0, 1, 2, 3, 4].map((i) => (
@@ -93,9 +121,15 @@ export default function TranscriptPanel({
       </Box>
     );
   }
-  if (lines.length === 0) {
+  if (sections.every((section) => !section.isLoading && !section.error && section.lines.length === 0)) {
     return <Alert severity="info">This transcript is empty.</Alert>;
   }
+
+  // Only once every transcript has loaded: one still loading, or that failed, has no lines to
+  // match yet, and saying "nothing matches" would hide its loading or its error.
+  const nothingMatches =
+    query.trim() !== "" &&
+    filtered.every((section) => !section.isLoading && !section.error && section.lines.length === 0);
 
   return (
     <Box>
@@ -123,58 +157,106 @@ export default function TranscriptPanel({
 
       {/* Filtering happens here rather than on the server: the whole transcript is already
           loaded, so a round trip would be slower and would lose the scroll position. */}
-      {filtered.length === 0 ? (
+      {nothingMatches ? (
         <Typography variant="body2" color="text.secondary">
           Nothing matches “{query}”.
         </Typography>
       ) : (
         <Box sx={{ maxHeight: "60vh", overflowY: "auto", pr: 1 }}>
-          {filtered.map((line, i) => {
-            const isActive = !query && i === activeIndex;
-            return (
-              <Box
-                key={`${line.startTime}-${i}`}
-                onClick={() => onSeek(line.offsetSeconds)}
-                // A button, not a div with a click: this is an action, and it has to be
-                // reachable and operable from the keyboard like any other.
-                component="button"
-                type="button"
-                sx={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  border: 0,
-                  borderLeft: 2,
-                  borderColor: isActive ? "primary.main" : "transparent",
-                  bgcolor: isActive ? "action.selected" : "transparent",
-                  cursor: "pointer",
-                  px: 1.5,
-                  py: 1,
-                  font: "inherit",
-                  borderRadius: 1,
-                  "&:hover": { bgcolor: "action.hover" },
-                }}
-              >
-                <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline", mb: 0.25 }}>
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}
-                  >
-                    {formatOffset(line.offsetSeconds)}
+          {filtered.map((section, s) => (
+            <Box key={s}>
+              {section.label && (
+                <Divider textAlign="left" sx={{ my: 1.5, "&:first-of-type": { mt: 0 } }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    {section.label}
                   </Typography>
-                  <Typography variant="caption" sx={{ fontWeight: 600 }}>
-                    {line.speaker}
-                  </Typography>
-                </Box>
-                <Typography variant="body2" color="text.primary">
-                  {line.text}
-                </Typography>
-              </Box>
-            );
-          })}
+                </Divider>
+              )}
+              <SectionBody
+                section={section}
+                sectionIndex={s}
+                activeKey={query ? null : activeKey}
+                onSeek={onSeek}
+              />
+            </Box>
+          ))}
         </Box>
       )}
     </Box>
   );
+}
+
+/** One transcript's lines, or why there are none. */
+function SectionBody({
+  section,
+  sectionIndex,
+  activeKey,
+  onSeek,
+}: {
+  section: TranscriptSection;
+  sectionIndex: number;
+  activeKey: string | null;
+  onSeek: (place: LinePlace) => void;
+}) {
+  if (section.isLoading) {
+    return <Skeleton variant="text" height={28} />;
+  }
+  if (section.error instanceof HttpError && section.error.status === 404) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ px: 1.5, py: 1 }}>
+        No synchronised transcript for this part; its document is linked under Files.
+      </Typography>
+    );
+  }
+  if (section.error) {
+    return <Alert severity="error">{describeError(section.error)}</Alert>;
+  }
+
+  return section.lines.map(({ line, place }, i) => {
+    const isActive = activeKey === `${sectionIndex}-${i}`;
+    return (
+      <Box
+        key={`${line.startTime}-${i}`}
+        onClick={place ? () => onSeek(place) : undefined}
+        // A button, not a div with a click: this is an action, and it has to be
+        // reachable and operable from the keyboard like any other. Disabled when the
+        // line was said while nothing was recording -- there is nowhere to seek to.
+        component="button"
+        type="button"
+        disabled={!place}
+        sx={{
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          border: 0,
+          borderLeft: 2,
+          borderColor: isActive ? "primary.main" : "transparent",
+          bgcolor: isActive ? "action.selected" : "transparent",
+          cursor: place ? "pointer" : "default",
+          px: 1.5,
+          py: 1,
+          font: "inherit",
+          borderRadius: 1,
+          "&:hover": place ? { bgcolor: "action.hover" } : undefined,
+        }}
+      >
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "baseline", mb: 0.25 }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontVariantNumeric: "tabular-nums", flexShrink: 0 }}
+          >
+            {formatOffset(place ? place.offsetSeconds : line.offsetSeconds)}
+          </Typography>
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            {line.speaker}
+          </Typography>
+          {!place && <Chip label="Not recorded" size="small" variant="outlined" sx={{ height: 18 }} />}
+        </Box>
+        <Typography variant="body2" color={place ? "text.primary" : "text.secondary"}>
+          {line.text}
+        </Typography>
+      </Box>
+    );
+  });
 }

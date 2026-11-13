@@ -119,6 +119,29 @@ export const CATEGORY_FILTERS: Record<CalendarCategory, readonly CalendarFilter[
     BU,
   ],
   email: [BU, REGION],
+  release: [
+    BU,
+    {
+      // Product names are free text in the form, so the options are the ones the
+      // month's releases carry.
+      param: "product",
+      label: "Product Name",
+      options: [],
+      values: detail("release", "productName"),
+    },
+    {
+      param: "release-type",
+      label: "Release Type",
+      options: ["LTS", "STS"],
+      values: detail("release", "releaseType"),
+    },
+    {
+      param: "tier",
+      label: "Tier",
+      options: ["Tier 1", "Tier 2", "Tier 3", "Tier 4"],
+      values: detail("release", "tier"),
+    },
+  ],
 };
 
 /** The filter's fixed options, then any other value the items carry, in alphabetical order. */

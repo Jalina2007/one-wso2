@@ -14,15 +14,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Skeleton } from "@wso2/oxygen-ui";
 import { Volume2Icon } from "@wso2/oxygen-ui-icons-react";
 import { useNavigate, useSearchParams } from "react-router";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
+import { useNotifications } from "@context/notifications/NotificationsContext";
 import { AMPLIFY_CELEBRATE_PATH } from "@constants/perspectives";
 import type { Campaign } from "../api/amplifyTypes";
 import {
   useAmplifyCampaigns,
+  useAmplifyConfig,
   useAmplifyCategories,
   useAmplifyLeaderboard,
   useAmplifyMe,
@@ -36,6 +38,7 @@ import LinkLinkedInDialog from "../components/LinkLinkedInDialog";
 import PostCard, { CategoryChip, PriorityChip } from "../components/PostCard";
 import PostCarousel from "../components/PostCarousel";
 import ShareDialog from "../components/ShareDialog";
+import { campaignForShareParam } from "../util/linkedinPost";
 
 // Celebrate: every employee's Amplify page. In order (phase 1 UX review):
 //  1. Posts to amplify, priority first then newest. Gone once you've shared
@@ -54,6 +57,8 @@ export default function CelebratePage() {
   const people = useAmplifyPeople();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { showSuccess } = useNotifications();
+  const { campaignLinkOrigins } = useAmplifyConfig();
 
   const [linking, setLinking] = useState<Campaign | null>(null);
   const [sharing, setSharing] = useState<Campaign | null>(null);
@@ -65,12 +70,18 @@ export default function CelebratePage() {
 
   // Posts still to amplify: open ones the caller hasn't shared yet. A FAILED
   // share stays in the list, since asking again retries it.
-  const toAmplify = useMemo(() => {
-    const done = new Set(
-      (shares.data?.items ?? []).filter((s) => s.status !== "FAILED").map((s) => s.campaignId),
-    );
-    return (campaigns.data?.items ?? []).filter((c) => !done.has(c.id));
-  }, [campaigns.data, shares.data]);
+  const openCampaigns = useMemo(() => campaigns.data?.items ?? [], [campaigns.data]);
+  const sharedCampaignIds = useMemo(
+    () =>
+      new Set(
+        (shares.data?.items ?? []).filter((s) => s.status !== "FAILED").map((s) => s.campaignId),
+      ),
+    [shares.data],
+  );
+  const toAmplify = useMemo(
+    () => openCampaigns.filter((c) => !sharedCampaignIds.has(c.id)),
+    [openCampaigns, sharedCampaignIds],
+  );
 
   const linkStatus = me.data?.linkedin.status;
   const linked = linkStatus === "ACTIVE" || linkStatus === "EXPIRING";
@@ -84,8 +95,58 @@ export default function CelebratePage() {
   // post's share dialog, so the click that started it carries on. Derived from
   // the URL rather than copied into state; closing the dialog clears both.
   const pendingShareId = searchParams.get("share");
+  // Novera sends the campaign id; a LinkedIn post id or post URL resolves to the same campaign.
+  const pendingCampaign = campaignForShareParam(pendingShareId, openCampaigns, campaignLinkOrigins);
   const pendingShare =
-    pendingShareId && linked ? (toAmplify.find((c) => c.id === pendingShareId) ?? null) : null;
+    pendingCampaign && linked && !sharedCampaignIds.has(pendingCampaign.id) ? pendingCampaign : null;
+
+  // The same link for an unlinked caller: the card's Amplify button would have
+  // opened the consent popup, so arriving through the card must do the same.
+  // Only once /me has answered — until then `linked` is false for everyone.
+  const pendingLink =
+    pendingCampaign && me.data !== undefined && !linked && !sharedCampaignIds.has(pendingCampaign.id)
+      ? pendingCampaign
+      : null;
+  const linkTarget = linking ?? pendingLink;
+
+  // Novera's card button always opens /amplify/celebrate?share=<id>. When the
+  // caller already amplified that post there is no dialog to open, so answer
+  // the click with a thank-you instead of a page that quietly ignores it. The
+  // title comes from the open list; a post that has closed since gives the
+  // plain message. The param is cleared so a refresh doesn't repeat it.
+  const thankedShareId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingShareId) {
+      // Cleared again (or never set): a later click on the same post is a new
+      // arrival and should be answered again. This also absorbs React's
+      // development double-run of the effect below.
+      thankedShareId.current = null;
+      return;
+    }
+    if (shares.isPending || campaigns.isPending) return;
+    // The share rows key on the campaign id, so a post id or URL in the link
+    // is looked up as its campaign first; only a campaign id can match when
+    // the post has closed and the open list no longer names it.
+    const targetId = pendingCampaign?.id ?? pendingShareId;
+    if (!sharedCampaignIds.has(targetId)) return;
+    if (thankedShareId.current === targetId) return;
+    thankedShareId.current = targetId;
+    showSuccess(
+      pendingCampaign
+        ? `Thank you for already amplifying this campaign: ${pendingCampaign.title}`
+        : "Thank you for already amplifying this campaign.",
+    );
+    setSearchParams({}, { replace: true });
+  }, [
+    pendingShareId,
+    shares.isPending,
+    campaigns.isPending,
+    sharedCampaignIds,
+    pendingCampaign,
+    showSuccess,
+    setSearchParams,
+  ]);
+
   const shareTarget = sharing ?? pendingShare;
   const closeShare = () => {
     setSharing(null);
@@ -169,11 +230,16 @@ export default function CelebratePage() {
       )}
 
       <LinkLinkedInDialog
-        open={linking !== null}
-        onClose={() => setLinking(null)}
+        open={linkTarget !== null}
+        onClose={() => {
+          setLinking(null);
+          // Closing a popup opened by the URL link clears it, so the page does
+          // not reopen it on the next render.
+          if (pendingLink) setSearchParams({}, { replace: true });
+        }}
         onDeclined={backToCelebrate}
-        returnTo={linking ? `${AMPLIFY_CELEBRATE_PATH}?share=${encodeURIComponent(linking.id)}` : AMPLIFY_CELEBRATE_PATH}
-        pendingCampaignId={linking?.id}
+        returnTo={linkTarget ? `${AMPLIFY_CELEBRATE_PATH}?share=${encodeURIComponent(linkTarget.id)}` : AMPLIFY_CELEBRATE_PATH}
+        pendingCampaignId={linkTarget?.id}
         reconnect={linkStatus === "NEEDS_RECONNECT"}
       />
       <ShareDialog campaign={shareTarget} onClose={closeShare} />

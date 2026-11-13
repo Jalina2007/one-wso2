@@ -68,14 +68,23 @@ export function useAmplifyMe(enabled = true) {
  * Deployment settings amplify-api sends in `GET /me` (LinkedIn company page, privacy notice, allowed post-link
  * origins). Until /me loads, or if it fails, the org and privacy values are empty and links are limited to
  * LinkedIn, so nothing is sent or followed on a guess.
+ *
+ * `campaignLinkOrigins` is the wire name (openapi.yaml); it also decides which LinkedIn sign-in page the consent
+ * popup may follow, which is how the local mock's `http://localhost:19091` gets through.
  */
+export function amplifyConfigFrom(me: AmplifyMe | undefined): AmplifyAppConfig {
+  return {
+    linkedinOrgUrn: me?.config?.linkedinOrgUrn ?? "",
+    privacyNoticeUrl: me?.config?.privacyNoticeUrl ?? "",
+    campaignLinkOrigins: me?.config?.campaignLinkOrigins?.length
+      ? me.config.campaignLinkOrigins
+      : [...DEFAULT_POST_LINK_ORIGINS],
+  };
+}
+
 export function useAmplifyConfig(): AmplifyAppConfig {
   const { data } = useAmplifyMe();
-  return {
-    linkedinOrgUrn: data?.config?.linkedinOrgUrn ?? "",
-    privacyNoticeUrl: data?.config?.privacyNoticeUrl ?? "",
-    postLinkOrigins: data?.config?.campaignLinkOrigins?.length ? data.config.campaignLinkOrigins : [...DEFAULT_POST_LINK_ORIGINS],
-  };
+  return amplifyConfigFrom(data);
 }
 
 /**

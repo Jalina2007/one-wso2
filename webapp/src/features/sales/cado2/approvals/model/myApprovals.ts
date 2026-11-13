@@ -22,7 +22,7 @@ import type { ApprovalOutcome, ApprovalStep, ApprovalWorkflow } from "@features/
 import { renewalStartWarning } from "@features/sales/cado2/quotes/form/renewalStart";
 
 /** What kind of rule asked for the approval; picks the row's icon. */
-export type ReasonKind = "discount" | "review" | "terms" | "term" | "downsell" | "payment" | "category" | "other";
+export type ReasonKind = "discount" | "review" | "terms" | "term" | "downsell" | "payment" | "other";
 
 /**
  * One reason, split for display. From the backend's sentence
@@ -96,29 +96,6 @@ export function parseReason(ruleCode: string, lineNumber: number, reason: string
   return discount
     ? { kind: rule.kind, title, group, figure: discount[1], detail: capital(discount[2].replace(/^is /, "")) }
     : { kind: rule.kind, title, group, detail: capital(rest) };
-}
-
-const CATEGORY_LABEL: Record<string, string> = {
-  SUBSCRIPTION: "Subscription",
-  SUPPORT: "Support",
-  PROFESSIONAL_SERVICE: "Professional Service",
-};
-
-/**
- * For Deal Desk: lines whose category the rep chose because the product isn't
- * mapped, e.g. "Line 3 · WSO2 Onboarding" / "Category chosen by the AM:
- * Professional Service". Deal Desk verifies them (quote-submission.md D46).
- */
-export function repCategoryPoints(
-  lines: readonly { number: number; productName: string; category: string; categoryByRep: boolean }[],
-): ReasonRow[] {
-  return lines
-    .filter((l) => l.categoryByRep)
-    .map((l) => ({
-      kind: "category" as const,
-      title: `Line ${l.number} · ${l.productName}`,
-      detail: `Category chosen by the AM: ${CATEGORY_LABEL[l.category] ?? l.category}`,
-    }));
 }
 
 /**

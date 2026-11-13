@@ -43,7 +43,6 @@ const line = (discount: string): LineValue => ({
   pricebookName: "FY26 USD",
   unitPrice: "1000",
   category: "SUBSCRIPTION",
-  categorySource: "MAPPED",
   recurring: true,
   classification: "PS",
   unitOfMeasure: "Gateways",
@@ -54,8 +53,6 @@ const line = (discount: string): LineValue => ({
   endDate: "",
   salesPrice: "",
   key: `k-${Math.random()}`,
-  parentKey: "",
-  bundleFixedQuantity: null,
 });
 
 function Harness({ lines, values = {} }: { lines: LineValue[]; values?: Partial<DraftFormValues> }) {
@@ -69,25 +66,11 @@ function Harness({ lines, values = {} }: { lines: LineValue[]; values?: Partial<
   );
 }
 
+// D141: the justification moved to Review, just above Submit.
 describe("CommercialStep — justification", () => {
-  it("is optional when no line has a discount", () => {
-    render(<Harness lines={[line("0"), line("")]} />);
-    expect(
-      screen.getByRole("textbox", { name: "Justification (optional)" }),
-    ).not.toBeRequired();
-    expect(screen.queryByText(/a justification is required/)).toBeNull();
-  });
-
-  it("is required, with a hint, once a line has a discount", () => {
-    render(<Harness lines={[line("18"), line("0"), line("5.5")]} />);
-    expect(
-      screen.getByRole("textbox", { name: /^Justification/ }),
-    ).toBeRequired();
-    expect(
-      screen.getByText(
-        "A discount has been added to 2 lines, so a justification is required.",
-      ),
-    ).toBeInTheDocument();
+  it("is no longer on Commercials", () => {
+    render(<Harness lines={[line("18")]} />);
+    expect(screen.queryByRole("textbox", { name: /^Justification/ })).toBeNull();
   });
 });
 
@@ -102,6 +85,15 @@ describe("CommercialStep — Commercials", () => {
     expect(screen.queryByRole("region", { name: "Payment" })).toBeNull();
     const billTo = within(screen.getByRole("region", { name: "Bill To" }));
     expect(billTo.getByRole("textbox", { name: "PO number (optional)" })).toBeInTheDocument();
+  });
+
+  // D165: an optional legal contact, under the security contact on Ship To.
+  it("offers a legal contact under the security contact", () => {
+    render(<Harness lines={[line("0")]} />);
+    const shipTo = within(screen.getByRole("region", { name: "Ship To" }));
+    const text = shipTo.getByText("Security contact (optional)").compareDocumentPosition(shipTo.getByText("Legal contact (optional)"));
+    expect(text & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shipTo.getByText(/Receives legal notices/)).toBeInTheDocument();
   });
 
   // D88: services-only quotes choose their billing too. The special-terms

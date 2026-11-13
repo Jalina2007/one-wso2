@@ -14,12 +14,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-// Marketing Calendar: a month of the events, content, social posts and emails the
+// Marketing Calendar: a month of the events, content, social posts, emails and releases the
 // marketing team plans in GitHub.
 //
 // The page is the shell and the access check. The calendar itself is a layout
 // route (MarketingCalendarLayout) with one tab per view: All, Events, Content,
-// Social and Email (routes.tsx).
+// Social, Email and Releases (routes.tsx).
 
 import { Alert } from "@wso2/oxygen-ui";
 import { MARKETING_OPS_EYEBROW } from "@constants/marketingOpsApps";
@@ -34,7 +34,7 @@ export default function MarketingCalendarPage() {
     <MarketingOpsShell
       eyebrow={MARKETING_OPS_EYEBROW.marketingCalendar}
       title="Calendar"
-      subtitle="Events, content, social posts and emails planned in GitHub. Click an item for its details."
+      subtitle="Events, content, social posts, emails and releases planned in GitHub. Click an item for its details."
     >
       <CalendarAccessCheck />
     </MarketingOpsShell>
@@ -43,7 +43,7 @@ export default function MarketingCalendarPage() {
 
 // The shell has already settled that the caller may use Marketing Ops at all; this
 // checks the Marketing Calendar capability itself, at the route, so a typed or shared
-// URL gets an answer rather than a failed request. One capability covers all five
+// URL gets an answer rather than a failed request. One capability covers all six
 // tabs, since they show the same data. The calendar (and its query) mounts only
 // once that passes.
 function CalendarAccessCheck() {

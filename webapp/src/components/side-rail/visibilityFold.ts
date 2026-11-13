@@ -245,7 +245,7 @@ export function claimsForPerspective(perspectiveKey: string): AdapterName[] {
   if (perspectiveKey === "sales") names.push("sales");
   // CadO2's rows exist only while its preview flag is on. Asking its /me when
   // they are absent would hold the Sales landing on a backend with nothing to show.
-  if (perspectiveKey === "sales" && isPreviewEnabled("cado2")) names.push("cado2");
+  if (perspectiveKey === "sales" && isPreviewEnabled("quickquote")) names.push("cado2");
   if (perspectiveKey === "people" || perspectiveKey === "me") names.push("promotion");
   if (perspectiveKey === "security") names.push("security");
   if (perspectiveKey === "engineering") names.push("engineering", "umt");

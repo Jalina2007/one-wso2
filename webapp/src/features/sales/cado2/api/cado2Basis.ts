@@ -35,7 +35,7 @@ export function useCado2Basis() {
   const sub = subState.status === "ready" ? subState.sub : undefined;
   // The preview flag as well as the URL: with the flag off nothing of CadO2
   // exists, and nothing may call its backend.
-  const ready = isSignedIn && isPreviewEnabled("cado2") && isCado2BackendConfigured() && Boolean(sub);
+  const ready = isSignedIn && isPreviewEnabled("quickquote") && isCado2BackendConfigured() && Boolean(sub);
   const key = useCallback((...parts: readonly unknown[]): Cado2Key => ["cado2", sub, ...parts], [sub]);
   return { getToken, sub, subState, retryIdentity, ready, key };
 }

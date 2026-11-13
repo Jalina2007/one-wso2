@@ -53,8 +53,18 @@ export default function SpeakerTimeline({
   currentTime,
   onSeek,
   markers = [],
+  lines: givenLines,
+  linesLoading = false,
 }: {
   meetingId: number;
+  /**
+   * The lines to draw, already placed on the recording being played -- when the call has
+   * several recordings, the page picks the lines spoken during the selected one and times
+   * them from its start. Omitted, the timeline reads the meeting's transcript itself.
+   */
+  lines?: readonly TranscriptLine[];
+  /** True while the given lines are still loading. */
+  linesLoading?: boolean;
   /** The recording's length, from the player. Falls back to the transcript's own span. */
   durationSeconds: number;
   currentTime: number;
@@ -69,10 +79,11 @@ export default function SpeakerTimeline({
 }) {
   const theme = useTheme();
   // Same query key as the transcript panel, so this shares its cache rather than
-  // fetching the conversation a second time.
-  const { data, isLoading } = useTranscript(meetingId);
+  // fetching the conversation a second time. Not fetched at all when the page gave lines.
+  const { data, isLoading: fetching } = useTranscript(givenLines ? null : meetingId);
+  const isLoading = givenLines ? linesLoading : fetching;
 
-  const lines = useMemo(() => data?.lines ?? [], [data]);
+  const lines = useMemo(() => givenLines ?? data?.lines ?? [], [givenLines, data]);
 
   const { speakers, span } = useMemo(() => summarise(lines, durationSeconds), [lines, durationSeconds]);
 
@@ -331,7 +342,7 @@ interface SpeakerSummary {
  * to fill the track and put every mark in the wrong place.
  */
 function summarise(
-  lines: TranscriptLine[],
+  lines: readonly TranscriptLine[],
   durationSeconds: number,
 ): { speakers: SpeakerSummary[]; span: number } {
   if (lines.length === 0) return { speakers: [], span: 0 };

@@ -122,7 +122,7 @@ export function Cado2Requires({ need, children }: { need: Cado2Need; children: R
   return <>{children}</>;
 }
 
-/** `/sales/cado2`: My Quotes for a rep, else My Approvals for an approver, else Admin. */
+/** `/sales/quickquote`: My Quotes for a rep, else My Approvals for an approver, else Admin. */
 export function Cado2Landing(): JSX.Element {
   const me = useCado2Me();
   const access = cado2Access(me.data);

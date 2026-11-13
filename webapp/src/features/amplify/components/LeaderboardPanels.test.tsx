@@ -79,6 +79,21 @@ describe("TopAmplifiersPanel", () => {
     expect(screen.getByText("250")).toBeTruthy();
   });
 
+  it("gives the time they reached their points on hover, only when the API sent it", () => {
+    const withTimes = topBoard(null);
+    withTimes.company[0].reachedAt = "2026-11-10T08:36:49Z";
+    render(<TopAmplifiersPanel board={withTimes} people={new Map()} />);
+    const labelled = document.querySelectorAll('[aria-label^="Reached "]');
+    expect(labelled).toHaveLength(1);
+    expect(labelled[0].getAttribute("aria-label")).toContain("Reached 120 pts");
+    expect(labelled[0].getAttribute("aria-label")).toContain("(2026-11-10 08:36:49 UTC)");
+  });
+
+  it("shows no time to an ordinary employee", () => {
+    render(<TopAmplifiersPanel board={topBoard(null)} people={new Map()} />);
+    expect(document.querySelectorAll('[aria-label^="Reached "]')).toHaveLength(0);
+  });
+
   it("shows the rule only for the monthly board", () => {
     const allTime = { ...topBoard(null), period: "ALL" as const };
     render(<TopAmplifiersPanel board={allTime} people={new Map()} />);

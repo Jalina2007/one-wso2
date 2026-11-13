@@ -64,9 +64,9 @@ const version = (n: number, status: "ACTIVE" | "REMOVED", minimum = "25000", day
 
 function renderPage() {
   render(
-    <MemoryRouter initialEntries={[`/sales/cado2/admin/pricing-formulas/${PRODUCT}`]}>
+    <MemoryRouter initialEntries={[`/sales/quickquote/admin/pricing-formulas/${PRODUCT}`]}>
       <Routes>
-        <Route path="/sales/cado2/admin/pricing-formulas/:productId" element={<PricingFormulaHistoryPage />} />
+        <Route path="/sales/quickquote/admin/pricing-formulas/:productId" element={<PricingFormulaHistoryPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -90,7 +90,7 @@ describe("PricingFormulaHistoryPage", () => {
     expect(asked).toContain(PRODUCT);
     expect(screen.getByRole("heading", { name: "WSO2 Enterprise Support" })).toBeInTheDocument();
     expect(screen.getByText("In force: v3 · 20 Oct 2026")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Pricing Formulas/ })).toHaveAttribute("href", "/sales/cado2/admin/pricing-formulas");
+    expect(screen.getByRole("link", { name: /Pricing Formulas/ })).toHaveAttribute("href", "/sales/quickquote/admin/pricing-formulas");
 
     const items = within(screen.getByRole("list", { name: "Versions, newest first" })).getAllByRole("listitem");
     expect(items.map((i) => i.getAttribute("aria-label"))).toEqual(["Version 3", "Version 2", "Version 1"]);

@@ -55,10 +55,20 @@ describe("umtBuildStatusChip", () => {
     expect(umtBuildStatusChip("IN_PROGRESS").pulsing).toBe(true);
   });
 
-  it("falls back to Failed for any unmapped value, including missing status", () => {
+  it("falls back to Failed for a status the backend sent that is not listed", () => {
     expect(umtBuildStatusChip("SOMETHING_ELSE").text).toBe("Failed");
-    expect(umtBuildStatusChip(null).text).toBe("Failed");
-    expect(umtBuildStatusChip(undefined).text).toBe("Failed");
+  });
+
+  it("falls back to Failed for a status named like a key every object inherits", () => {
+    for (const status of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+      expect(umtBuildStatusChip(status), status).toEqual({ text: "Failed", color: "#F64E60" });
+    }
+  });
+
+  it("reads a missing status as N/A, not as any build state", () => {
+    expect(umtBuildStatusChip(null).text).toBe("N/A");
+    expect(umtBuildStatusChip(undefined).text).toBe("N/A");
+    expect(umtBuildStatusChip("").text).toBe("N/A");
   });
 });
 

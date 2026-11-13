@@ -171,6 +171,27 @@ describe("email", () => {
   });
 });
 
+describe("release", () => {
+  it("lists the release fields, with the date as the Marketing Launch Date", () => {
+    const panel = renderDrawer(sampleItem("88:release"));
+    expect(within(panel).getByRole("heading", { name: "[Release-LTS] API Manager 4.6" })).toBeVisible();
+    expect(rows(panel)).toEqual([
+      ["Product name", "API Manager"],
+      ["Version", "4.6"],
+      ["BU", "API"],
+      ["Release type", "LTS"],
+      ["Tier", "Tier 1"],
+      ["Website Availability Date", longDate("2026-11-19")],
+      ["Marketing Launch Date", longDate("2026-11-24")],
+    ]);
+  });
+
+  it("leaves out a website availability date the form doesn't give", () => {
+    const panel = renderDrawer(sampleItem("91:release"));
+    expect(rows(panel).map(([label]) => label)).not.toContain("Website Availability Date");
+  });
+});
+
 it("always offers the issue on GitHub", () => {
   const panel = renderDrawer(sampleItem("55:social"));
   expect(within(panel).getByRole("link", { name: "Open in GitHub" })).toHaveAttribute(

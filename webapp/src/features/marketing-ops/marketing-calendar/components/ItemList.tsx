@@ -17,12 +17,14 @@
 import { alpha, Box, ButtonBase, Stack, Typography, useTheme } from "@wso2/oxygen-ui";
 import { categoryMainColor, categoryStyle } from "../calendarCategories";
 import { longDate } from "../calendarDates";
+import { itemDateText } from "../calendarSpans";
 import type { CalendarItem } from "../marketingCalendarTypes";
 
 // The List view's body: the items under a heading per day, earliest first, with
 // days that have nothing left out. Each row is drawn like the grid's entry (the
 // category's bar and tint) but with room for the whole title and a line of
-// category, Status and BU, which the grid only shows in the drawer.
+// category, Status and BU, which the grid only shows in the drawer. An event over
+// several days is listed once, under its first day, with its dates in that line.
 export default function ItemList({
   items,
   onOpenItem,
@@ -51,7 +53,9 @@ export default function ItemList({
 function ItemRow({ item, onOpen }: { item: CalendarItem; onOpen: (item: CalendarItem) => void }) {
   const style = categoryStyle(item.category);
   const colour = categoryMainColor(style, useTheme().palette);
-  const summary = [style.label, item.status, item.bu.join(", ")].filter(Boolean).join(" · ");
+  const summary = [style.label, item.endDate && itemDateText(item), item.status, item.bu.join(", ")]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <ButtonBase
       onClick={() => onOpen(item)}

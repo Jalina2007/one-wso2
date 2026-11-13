@@ -60,12 +60,12 @@ export default function PostCard({
   chips?: ReactNode;
   action?: ReactNode;
 }) {
-  const { postLinkOrigins } = useAmplifyConfig();
+  const { campaignLinkOrigins } = useAmplifyConfig();
   return (
     <Paper variant="outlined" sx={{ p: 1.5, height: "100%", display: "flex", flexDirection: "column", gap: 1 }}>
       <Box sx={{ minWidth: 0 }}>
         <Link
-          href={linkedInPostUrl(campaign.resourceUrn, campaign.resourceUrl, postLinkOrigins)}
+          href={linkedInPostUrl(campaign.resourceUrn, campaign.resourceUrl, campaignLinkOrigins)}
           target="_blank"
           rel="noopener noreferrer"
           underline="hover"

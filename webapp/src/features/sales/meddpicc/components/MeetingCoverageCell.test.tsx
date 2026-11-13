@@ -62,4 +62,12 @@ describe("MeetingCoverageCell", () => {
     expect(row.children[0].textContent).toBe("");
     expect(row.children[1].contains(screen.getByRole("group"))).toBe(true);
   });
+
+  // An empty transcript is not a failed analysis: nothing was said, so nothing went wrong.
+  it("says the transcript is empty rather than that the analysis failed", () => {
+    renderCell(coverage({ status: "EMPTY", coverage: null, stageAtCall: null }));
+    expect(screen.getByText("Transcript is empty")).toBeInTheDocument();
+    expect(screen.queryByText("Analysis failed")).not.toBeInTheDocument();
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+  });
 });

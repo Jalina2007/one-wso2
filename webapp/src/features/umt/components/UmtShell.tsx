@@ -15,7 +15,7 @@
 // under the License.
 
 import type { ReactNode } from "react";
-import { Alert, Box, CircularProgress, IconButton, Stack, Typography } from "@wso2/oxygen-ui";
+import { Alert, Box, CircularProgress, GlobalStyles, IconButton, Stack, Typography } from "@wso2/oxygen-ui";
 import { ArrowLeftIcon } from "@wso2/oxygen-ui-icons-react";
 import { Link as RouterLink } from "react-router";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
@@ -23,6 +23,30 @@ import { isUmtBackendConfigured } from "@config/apiConfig";
 import { useUmtGate } from "../api/useUmtGate";
 import { useUmtMeta } from "../api/useUmtMeta";
 import UmtLocked from "./UmtLocked";
+
+// Two corrections to how the theme draws selects, for every UMT screen:
+//
+//   1. The theme lifts the label of an empty select 7px. That centres the
+//      medium label of a <FormControl> + <InputLabel> + <Select>, but lifts
+//      the small label of a <TextField select> above the middle of the field.
+//      This puts the <TextField select> label back in the middle and leaves
+//      the other kind as the theme draws it.
+//   2. The theme gives a small select 10px of vertical padding, where a small
+//      text field has 8.5px, so a select sits 3px taller than a text field
+//      beside it. This gives the select the text field's padding.
+//
+// These are global rules, so they also reach selects in dialogs, which render
+// outside the page. They are active only while a UMT screen is mounted. The
+// repeated classes make them more specific than the theme's rules.
+const UMT_SELECT_FIXES = {
+  ".MuiTextField-root:has(.MuiSelect-select) .MuiInputLabel-root.MuiInputLabel-root:not(.MuiInputLabel-shrink)": {
+    top: 0,
+  },
+  ".MuiFormControl-root .MuiSelect-select.MuiSelect-select.MuiInputBase-inputSizeSmall": {
+    paddingTop: "8.5px",
+    paddingBottom: "8.5px",
+  },
+};
 
 // Shared frame for every UMT screen and the one owner of its access-state
 // ladder:
@@ -57,6 +81,7 @@ export default function UmtShell({
 
   return (
     <Box sx={{ display: "flex", flex: 1, flexDirection: "column", minHeight: 0 }}>
+      <GlobalStyles styles={UMT_SELECT_FIXES} />
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2.25, mt: 0 }}>
         {backTo && (
           <IconButton component={RouterLink} to={backTo} state={backState} size="small" aria-label="Back">

@@ -67,6 +67,10 @@ declare global {
       // Optional — when absent (and the `cado2` preview flag is on) CadO2's
       // pages show a not-connected state and make no requests.
       ONE_WSO2_CADO2_BACKEND_URL?: string;
+      // Base URL for the Swag Store backend, version segment included.
+      // Optional — when absent (and the `swagStore` preview flag is on) the
+      // store's pages show a not-connected state and make no requests.
+      ONE_WSO2_SWAG_STORE_BACKEND_URL?: string;
       // Base URL for the Pitstop backend that serves Smart Search, version
       // segment included. Optional — when absent Sales → Library shows a
       // not-connected state and makes no requests.
@@ -187,6 +191,8 @@ declare global {
       // https://wso2.lightning.force.com, correct for every WSO2
       // environment today. Set it only for a sandbox org.
       ONE_WSO2_SALESFORCE_BASE_URL?: string;
+      // Image URL used in the generated email signature. Optional.
+      ONE_WSO2_EMAIL_SIGNATURE_LOGO_URL?: string;
       // Override for the Asgardeo My Account portal URL that the top-bar
       // "Profile" menu item opens. Only set this on non-standard tenants
       // (self-hosted / custom domain); on Asgardeo Cloud we derive it from

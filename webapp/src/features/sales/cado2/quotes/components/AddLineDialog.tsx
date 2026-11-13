@@ -27,7 +27,6 @@ import {
   DialogContent,
   DialogTitle,
   InputAdornment,
-  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -35,40 +34,29 @@ import {
 } from "@wso2/oxygen-ui";
 import { CalendarDaysIcon, PackageIcon, PercentIcon } from "@wso2/oxygen-ui-icons-react";
 import { formatMoney } from "@features/sales/cado2/utils/money";
-import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { descriptionAfterName } from "@features/sales/cado2/utils/productDescription";
 import { lineProblems } from "@features/sales/cado2/quotes/components/lineProblems";
-import { useBundleChildren, usePricingFormulas, useProducts } from "@features/sales/cado2/quotes/api/useQuoteApi";
+import { usePricingFormulas, useProducts } from "@features/sales/cado2/quotes/api/useQuoteApi";
 import type {
-  CategorySource,
   LineCategory,
   LineFormula,
   PricebookRef,
   PricingFormula,
   Product,
 } from "@features/sales/cado2/quotes/api/quoteTypes";
-import { bindingsSummary, versionLabel } from "@features/sales/cado2/utils/pricingFormula";
+import { bindingsSummary, unitOfMeasureFor, versionLabel } from "@features/sales/cado2/utils/pricingFormula";
 import {
   ProductListContext,
   productLabel,
   useProductList,
 } from "@features/sales/cado2/components/product-list/productList";
 import { ProductListPaper, ProductOption } from "@features/sales/cado2/components/product-list/ProductListParts";
-import BundlePicks from "./BundlePicks";
 import {
-  asksTheAm,
-  missingChoices,
-  NO_PICKS,
-  pickedChildren,
-  picksFrom,
-  type BundlePicksValue,
-} from "@features/sales/cado2/quotes/form/bundlePicks";
-import {
+  durationText,
   formatDate,
   LINE_CATEGORIES,
   lineDatesProblem,
-  childQuantity,
   newLineKey,
   parseDateString,
   salesPriceProblem,
@@ -116,6 +104,49 @@ type CardPricing =
   | { kind: "PRICE_BOOK" }
   | { kind: "KEPT_FORMULA"; formula: LineFormula }
   | { kind: "FORMULA"; formula: PricingFormula };
+
+/**
+ * A formula line's discount (D149): the formula price, the discount and the
+ * price after it, per unit. A new line's formula price is worked out on the
+ * quote, so only the discount is said.
+ */
+function FormulaDiscount({
+  currency,
+  formulaPrice,
+  discount,
+}: {
+  currency: string;
+  formulaPrice: string | null;
+  discount: string;
+}): JSX.Element {
+  const pct = Number(discount);
+  if (!formulaPrice) {
+    return (
+      <Typography variant="body2" color="text.secondary" aria-label="Price after discount">
+        {pct}% off the formula price, once it&apos;s worked out on the quote.
+      </Typography>
+    );
+  }
+  const price = Number(formulaPrice);
+  const off = Math.round(price * pct) / 100;
+  const row = (label: string, value: string, bold = false) => (
+    <Stack direction="row" justifyContent="space-between" spacing={2} sx={{ fontWeight: bold ? 700 : 400 }}>
+      <span>{label}</span>
+      <Box component="span" sx={{ fontVariantNumeric: "tabular-nums" }}>
+        {value}
+      </Box>
+    </Stack>
+  );
+  return (
+    <Box aria-label="Price after discount" sx={{ p: 1.25, borderRadius: 1, bgcolor: "action.hover", typography: "body2" }}>
+      {row("Formula price", `${currency} ${formatMoney(price.toFixed(2))}`)}
+      {row(`Discount ${pct}%`, `− ${currency} ${formatMoney(off.toFixed(2))}`)}
+      <Box sx={{ borderTop: 1, borderColor: "divider", mt: 0.5, pt: 0.5 }}>
+        {row("Price after discount, per unit", `${currency} ${formatMoney((price - off).toFixed(2))}`, true)}
+      </Box>
+    </Box>
+  );
+}
 
 /**
  * The chosen product and its price, shown prominently (the price can't be
@@ -216,16 +247,7 @@ interface AddLineDialogProps {
   readonly pricebook: PricebookRef;
   /** The contract year the line is in; its dates stay within it. Null before the start date. */
   readonly year: ContractYear | null;
-  /** Editing a bundle child: its parent's name; it keeps the parent's dates. */
-  readonly parentName?: string | null;
-  /** Editing a bundle parent: its child lines now, whose picks it shows (D131). */
-  readonly currentChildren?: readonly LineValue[];
-  /**
-   * The line, and the children that come with it: for a new bundle parent,
-   * or an edited one whose picks the AM may change (D131); null = its
-   * children unchanged.
-   */
-  readonly onSave: (line: LineValue, children: LineValue[] | null) => void;
+  readonly onSave: (line: LineValue) => void;
   readonly onClose: () => void;
 }
 
@@ -247,8 +269,6 @@ export default function AddLineDialog({
   currency,
   pricebook,
   year,
-  parentName = null,
-  currentChildren = [],
   onSave,
   onClose,
 }: AddLineDialogProps): JSX.Element {
@@ -263,51 +283,29 @@ export default function AddLineDialog({
   const [product, setProduct] = useState<Product | null>(null);
   // The parent mounts the dialog afresh for each add/edit, so the line (or
   // blanks) only needs loading once.
-  // The rep's choice, used only for a product without a mapping.
-  const [category, setCategory] = useState<LineCategory | "">(line?.category ?? "");
   // Locked for now (2026-10-14): a saved line keeps its value; a new one has none.
   const [quantity, setQuantity] = useState(line?.quantity ?? "1");
   const [discount, setDiscount] = useState(line?.discount ?? "0");
   // The unit price charged: "" = the list price.
   const [salesPrice, setSalesPrice] = useState(line?.salesPrice ?? "");
   const [tried, setTried] = useState(false);
-  // Its dates within the year, shown filled in; saved as "" when they are the year's own.
+  // A one-off line's dates within the year (D146), shown filled in: the
+  // end follows the start until the AM picks one. A recurring line has none.
   const [startDate, setStartDate] = useState(line?.startDate || year?.start || "");
-  const [endDate, setEndDate] = useState(line?.endDate || year?.end || "");
+  const [pickedEnd, setEndDate] = useState(line?.endDate ?? "");
+  const endDate = pickedEnd || startDate;
   const formulas = usePricingFormulas();
-  const isChild = Boolean(line?.parentKey);
-  // A new product's bundle, or an edited parent's (its picks, D131): what
-  // comes with it from this price book.
-  const bundle = useBundleChildren(!line ? (product?.id ?? null) : isChild ? null : (line.productId ?? null), currency, pricebook.id);
-  const bundled = bundle.data?.children ?? [];
-  // A product whose bundle couldn't be read isn't added alone: its children
-  // must come with it, and can't be added as children later.
-  const bundleFailed = !line && Boolean(product) && Boolean(bundle.error);
-  // D131: a bundle with choices or optional products asks the AM; the picks
-  // start empty for a new product, from the child lines for an edited parent.
-  const asks = asksTheAm(bundled);
-  const [pickState, setPickState] = useState<{ productId: string; value: BundlePicksValue } | null>(null);
-  const pickedFor = line ? (line.productId ?? "") : (product?.id ?? "");
-  const picks =
-    pickState && pickState.productId === pickedFor
-      ? pickState.value
-      : line
-        ? picksFrom(bundled, currentChildren.map((c) => c.productId ?? ""))
-        : NO_PICKS;
-  const stillToPick = asks ? missingChoices(bundled, picks) : [];
-  const comesCount = (asks ? pickedChildren(bundled, picks) : bundled).length;
 
   // A product carries one price: the quote's book's.
   const entry = product?.pricebookEntries[0];
   // Editing without re-choosing the product keeps the saved snapshot.
   const keepsExisting = line !== null && product === null;
-  // A mapped product's category is the Admin's and can't be changed.
-  const mapped: LineCategory | null = product
-    ? (product.category ?? null)
-    : keepsExisting && line.categorySource === "MAPPED" && line.category
-      ? line.category
-      : null;
-  const source: CategorySource = mapped ? "MAPPED" : "REP";
+  // Its group and whether it recurs come from its Salesforce classification
+  // (D152); nobody chooses them. A product whose classification isn't set up
+  // can't be added.
+  const group: LineCategory | "" = product ? (product.category ?? "") : keepsExisting ? line.category : "";
+  const classificationProblem = product?.classificationProblem ?? null;
+  const classification = product ? product.classification : keepsExisting ? line.classification : null;
   const chosen = product !== null || keepsExisting;
   // How the line is priced (D81, D82). A saved line keeps its pricing until
   // the AM moves it to the product's pricing in force; a new line takes that.
@@ -323,7 +321,7 @@ export default function AddLineDialog({
     : inForce
       ? { kind: "FORMULA", formula: inForce }
       : { kind: "PRICE_BOOK" };
-  // A formula line has no discount.
+  // A formula sets the price; the AM's discount is taken off it (D149).
   const formula = kept ? kept.method === "FORMULA" : Boolean(inForce);
   // What the AM can move the kept line to, if the pricing in force differs.
   const moveTo = !kept
@@ -344,36 +342,43 @@ export default function AddLineDialog({
         ? { text: `This product now has a pricing formula: ${versionLabel(inForce.version, inForce.updatedAt)}.`, action: "Use the formula" }
         : null;
   // The unit of measure, saved with the line and shown in the table, not in
-  // this dialog (D114): a formula line's comes from its version (D83);
-  // otherwise it will come from Salesforce (D79), and a line moved off a
+  // this dialog (D114): a formula line's comes from its version (D83); a new
+  // price-book line's from its product's Quantity Unit Of Measure in
+  // Salesforce (D158); a kept line keeps its own, and a line moved off a
   // formula has none.
   const uom =
     pricing.kind === "FORMULA"
-      ? pricing.formula.unitOfMeasure
+      ? // %LIST_PRICE% filled in with the price-book price (D154), as the save does.
+        unitOfMeasureFor(
+          pricing.formula.unitOfMeasure,
+          entry?.unitPrice ?? line?.keepPricing?.formula?.listPrice ?? line?.unitPrice ?? "",
+        )
       : pricing.kind === "KEPT_FORMULA"
         ? (pricing.formula.unitOfMeasure ?? line?.unitOfMeasure ?? "")
-        : keepsExisting && moved && line.keepPricing?.method === "FORMULA"
-          ? ""
-          : (line?.unitOfMeasure ?? "");
+        : !keepsExisting
+          ? (product?.unitOfMeasure ?? "")
+          : moved && line.keepPricing?.method === "FORMULA"
+            ? ""
+            : (line.unitOfMeasure ?? "");
   // A line moved off a formula goes back to the price-book price it was worked out from.
   const keptUnitPrice =
     keepsExisting && moved && line.keepPricing?.method === "FORMULA" ? (line.keepPricing.formula?.listPrice ?? line.unitPrice) : line?.unitPrice ?? "";
 
   const problems = lineProblems({
     pricebookEntryId: keepsExisting ? line.pricebookEntryId : entry ? entry.id : "",
-    category: mapped ?? category,
     quantity,
-    discount: formula ? "0" : discount,
+    discount,
   });
   const recurring = keepsExisting ? line.recurring : (product?.recurring ?? true);
-  const datesProblem = !year
-    ? ""
-    : !startDate || (recurring && !endDate)
-      ? "Choose the dates"
-      : lineDatesProblem(
-          { yearNumber: year.number, startDate, endDate: recurring ? endDate : "", recurring },
-          Array.from({ length: year.number }, () => year),
-        );
+  const datesProblem =
+    !year || recurring
+      ? ""
+      : !startDate
+        ? "Choose the dates"
+        : lineDatesProblem(
+            { yearNumber: year.number, startDate, endDate, recurring },
+            Array.from({ length: year.number }, () => year),
+          );
   // The list price the sales price can't go below: the price book's (a kept
   // line's stored one); a formula line has no sales price.
   const listPrice = keepsExisting ? keptUnitPrice : (entry?.unitPrice ?? "");
@@ -382,13 +387,11 @@ export default function AddLineDialog({
 
   const chooseProduct = (p: Product | null) => {
     setProduct(p);
-    // No pre-fill: Product_Unit__c turned out to be the product family (APIM,
-    // IAM…), not a unit of measure (verified 2026-09-26). The rep types it.
   };
 
   const save = () => {
     setTried(true);
-    if (Object.keys(problems).length > 0 || (!isChild && datesProblem) || salesProblem || stillToPick.length > 0) return;
+    if (classificationProblem || Object.keys(problems).length > 0 || datesProblem || salesProblem) return;
     const base: LineValue = keepsExisting
       ? { ...line }
       : {
@@ -401,8 +404,7 @@ export default function AddLineDialog({
           pricebookId: entry!.pricebook?.id ?? "",
           pricebookName: entry!.pricebook?.name ?? "",
           unitPrice: entry!.unitPrice ?? "",
-          category: mapped ?? (category as LineCategory),
-          categorySource: source,
+          category: product!.category ?? "",
           recurring: product!.recurring,
           classification: product!.classification ?? "",
           unitOfMeasure: "",
@@ -413,75 +415,20 @@ export default function AddLineDialog({
           endDate: "",
           salesPrice: "",
           key: newLineKey(),
-          parentKey: "",
-          bundleFixedQuantity: null,
         };
     const saved: LineValue = {
       ...base,
-      category: mapped ?? (category as LineCategory),
-      categorySource: source,
       unitOfMeasure: uom.trim(),
       quantity: String(Number(quantity)),
-      discount: formula ? "0" : discount.trim() || "0",
+      discount: discount.trim() || "0",
       unitPrice: keepsExisting ? keptUnitPrice : base.unitPrice,
       useLatestPricing: keepsExisting && moved ? true : undefined,
       salesPrice: formula || !salesPrice.trim() || Number(salesPrice) === Number(listPrice) ? "" : String(Number(salesPrice)),
-      startDate: year && startDate !== year.start ? startDate : "",
-      endDate: year && recurring && endDate !== year.end ? endDate : "",
+      // A one-off line's real dates, kept when the term moves (D146).
+      startDate: year && !recurring ? startDate : "",
+      endDate: year && !recurring ? endDate : "",
     };
-    // Its bundle comes with it: same year and dates, the quantity its rule
-    // says (D125: fixed, or the parent's), no discount, priced from the same
-    // book; with choices, only what the AM picked (D131). An edited parent's
-    // children it keeps stay as they were (discount, sales price).
-    const comes = asks ? pickedChildren(bundled, picks) : bundled;
-    const children: LineValue[] | null =
-      line && !(asks && !isChild)
-        ? null
-        : comes.flatMap((p) => {
-          const e = p.pricebookEntries[0];
-          const kept = currentChildren.find((c) => c.productId === p.id);
-          if (kept) {
-            return [
-              {
-                ...kept,
-                yearNumber: saved.yearNumber,
-                startDate: saved.startDate,
-                endDate: kept.recurring ? saved.endDate : "",
-                quantity: childQuantity(saved.quantity, p.fixedQuantity),
-                bundleFixedQuantity: p.fixedQuantity,
-              },
-            ];
-          }
-          if (!e) return [];
-          return [
-            {
-              lineId: null,
-              pricebookEntryId: e.id,
-              productId: p.id,
-              productName: p.name ?? p.id,
-              productCode: p.productCode ?? "",
-              productDescription: p.description ?? "",
-              pricebookId: e.pricebook?.id ?? "",
-              pricebookName: e.pricebook?.name ?? "",
-              unitPrice: e.unitPrice ?? "",
-              category: p.category ?? "",
-              categorySource: p.category ? "MAPPED" : "REP",
-              recurring: p.recurring,
-              classification: p.classification ?? "",
-              unitOfMeasure: "",
-              quantity: childQuantity(saved.quantity, p.fixedQuantity),
-              discount: "0",
-              yearNumber: saved.yearNumber,
-              startDate: saved.startDate,
-              endDate: p.recurring ? saved.endDate : "",
-              salesPrice: "",
-              key: newLineKey(),
-              parentKey: saved.key,
-              bundleFixedQuantity: p.fixedQuantity,
-            } satisfies LineValue,
-          ];
-        });
-    onSave(saved, children);
+    onSave(saved);
   };
 
   return (
@@ -581,73 +528,30 @@ export default function AddLineDialog({
                 />
               </ProductListContext.Provider>
             )}
-            {asks ? (
-            <BundlePicks
-              items={bundled}
-              value={picks}
-              onChange={(value) => setPickState({ productId: pickedFor, value })}
-              parentQuantity={quantity}
-              showMissing={tried}
-            />
-          ) : !line && bundled.length ? (
-            <Alert severity="info" variant="outlined" aria-label="Bundle">
-              Comes with{" "}
-              {bundled.map((p) => `${p.name ?? p.id} (${p.fixedQuantity === null ? "same quantity" : `always ${p.fixedQuantity}`})`).join(", ")}.{" "}
-              {bundled.length === 1 ? "It is" : "They are"} added with it, in the same year and dates, and can only be removed with it.
+          {/* Its category and type, and the classification they come from (D152). */}
+          {chosen && classificationProblem ? (
+            <Alert severity="error" aria-label="Classification">
+              {classificationProblem}
             </Alert>
-          ) : null}
-          {bundleFailed ? (
-            <ErrorNotice error={bundle.error} onRetry={() => void bundle.refetch()} retrying={bundle.isFetching}>
-              Couldn&apos;t check what comes with this product, so it can&apos;t be added yet.
-            </ErrorNotice>
-          ) : null}
-          {bundle.data?.missing.length ? (
-            <Alert severity="warning" aria-label="Not in the price book">
-              Not in {pricebook.name}, so not added: {bundle.data.missing.join(", ")}.
-            </Alert>
-          ) : null}
-          {chosen && mapped ? (
-              <Stack
-                direction="row"
-                spacing={1}
-                alignItems="center"
-                aria-label="Category"
-                sx={{ flexWrap: "wrap", rowGap: 0.5 }}
-              >
-                <Typography variant="body2" color="text.secondary">
-                  Category
-                </Typography>
-                <Chip size="small" color="primary" variant="outlined" label={categoryLabel(mapped)} />
+          ) : chosen && group ? (
+            <Stack direction="row" spacing={1} alignItems="center" aria-label="Category" sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+              <Typography variant="body2" color="text.secondary">
+                Category
+              </Typography>
+              <Chip size="small" color="primary" variant="outlined" label={categoryLabel(group)} />
+              <Chip size="small" variant="outlined" label={recurring ? "Recurring" : "Non-recurring"} />
+              {classification ? (
                 <Typography variant="caption" color="text.secondary">
-                  Set for this product by an Admin
+                  From its Salesforce classification, {classification}.
                 </Typography>
-              </Stack>
-            ) : chosen ? (
-              <>
-                {/* Until the AM chooses; then only a quiet note under the field. */}
-                {category ? null : (
-                  <Alert severity="warning">
-                    No category is set up for this product. Choose one; Deal Desk will check it.
-                  </Alert>
-                )}
-                <TextField
-                  select
-                  label="Category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as LineCategory)}
-                  size="small"
-                  required
-                  error={Boolean(show("category"))}
-                  helperText={show("category") ?? (category ? "Deal Desk will check it" : undefined)}
-                >
-                  {CATEGORIES.map((c) => (
-                    <MenuItem key={c.value} value={c.value}>
-                      {c.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </>
-            ) : null}
+              ) : null}
+            </Stack>
+          ) : chosen ? (
+            <Alert severity="warning" aria-label="Classification">
+              Classification not set up · ask an Admin. This product can&apos;t be quoted until its classification
+              {classification ? `, ${classification},` : ""} is set up on Admin → Product Classifications.
+            </Alert>
+          ) : null}
           </Stack>
           <Group icon={<PercentIcon size={14} />} title="Price, Quantity & Discount">
             {/* The sales price: the list price unless raised; never
@@ -670,32 +574,23 @@ export default function AddLineDialog({
               slotProps={{ input: { startAdornment: <InputAdornment position="start">{currency}</InputAdornment> } }}
             />
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              {/* D125: a bundle child's quantity comes from the bundle, not the AM. */}
               <TextField
                 label="Quantity"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 size="small"
-                required={!isChild}
-                disabled={isChild}
+                required
                 inputMode="numeric"
-                error={!isChild && Boolean(show("quantity"))}
-                helperText={
-                  isChild
-                    ? line?.bundleFixedQuantity != null
-                      ? `Set by the bundle: always ${line.bundleFixedQuantity}`
-                      : `Set by the bundle: the same as ${parentName ?? "its parent"}`
-                    : (show("quantity") ?? "Whole units only")
-                }
+                error={Boolean(show("quantity"))}
+                helperText={show("quantity") ?? "Whole units only"}
               />
               <TextField
                 label="Discount"
-                value={formula ? "0" : discount}
+                value={discount}
                 onChange={(e) => setDiscount(e.target.value)}
                 size="small"
-                disabled={Boolean(formula)}
-                error={Boolean(show("discount")) && !formula}
-                helperText={formula ? "No discount on formula-priced products" : show("discount")}
+                error={Boolean(show("discount"))}
+                helperText={show("discount") ?? (formula ? "Off the formula price" : undefined)}
                 slotProps={{
                   input: {
                     endAdornment: <InputAdornment position="end">%</InputAdornment>,
@@ -703,20 +598,38 @@ export default function AddLineDialog({
                 }}
               />
             </Stack>
+            {formula && !problems.discount && Number(discount) > 0 ? (
+              <FormulaDiscount
+                currency={currency}
+                formulaPrice={pricing.kind === "KEPT_FORMULA" ? keptUnitPrice : null}
+                discount={discount}
+              />
+            ) : null}
           </Group>
-          {/* Its dates within its year: the whole year
-              unless narrowed; a one-off is charged on its start. A bundle
-              child keeps its parent's. */}
-          {isChild ? (
-            <Typography variant="body2" color="text.secondary">
-              Comes with {parentName ?? "its bundle's product"}: same year and dates, and removed only with it.
-            </Typography>
+          {/* Its dates within its year (D146): a recurring line covers all
+              of it; a one-off line has a start and an end inside it,
+              charged once. */}
+          {year && recurring ? (
+            <Group icon={<CalendarDaysIcon size={14} />} title={`Dates in Year ${year.number}`}>
+              <Box sx={{ bgcolor: "action.hover", borderRadius: 1, px: 1.5, py: 1.25 }}>
+                <Typography variant="body2">
+                  Covers the whole of Year {year.number}:{" "}
+                  <Box component="span" sx={{ fontWeight: 600 }}>
+                    {formatDate(year.start)} – {formatDate(year.end)}
+                  </Box>{" "}
+                  · {durationText(year.start, year.end)}
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                Charged every year: its dates follow the year.
+              </Typography>
+            </Group>
           ) : year ? (
             <Group icon={<CalendarDaysIcon size={14} />} title={`Dates in Year ${year.number}`}>
               <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
                 {[
-                  { label: recurring ? "Start" : "Charged on", value: startDate, set: setStartDate },
-                  ...(recurring ? [{ label: "End", value: endDate, set: setEndDate }] : []),
+                  { label: "Start", value: startDate, set: setStartDate },
+                  { label: "End", value: endDate, set: setEndDate },
                 ].map((f) => (
                   <DatePicker
                     key={f.label}
@@ -730,26 +643,21 @@ export default function AddLineDialog({
                 ))}
               </Stack>
               <Typography variant="caption" color={tried && datesProblem ? "error" : "text.secondary"}>
-                {(tried && datesProblem) || `Year ${year.number} runs ${formatDate(year.start)} – ${formatDate(year.end)}`}
+                {(tried && datesProblem) ||
+                  `One-time: charged once, in full. Year ${year.number} runs ${formatDate(year.start)} – ${formatDate(year.end)}`}
               </Typography>
             </Group>
           ) : null}
         </Stack>
       </DialogContent>
       <DialogActions>
-        {stillToPick.length ? (
-          <Typography variant="body2" sx={{ mr: "auto", pl: 1, color: "warning.dark" }}>
-            To {line ? "save" : "add"}: pick {stillToPick.map((n) => n.toLowerCase()).join(" and ")}
-          </Typography>
-        ) : null}
         <Button onClick={onClose}>Cancel</Button>
         <Button
           variant="contained"
           onClick={save}
-          disabled={(Boolean(product ?? line) && bundle.isFetching && !isChild) || bundleFailed || stillToPick.length > 0}
+          disabled={Boolean(classificationProblem)}
         >
-          {/* With choices, what the picks bring (D131). */}
-          {line ? "Save product" : comesCount ? `Add ${comesCount + 1} products` : "Add product"}
+          {line ? "Save product" : "Add product"}
         </Button>
       </DialogActions>
     </Dialog>

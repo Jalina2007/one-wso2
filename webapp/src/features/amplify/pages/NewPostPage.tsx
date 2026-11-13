@@ -63,7 +63,7 @@ export default function NewPostPage() {
 
   // The first category until one is chosen, so there is always a choice.
   const category = chosenCategory || categories.data?.[0]?.code || "";
-  const { linkedinOrgUrn, postLinkOrigins } = useAmplifyConfig();
+  const { linkedinOrgUrn, campaignLinkOrigins } = useAmplifyConfig();
   const resourceUrn = postUrnFor(postKind, postId);
   const idError = touched && !resourceUrn;
   const titleError = touched && !title.trim();
@@ -72,7 +72,7 @@ export default function NewPostPage() {
 
   // Pasting a whole link or URN into the id box fills the kind list and keeps just the id.
   const onPostIdChange = (value: string) => {
-    const pasted = /[:/]/.test(value) ? postRefFromPaste(value, postLinkOrigins) : null;
+    const pasted = /[:/]/.test(value) ? postRefFromPaste(value, campaignLinkOrigins) : null;
     if (pasted) {
       setPostKind(pasted.kind);
       setPostId(pasted.id);

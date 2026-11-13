@@ -76,6 +76,7 @@ function TopThree({ board, people }: { board: TopBoard; people: PeopleByEmail })
             return {
               name,
               points: leader.points ?? 0,
+              reachedAt: leader.reachedAt,
               avatarUrl: person?.photoUrl ?? undefined,
               nameNode: (
                 <PersonLink person={{ employeeId: leader.employeeId, displayName: leader.displayName, email: leader.email }}>

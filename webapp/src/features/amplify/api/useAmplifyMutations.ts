@@ -34,6 +34,7 @@ import type {
   CampaignDraft,
   CampaignPatch,
   CampaignRegistration,
+  DashboardOperations,
   ConnectAuthorization,
   LinkedInConnection,
   Share,
@@ -46,6 +47,21 @@ import type {
 // afterwards lands on fresh data.
 function refreshNow(qc: QueryClient, queryKey: unknown[]): Promise<void> {
   return qc.invalidateQueries({ queryKey, refetchType: "all" });
+}
+
+// Shows the announcement as Queued before the server snapshot rebuilds; the prefix match covers every `sub`.
+function markAnnouncementQueued(qc: QueryClient, campaignId: string): void {
+  qc.setQueriesData<DashboardOperations>({ queryKey: ["amplify", "dashboard-operations"] }, (old) =>
+    old
+      ? {
+          ...old,
+          campaigns: old.campaigns.map((c) =>
+            c.campaignId === campaignId ? { ...c, announcement: { status: "QUEUED", attempts: 0 } } : c,
+          ),
+        }
+      : old,
+  );
+  void qc.invalidateQueries({ queryKey: ["amplify", "dashboard-operations"], refetchType: "all" });
 }
 
 function useAmplifySub(): string | undefined {
@@ -103,6 +119,38 @@ export function useRequestShare() {
   });
 }
 
+/**
+ * POST /admin/announcements/{campaignId}/retry: puts a FAILED Novera announcement back in the queue (CAN_ADMIN).
+ * The board's chip then reads Queued once the dashboards reload.
+ */
+export function useRetryAnnouncement() {
+  const getAccessToken = useAccessToken();
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { campaignId: string }>({
+    mutationFn: async (vars) =>
+      authedPost<unknown>(
+        amplifyServiceUrls.adminAnnouncementRetry(vars.campaignId),
+        await getAccessToken(),
+        {},
+      ),
+    onSuccess: (_data, vars) => markAnnouncementQueued(qc, vars.campaignId),
+  });
+}
+
+/**
+ * POST /admin/announcements/{campaignId}/send: queues the Novera announcement for a post that was never announced
+ * (CAN_ADMIN). The board's chip then reads Queued once the dashboards reload.
+ */
+export function useSendAnnouncement() {
+  const getAccessToken = useAccessToken();
+  const qc = useQueryClient();
+  return useMutation<unknown, Error, { campaignId: string }>({
+    mutationFn: async (vars) =>
+      authedPost<unknown>(amplifyServiceUrls.adminAnnouncementSend(vars.campaignId), await getAccessToken(), {}),
+    onSuccess: (_data, vars) => markAnnouncementQueued(qc, vars.campaignId),
+  });
+}
+
 /** POST /connections/linkedin/start. The caller sends the browser to `authorizationUrl`. */
 export function useStartLinkedInConnect() {
   const getAccessToken = useAccessToken();
@@ -123,6 +171,22 @@ export function useDeclineLinkedInConsent() {
     mutationFn: async (body) => {
       await authedPost<unknown>(amplifyServiceUrls.connectDecline, await getAccessToken(), body);
       return null;
+    },
+  });
+}
+
+/** DELETE /campaigns/{id} (PO and Marketing): archives the post, then refetches the campaigns lists. */
+export function useArchiveCampaign() {
+  const getAccessToken = useAccessToken();
+  const qc = useQueryClient();
+  const sub = useAmplifySub();
+  return useMutation<null, Error, { id: string }>({
+    mutationFn: async ({ id }) => {
+      await authedDelete(amplifyServiceUrls.campaign(id), await getAccessToken());
+      return null;
+    },
+    onSuccess: async () => {
+      await refreshNow(qc, amplifyKey("campaigns", sub));
     },
   });
 }

@@ -22,7 +22,7 @@ import type { CalendarCategory, CalendarItem } from "./marketingCalendarTypes";
 // a link that can be shared. Pure, and kept apart from the components so the
 // rules below are tested on their own.
 //
-// - All: `?show=social,email` names the categories that are on; absent means all four.
+// - All: `?show=social,email` names the categories that are on; absent means all of them.
 // - A type tab: its own items, narrowed by its filters (`?bu=Corporate,Integration&format=Blog`).
 //   Within one filter any selected value matches; across filters all must match.
 //   An item with several BUs matches when any of them is selected, and an item
@@ -49,7 +49,7 @@ export function listParamValue(values: readonly string[]): string | null {
   return values.length > 0 ? values.join(",") : null;
 }
 
-/** The categories the All view shows: those `?show=` names, or all four when it names none. */
+/** The categories the All view shows: those `?show=` names, or all of them when it names none. */
 export function shownCategories(params: URLSearchParams): CalendarCategory[] {
   const named = new Set(listParam(params, SHOW_PARAM));
   const shown = ALL_CATEGORY_KEYS.filter((key) => named.has(key));

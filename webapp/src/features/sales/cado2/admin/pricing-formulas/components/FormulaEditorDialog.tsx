@@ -23,6 +23,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  MenuItem,
   Stack,
   TextField,
   ToggleButton,
@@ -33,6 +34,7 @@ import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { problemOf } from "@features/sales/cado2/quotes/api/errors";
 import type { FormulaProduct, Issue, PricingFormula } from "@features/sales/cado2/quotes/api/quoteTypes";
 import { formatMoney } from "@features/sales/cado2/utils/money";
+import { LINE_CATEGORIES } from "@features/sales/cado2/quotes/form/draftForm";
 import { ProductField, ProductsField } from "@features/sales/cado2/admin/components/AdminProductFields";
 import {
   useSavePricingFormula,
@@ -50,7 +52,7 @@ import {
 
 const MONO = { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" };
 
-/** One placeholder: a fixed value, or the products whose lines it adds up. */
+/** One placeholder: a fixed value, the products whose lines it adds up, or a category's (D153). */
 function BindingRow({
   name,
   draft,
@@ -74,6 +76,7 @@ function BindingRow({
       >
         <ToggleButton value="VALUE">Value</ToggleButton>
         <ToggleButton value="PRODUCTS">Products</ToggleButton>
+        <ToggleButton value="CATEGORY">Category</ToggleButton>
       </ToggleButtonGroup>
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
         {draft.kind === "VALUE" ? (
@@ -87,8 +90,33 @@ function BindingRow({
             helperText={error}
             slotProps={{ htmlInput: { "aria-label": `Value of ${name}` } }}
           />
-        ) : (
+        ) : draft.kind === "PRODUCTS" ? (
           <ProductsField name={name} value={draft.products} onChange={(products) => onChange({ ...draft, products })} error={error} />
+        ) : (
+          <TextField
+            select
+            size="small"
+            fullWidth
+            value={draft.category}
+            onChange={(e) => onChange({ ...draft, category: e.target.value as BindingDraft["category"] })}
+            error={!!error}
+            helperText={
+              error ??
+              (draft.category
+                ? `The year's ${LINE_CATEGORIES.find((c) => c.value === draft.category)?.label} lines, after their discount. Lines priced by a formula aren't counted.`
+                : "Choose the category to add up")
+            }
+            slotProps={{ htmlInput: { "aria-label": `Category of ${name}` }, select: { displayEmpty: true } }}
+          >
+            <MenuItem value="" disabled>
+              Choose…
+            </MenuItem>
+            {LINE_CATEGORIES.map((c) => (
+              <MenuItem key={c.value} value={c.value}>
+                {c.label}
+              </MenuItem>
+            ))}
+          </TextField>
         )}
       </Box>
     </Stack>
@@ -131,7 +159,8 @@ export default function FormulaEditorDialog({ formula, saved, onClose, onSaved }
 
   const names = placeholdersOf(expression);
   const sent = bindingInputs(expression, drafts);
-  const productsNames = names.filter((n) => drafts[n]?.kind === "PRODUCTS");
+  // Placeholders that add up lines: Try it asks for a sample total for each.
+  const totalNames = names.filter((n) => drafts[n]?.kind === "PRODUCTS" || drafts[n]?.kind === "CATEGORY");
   const issues = problemOf(save.error ?? tryIt.error)?.issues ?? [];
   const rowError = (name: string) => messagesOn(issues, `bindings[${sent.findIndex((b) => b.name === name)}]`);
   const general = issues.filter((i) => !/^(expression|unitOfMeasure|bindings\[\d+\])/.test(i.field));
@@ -184,9 +213,12 @@ export default function FormulaEditorDialog({ formula, saved, onClose, onSaved }
             required
             value={unitOfMeasure}
             onChange={(e) => setUnitOfMeasure(e.target.value)}
-            placeholder="Annual, higher of 25,000 or 10% of subscription"
+            placeholder="Annual, higher of %LIST_PRICE% or 10% of subscription"
             error={!!messagesOn(issues, "unitOfMeasure")}
-            helperText={messagesOn(issues, "unitOfMeasure") ?? "Shown as the unit of measure on every line priced with this formula"}
+            helperText={
+              messagesOn(issues, "unitOfMeasure") ??
+              "Shown as the unit of measure on every line priced with this formula. %LIST_PRICE% shows the line's price-book price."
+            }
             slotProps={{ htmlInput: { maxLength: 100 } }}
           />
 
@@ -194,8 +226,8 @@ export default function FormulaEditorDialog({ formula, saved, onClose, onSaved }
             <Stack spacing={1.5}>
               <Typography variant="subtitle2">Placeholders</Typography>
               <Typography variant="body2" color="text.secondary">
-                Give each one a fixed value, or products: it then stands for the total of those products&apos; lines on
-                the quote, after their discount.
+                Give each one a fixed value; products, for the total of those products&apos; lines on the quote; or a
+                category, for the total of its price-book lines in the year. Totals are after the lines&apos; discount.
               </Typography>
               {names.map((n) => (
                 <BindingRow
@@ -213,7 +245,7 @@ export default function FormulaEditorDialog({ formula, saved, onClose, onSaved }
             <Stack spacing={1.5} sx={{ p: 2, borderRadius: 1.5, bgcolor: "action.hover" }}>
               <Typography variant="subtitle2">Try it</Typography>
               <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap">
-                {productsNames.map((n) => (
+                {totalNames.map((n) => (
                   <TextField
                     key={n}
                     size="small"

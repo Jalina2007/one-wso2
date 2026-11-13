@@ -45,3 +45,21 @@ describe("the email colour", () => {
     expect(categoryChipColor(categoryStyle("content"), "filled")).toEqual({ color: "info", sx: {} });
   });
 });
+
+describe("the release colour", () => {
+  const release = categoryStyle("release").color;
+  if (typeof release === "string") throw new Error("release is expected to carry its own hue");
+
+  it("clears 3:1 against white, against the dark theme's background, and under white text", () => {
+    expect(ratio(release.main, "#ffffff")).toBeGreaterThanOrEqual(3);
+    expect(ratio(release.main, "#0f172a")).toBeGreaterThanOrEqual(3);
+    expect(ratio("#ffffff", release.main)).toBeGreaterThanOrEqual(3);
+    expect(ratio("#ffffff", release.dark)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("paints an outlined chip's text and a filled chip's fill with it", () => {
+    const style = categoryStyle("release");
+    expect(categoryChipColor(style, "outlined").sx).toMatchObject({ color: release.main });
+    expect(categoryChipColor(style, "filled").sx).toMatchObject({ bgcolor: release.main, color: "#ffffff" });
+  });
+});

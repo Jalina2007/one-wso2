@@ -20,10 +20,13 @@ import userEvent from "@testing-library/user-event";
 import type { JSX } from "react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import type { QuoteListItem } from "@features/sales/cado2/quotes/api/quoteTypes";
+import type { QuoteListQuery } from "@features/sales/cado2/quotes/api/useQuoteApi";
+import { quoteStatusLabel } from "@features/sales/cado2/quotes/lifecycle/lifecycle";
 import { ready } from "@features/sales/cado2/quotes/testing/fixtures";
 import MyQuotesPage from "./MyQuotesPage";
 
-// The Quotes page (D70): tabs, status chips, list and tree layouts.
+// The Quotes page (D70): tabs, status chips, list and tree layouts. The
+// backend searches, sorts and pages (D148); `served` stands in for it.
 
 const query = () => ({
   data: undefined as unknown,
@@ -39,6 +42,8 @@ const setPrimary = {
   isPending: false,
   error: null,
 };
+// D108 from the list: clones the row's latest version.
+const clone = { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null as unknown };
 const deleteDraft = {
   mutate: vi.fn(),
   reset: vi.fn(),
@@ -46,8 +51,48 @@ const deleteDraft = {
   error: null,
 };
 
+const PAGE = 50;
+const ACCOUNTS = 20;
+const sortText: Record<string, (q: QuoteListItem) => string> = {
+  quote: (q) => q.quoteNumber ?? "",
+  account: (q) => q.accountName ?? "",
+  opportunity: (q) => q.opportunityName ?? "",
+  status: (q) => quoteStatusLabel(q.status, q.versionNumber),
+  owner: (q) => q.ownerEmail,
+  created: (q) => q.createdAt,
+  updated: (q) => q.updatedAt,
+};
+/** The backend's GET /quotes over a tab's quotes: search, sort, page. */
+function served(scope: "mine" | "all", query: QuoteListQuery = {}) {
+  const base = lists[scope];
+  const data = base.data as { items: QuoteListItem[] } | undefined;
+  if (!data) return base;
+  const term = (query.search ?? "").trim().toLowerCase();
+  const sort = query.sort ?? { key: "updated", dir: "desc" };
+  const sign = sort.dir === "asc" ? 1 : -1;
+  const matched = data.items
+    .filter((q) => !term || [q.quoteNumber, q.accountName, q.opportunityName, q.ownerEmail].some((f) => f?.toLowerCase().includes(term)))
+    .map((q, i) => ({ q, i }))
+    .sort((a, b) => sign * sortText[sort.key](a.q).localeCompare(sortText[sort.key](b.q), undefined, { sensitivity: "base" }) || a.i - b.i)
+    .map((x) => x.q);
+  if (query.byAccount) {
+    // An account sits where its first quote would, with all its quotes.
+    const accounts = [...new Set(matched.map((q) => q.sfAccountId))];
+    const from = (query.page ?? 0) * ACCOUNTS;
+    const shown = new Set(accounts.slice(from, from + ACCOUNTS));
+    const items = [...shown].flatMap((a) => matched.filter((q) => q.sfAccountId === a));
+    return { ...base, data: { items, total: accounts.length } };
+  }
+  const limit = query.limit ?? PAGE;
+  const from = (query.page ?? 0) * limit;
+  return { ...base, data: { items: matched.slice(from, from + limit), total: matched.length } };
+}
+
+vi.mock("@hooks/useDebouncedValue", () => ({ useDebouncedValue: <T,>(v: T) => v }));
 vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
-  useQuoteList: (_status: string, scope: "mine" | "all") => lists[scope],
+  QUOTE_PAGE: 50,
+  ACCOUNT_PAGE: 20,
+  useQuoteList: (scope: "mine" | "all", query?: QuoteListQuery) => served(scope, query),
   useSetPrimary: () => setPrimary,
   useOpportunityQuotes: () => ({
     data: [],
@@ -63,6 +108,7 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
     refetch: vi.fn(),
   }),
   useDeleteDraft: () => deleteDraft,
+  useCloneQuote: () => clone,
 }));
 
 // A rep by default; Deal Desk without the Sales role in its own test (D127).
@@ -105,8 +151,9 @@ const mine = [
     accountName: "Northwind Logistics",
     sfOpportunityId: "006NW",
     opportunityName: "API Platform 2027",
+    expiryDate: "2099-12-11", // its order form is issued (D160)
   }),
-  item(3, { status: "APPROVED" }),
+  item(3, { status: "APPROVED", expiryDate: "2026-01-05" }), // issued, and expired
   item(5, {
     status: "SUBMITTED",
     sfOpportunityId: "006ACMEIAM",
@@ -131,12 +178,13 @@ function Where(): JSX.Element {
   return <output aria-label="Location">{l.pathname + l.search}</output>;
 }
 
-function renderPage(path = "/sales/cado2/quotes") {
+function renderPage(path = "/sales/quickquote/quotes") {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/sales/cado2/quotes" element={<MyQuotesPage />} />
-        <Route path="/sales/cado2/quotes/:id/quote" element={<Where />} />
+        <Route path="/sales/quickquote/quotes" element={<MyQuotesPage />} />
+        <Route path="/sales/quickquote/quotes/:id/quote" element={<Where />} />
+        <Route path="/sales/quickquote/quotes/:id/versions/:n/edit" element={<Where />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -190,7 +238,7 @@ describe("Quotes page", () => {
     expect(first.getByLabelText("Primary quote")).toBeInTheDocument();
     expect(first.getByRole("link", { name: "Q-26-00001" })).toHaveAttribute(
       "href",
-      "/sales/cado2/quotes/1/quote",
+      "/sales/quickquote/quotes/1/quote",
     );
     expect(first.getByText("Draft (v2)")).toBeInTheDocument();
     expect(first.getByText("2 Oct 2026")).toBeInTheDocument(); // created
@@ -203,7 +251,7 @@ describe("Quotes page", () => {
       .setup()
       .click(within(bodyRows()[1]).getByText("Northwind Logistics"));
     expect(screen.getByLabelText("Location")).toHaveTextContent(
-      "/sales/cado2/quotes/2/quote",
+      "/sales/quickquote/quotes/2/quote",
     ); // the whole row opens it
   });
 
@@ -248,7 +296,10 @@ describe("Quotes page", () => {
     ).toBeInTheDocument();
     const suva = within(bodyRows()[5]);
     expect(suva.getByText("nimesha@wso2.com")).toBeInTheDocument();
-    expect(suva.queryByRole("button", { name: /^Actions for/ })).toBeNull(); // quote access View
+    // Another AM's quote: read-only, but it can be cloned (D108).
+    await user.click(suva.getByRole("button", { name: /^Actions for/ }));
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Clone quote"]);
+    await user.keyboard("{Escape}");
 
     expect(screen.queryByRole("combobox", { name: "Owner" })).toBeNull(); // no owner dropdown (2026-10-12)
     await user.type(
@@ -310,6 +361,8 @@ describe("Quotes page", () => {
     );
     expect(screen.queryByRole("menuitem", { name: "Delete draft" })).toBeNull(); // approved, not a draft
     await user.click(screen.getByRole("menuitem", { name: "Make primary" }));
+    // D168: approved, so it is written to the opportunity now.
+    expect(screen.getByRole("dialog")).toHaveTextContent("Its products are written to the opportunity in Salesforce now");
     await user.click(
       within(screen.getByRole("dialog")).getByRole("button", {
         name: "Make primary",
@@ -331,7 +384,7 @@ describe("Quotes page", () => {
       }),
     );
     // The quote page's menu (2026-10-13): the everyday action first, Delete draft last.
-    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Remove primary", "Delete draft"]); // this draft is the primary
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Clone quote", "Remove primary", "Delete draft"]); // this draft is the primary
     await user.click(screen.getByRole("menuitem", { name: "Delete draft" }));
     const dialog = screen.getByRole("dialog", {
       name: "Delete this draft quote?",
@@ -347,6 +400,33 @@ describe("Quotes page", () => {
       },
       expect.anything(),
     );
+  });
+
+  // D108 from the list: clone a row's latest version, after asking, then open the new draft.
+  it("clones a quote from its row menu", async () => {
+    clone.mutate.mockImplementation((_v: unknown, o: { onSuccess: (r: unknown) => void }) =>
+      o.onSuccess({ quote: { id: 99 }, version: { versionNumber: 1 } }),
+    );
+    renderPage();
+    const user = userEvent.setup();
+    await user.click(within(bodyRows()[0]).getByRole("button", { name: "Actions for Q-26-00001" }));
+    await user.click(screen.getByRole("menuitem", { name: "Clone quote" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Clone Q-26-00001 v2?" }));
+    expect(screen.getByRole("table", { name: "Quotes", hidden: true })).toBeInTheDocument(); // still on the list: the click didn't open the quote
+    await user.click(dialog.getByRole("button", { name: "Clone" }));
+    expect(clone.mutate).toHaveBeenCalledWith({ quoteId: 1, version: 2 }, expect.anything());
+    expect(screen.getByLabelText("Location")).toHaveTextContent("/sales/quickquote/quotes/99/versions/1/edit");
+  });
+
+  // D160: when an issued order form expires; a dash before it is issued, red once passed.
+  it("shows when an issued order form expires", () => {
+    renderPage();
+    const header = within(table()).getByRole("columnheader", { name: "Expires" });
+    expect(within(header).queryByRole("button")).toBeNull(); // not sorted
+    const row = (n: string) => within(bodyRows().find((r) => within(r).queryByRole("link", { name: n }))!);
+    expect(row("Q-26-00001").getByText("—")).toBeInTheDocument();
+    expect(row("Q-26-00002").getByText("11 Dec 2099")).not.toHaveAttribute("title");
+    expect(row("Q-26-00003").getByText("5 Jan 2026")).toHaveAttribute("title", "Expired");
   });
 
   it("sorts on any column, ascending then descending", async () => {
@@ -386,12 +466,71 @@ describe("Quotes page", () => {
     expect(screen.queryByRole("link", { name: "New Quote" })).not.toBeInTheDocument();
   });
 
+  // D148: 50 rows a page; the count is every match.
+  it("pages through more quotes than fit on one page", async () => {
+    const many = Array.from({ length: 120 }, (_, i) => item(i + 1, { quoteNumber: `Q-26-${String(i + 1).padStart(5, "0")}` }));
+    Object.assign(lists.mine, { data: { items: many, total: many.length } });
+    renderPage();
+    const user = userEvent.setup();
+
+    expect(screen.getByRole("tab", { name: "My quotes 120" })).toBeInTheDocument();
+    expect(bodyRows()).toHaveLength(50);
+    expect(screen.getByText("1–50 of 120")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("101–120 of 120")).toBeInTheDocument();
+    expect(bodyRows()).toHaveLength(20);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+
+    // A search starts again from the first page, and finds a quote past it.
+    await user.type(screen.getByRole("textbox", { name: "Search quotes" }), "Q-26-00119");
+    expect(screen.getByText("1–1 of 1")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "My quotes 120" })).toBeInTheDocument(); // still the whole count
+  }, 15_000); // 50 rows twice and a typed search: slow when every test file runs at once
+
+  // D148: the tree pages accounts, so an account's quotes stay together.
+  it("pages the tree by account, each account with all its quotes", async () => {
+    const accounts = Array.from({ length: 25 }, (_, i) =>
+      item(i + 1, {
+        sfAccountId: `001A${i + 1}`,
+        accountName: `Account ${i + 1}`,
+        sfOpportunityId: `006A${i + 1}`,
+        opportunityName: `Deal ${i + 1}`,
+        updatedAt: new Date(Date.UTC(2026, 9, 1, 0, 100 - i)).toISOString(),
+      }),
+    );
+    // Account 1's other quote is the oldest of all: in a list by quote it
+    // would be on the last page.
+    const oldest = item(99, {
+      sfAccountId: "001A1",
+      accountName: "Account 1",
+      sfOpportunityId: "006A1",
+      opportunityName: "Deal 1",
+      updatedAt: "2026-01-01T00:00:00Z",
+    });
+    Object.assign(lists.mine, { data: { items: [...accounts, oldest], total: 26 } });
+    renderPage("/sales/quickquote/quotes?layout=tree");
+    const user = userEvent.setup();
+    const tree = "Quotes by account and opportunity";
+
+    expect(screen.getByText("Accounts 1–20 of 25")).toBeInTheDocument();
+    expect(within(table(tree)).getByRole("link", { name: "Q-26-00001" })).toBeInTheDocument();
+    expect(within(table(tree)).getByRole("link", { name: "Q-26-000099" })).toBeInTheDocument(); // with its account
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Accounts 21–25 of 25")).toBeInTheDocument();
+    expect(within(table(tree)).getAllByRole("link")).toHaveLength(5);
+
+    await user.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByText("1–26 of 26")).toBeInTheDocument(); // back to quotes, from page 1
+  });
+
   it("welcomes a rep with no quotes", () => {
     Object.assign(lists.mine, { data: { items: [], total: 0 } });
     renderPage();
     expect(screen.getByText("No quotes yet")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Create your first quote" }),
-    ).toHaveAttribute("href", "/sales/cado2/quotes/new");
+    ).toHaveAttribute("href", "/sales/quickquote/quotes/new");
   });
 });

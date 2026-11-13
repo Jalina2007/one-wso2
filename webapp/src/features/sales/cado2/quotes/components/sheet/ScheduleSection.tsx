@@ -25,7 +25,12 @@ export default function ScheduleSection({ sheet }: { sheet: QuoteSheet }): JSX.E
   if (!hasYearlySchedule(sheet)) return null;
   return (
     <SheetCard title="Yearly Schedule" icon={<ChartColumnIcon size={18} />}>
-      <ScheduleTable years={sheet.years} lines={sheet.lines} netOfCommission={sheet.partnerCommissionPercent !== null} />
+      <ScheduleTable
+        years={sheet.years}
+        lines={sheet.lines}
+        netOfCommission={sheet.partnerCommissionPercent !== null}
+        commissionRates={sheet.partnerCommissionRates ?? (sheet.partnerCommissionPercent ? [sheet.partnerCommissionPercent] : null)}
+      />
     </SheetCard>
   );
 }

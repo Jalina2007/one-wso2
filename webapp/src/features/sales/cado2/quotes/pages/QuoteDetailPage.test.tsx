@@ -31,6 +31,8 @@ async function openMenu(user: ReturnType<typeof userEvent.setup>): Promise<void>
 const menuItems = () => screen.getAllByRole("menuitem").map((m) => m.textContent);
 
 const query = (data: unknown) => ({ data, error: null, isPending: false, isFetching: false, refetch: vi.fn() });
+// D164: the opportunity's state in Salesforce, open unless a test closes it.
+const opportunityState = query({ found: true, open: true, state: "" });
 const quote = query(undefined as unknown);
 const versions = new Map<number, DraftResponse>();
 const history = query([] as unknown);
@@ -47,7 +49,6 @@ const decide = mutation();
 const workflow = { data: null as ApprovalWorkflow | null, isPending: false, error: null, refetch: vi.fn() };
 // D129: the caller's lenses; none unless a test sets them.
 const review = { data: { lenses: [] } as Review | undefined };
-const markNote = mutation();
 // The drawing needs a real browser (layout, ResizeObserver); its text companion stands in.
 vi.mock("@features/sales/cado2/approvals/components/LazyApprovalDiagram", async () => ({
   default: (await import("@features/sales/cado2/approvals/components/ApprovalReasons")).default,
@@ -57,7 +58,6 @@ vi.mock("@features/sales/cado2/approvals/api/useApprovalApi", () => ({
   useStoredApprovalPreview: () => ({ data: undefined, isPending: false, isFetching: false, error: null }),
   useDecideStep: () => decide,
   useReview: () => review,
-  useMarkNote: () => markNote,
   useApproveOnBehalf: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
 }));
 
@@ -73,13 +73,14 @@ const attach = { ...mutation(), mutateAsync: vi.fn() };
 const files = { preview: vi.fn(), download: vi.fn() };
 const setPrimary = { mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null };
 const opportunityQuotes = { data: [] as unknown[], error: null, isPending: false, isFetching: false, refetch: vi.fn() };
-// No supporting documents in the library (DGD-10); tested on their own.
+// No supporting documents in the library (DGD-10) unless a test says so; tested on their own.
+const supporting = { has: false };
 vi.mock("@features/sales/cado2/quotes/api/useSupportingDocuments", async (actual) => ({
   ...(await actual<typeof import("@features/sales/cado2/quotes/api/useSupportingDocuments")>()),
   useSupportingDocumentLibrary: () => ({ data: [], isPending: false, error: null }),
   useQuoteSupportingDocuments: () => ({ data: undefined, isPending: false, error: null }),
   useSetQuoteSupportingDocuments: () => ({ mutate: vi.fn(), reset: vi.fn(), isPending: false, error: null }),
-  useHasSupportingDocuments: () => false,
+  useHasSupportingDocuments: () => supporting.has,
 }));
 vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
   useQuote: () => quote,
@@ -92,6 +93,7 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
   useCloseQuote: () => close,
   useSetPrimary: () => setPrimary,
   useOpportunityQuotes: () => opportunityQuotes,
+  useOpportunityState: () => opportunityState,
   useDeleteDraft: () => del,
   useDocuments: (_q: number, _v: number, enabled: boolean) => (enabled ? documents : query(undefined)),
   useIssueOrderForm: () => issue,
@@ -101,10 +103,23 @@ vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
 }));
 const writeSpecial = mutation();
 
-/** The submitted quote with every product mapped: no category chosen by the AM. */
-const allMapped: DraftResponse = {
-  ...submitted,
-  version: { ...submitted.version, lines: submitted.version.lines.map((l) => ({ ...l, categorySource: "MAPPED" as const })) },
+/** The submitted quote. */
+const allMapped: DraftResponse = submitted;
+
+// D139: the AM's special terms, with no override yet.
+const withSpecialTerms: DraftResponse = {
+  ...allMapped,
+  version: {
+    ...allMapped.version,
+    specialTerms: { enabled: true, text: "<p>40% on signature, 60% on go-live.</p>" },
+    legal: {
+      onPrem: true, saas: false, onPremNonStandard: false, saasNonStandard: false, contractName: "", partnerName: "", contractDate: null,
+      sections: { blocks: [{ kind: "ONPREM", nonStandard: false, text: "Standard terms." }], notices: [], contractName: "" },
+      specialTerms: "<p>40% on signature, 60% on go-live.</p>", specialTermsBy: "AM", specialTermsByLegal: false,
+      amSpecialTerms: "<p>40% on signature, 60% on go-live.</p>", deskSpecialTerms: null, deskSpecialTermsByEmail: null,
+      legalSpecialTermsByEmail: null, frozen: true,
+    },
+  },
 };
 
 const recalledV1: DraftResponse = {
@@ -119,7 +134,7 @@ function show(q: QuoteView, ...vs: DraftResponse[]) {
 
 /** Opens the quote page as if from another page, e.g. My Approvals. */
 function showFrom(from: string | undefined, q: QuoteView, ...vs: DraftResponse[]) {
-  showAt(`/sales/cado2/quotes/5/quote${from === "approvals" ? "?from=approvals" : ""}`, q, ...vs);
+  showAt(`/sales/quickquote/quotes/5/quote${from === "approvals" ? "?from=approvals" : ""}`, q, ...vs);
 }
 
 function showAt(url: string, q: QuoteView, ...vs: DraftResponse[]) {
@@ -130,9 +145,9 @@ function showAt(url: string, q: QuoteView, ...vs: DraftResponse[]) {
     <Cado2ToastProvider>
       <MemoryRouter initialEntries={[url]}>
         <Routes>
-          <Route path="sales/cado2/quotes/:quoteId/:tab" element={<QuoteDetailPage />} />
-          <Route path="sales/cado2/quotes/:quoteId/versions/:version/edit" element={<p>wizard</p>} />
-          <Route path="sales/cado2/quotes" element={<p>My Quotes page</p>} />
+          <Route path="sales/quickquote/quotes/:quoteId/:tab" element={<QuoteDetailPage />} />
+          <Route path="sales/quickquote/quotes/:quoteId/versions/:version/edit" element={<p>wizard</p>} />
+          <Route path="sales/quickquote/quotes" element={<p>My Quotes page</p>} />
         </Routes>
       </MemoryRouter>
     </Cado2ToastProvider>,
@@ -140,13 +155,14 @@ function showAt(url: string, q: QuoteView, ...vs: DraftResponse[]) {
 }
 
 beforeEach(() => {
+  opportunityState.data = { found: true, open: true, state: "" };
   Object.assign(setPrimary, mutation());
   opportunityQuotes.data = [];
   Object.assign(decide, mutation());
   workflow.data = null;
   me.data.approverRoles = ["DEAL_DESK"];
   review.data = { lenses: [] };
-  Object.assign(markNote, mutation());
+  supporting.has = false;
   me.data.roles = [];
   Object.assign(clone, mutation());
   Object.assign(recall, mutation());
@@ -181,7 +197,7 @@ describe("QuoteDetailPage — primary quote", () => {
     show(submitted.quote, submitted);
 
     const panel = screen.getByRole("region", { name: "This Opportunity's Quotes" });
-    expect(within(panel).getByRole("link", { name: "Q-26-00031" })).toHaveAttribute("href", "/sales/cado2/quotes/3/quote");
+    expect(within(panel).getByRole("link", { name: "Q-26-00031" })).toHaveAttribute("href", "/sales/quickquote/quotes/3/quote");
     // The current quote: a shaded row, not a link, "This quote" under its number (2026-10-14).
     const rows = within(panel).getAllByRole("listitem");
     expect(rows[1]).toHaveAttribute("aria-current", "true");
@@ -193,6 +209,8 @@ describe("QuoteDetailPage — primary quote", () => {
     await user.click(screen.getByRole("menuitem", { name: "Make primary" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("Q-26-00031 (nimesha@wso2.com) is the primary quote for this opportunity. Making this quote primary releases it.");
+    // D168: in approval, it is written to the opportunity now.
+    expect(dialog).toHaveTextContent("Its products are written to the opportunity in Salesforce now, if syncing to Salesforce is on.");
     await user.click(within(dialog).getByRole("button", { name: "Make primary" }));
     expect(setPrimary.mutate).toHaveBeenCalledWith({ quoteId: submitted.quote.id, primary: true }, expect.anything());
   });
@@ -212,20 +230,20 @@ describe("QuoteDetailPage — primary quote", () => {
 describe("QuoteDetailPage — lifecycle", () => {
   it("goes back to My Approvals when opened from there, else to Quotes", () => {
     showFrom("approvals", submitted.quote, submitted);
-    expect(screen.getByRole("link", { name: /My Approvals/ })).toHaveAttribute("href", "/sales/cado2/approvals");
+    expect(screen.getByRole("link", { name: /My Approvals/ })).toHaveAttribute("href", "/sales/quickquote/approvals");
     cleanup();
     show(submitted.quote, submitted);
-    expect(screen.getByRole("link", { name: /Quotes/ })).toHaveAttribute("href", "/sales/cado2/quotes");
+    expect(screen.getByRole("link", { name: /Quotes/ })).toHaveAttribute("href", "/sales/quickquote/quotes");
   });
 
   it("goes back to the Quote Report, with its filters, when opened from there", () => {
-    const back = "/sales/cado2/insights/report?q=north&status=SUBMITTED";
-    showAt(`/sales/cado2/quotes/5/quote?${new URLSearchParams({ from: "insights", back })}`, submitted.quote, submitted);
+    const back = "/sales/quickquote/insights/report?q=north&status=SUBMITTED";
+    showAt(`/sales/quickquote/quotes/5/quote?${new URLSearchParams({ from: "insights", back })}`, submitted.quote, submitted);
     expect(screen.getByRole("link", { name: /Quote Report/ })).toHaveAttribute("href", back);
     cleanup();
     // Only an Insights address is accepted as the way back.
-    showAt(`/sales/cado2/quotes/5/quote?${new URLSearchParams({ from: "insights", back: "https://evil.example" })}`, submitted.quote, submitted);
-    expect(screen.getByRole("link", { name: /Quotes/ })).toHaveAttribute("href", "/sales/cado2/quotes");
+    showAt(`/sales/quickquote/quotes/5/quote?${new URLSearchParams({ from: "insights", back: "https://evil.example" })}`, submitted.quote, submitted);
+    expect(screen.getByRole("link", { name: /Quotes/ })).toHaveAttribute("href", "/sales/quickquote/quotes");
   });
 
   it("offers Recall in the menu on a submitted quote, with no main button", async () => {
@@ -324,6 +342,17 @@ describe("QuoteDetailPage — lifecycle", () => {
     expect(await screen.findByText("My Quotes page")).toBeInTheDocument();
   });
 
+  // 2026-11-11: a draft synced to Salesforce can't be deleted; the quote is closed instead.
+  it("doesn't delete a draft that was synced to Salesforce", async () => {
+    show({ ...ready.quote, sfSyncedAt: "2026-11-10T12:14:54Z", sfSyncedVersion: 1 }, ready);
+    const user = userEvent.setup();
+    await openMenu(user);
+    const item = screen.getByRole("menuitem", { name: /Delete draft/ });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("Synced to Salesforce: close the quote instead");
+    expect(screen.getByRole("menuitem", { name: /Close quote/ })).not.toHaveAttribute("aria-disabled");
+  });
+
   it("deletes a later draft, and the version before it is the latest again", async () => {
     const v2: DraftResponse = { ...ready, version: { ...ready.version, versionNumber: 2 } };
     const q: QuoteView = {
@@ -348,7 +377,7 @@ describe("QuoteDetailPage — lifecycle", () => {
   it("gives a draft one main button, Edit draft, and puts the destructive actions last in the menu", async () => {
     show(ready.quote, ready);
     const user = userEvent.setup();
-    expect(screen.getByRole("link", { name: "Edit draft" })).toHaveAttribute("href", "/sales/cado2/quotes/5/versions/1/edit");
+    expect(screen.getByRole("link", { name: "Edit draft" })).toHaveAttribute("href", "/sales/quickquote/quotes/5/versions/1/edit");
     // The status is with the title, not among the actions.
     expect(within(screen.getByLabelText("About this quote")).queryByRole("button", { name: "Close quote" })).toBeNull();
     await openMenu(user);
@@ -501,21 +530,20 @@ describe("QuoteDetailPage — lifecycle", () => {
   // D128: Deal Desk writes the special terms in its panel, sees why the
   // earlier version came back, and can't approve "See Special Terms" billing
   // before describing it.
-  it("lets Deal Desk write the special terms, with the earlier return in view", () => {
+  it("lets Deal Desk override the AM's special terms, with the earlier return in view", () => {
     workflow.data = {
       status: "IN_PROGRESS", createdAt: "2026-10-06T09:00:00Z", completedAt: null,
       steps: [reasonStep("DEAL_DESK", 11, { status: "PENDING", canAct: true })],
       previousReturn: { versionNumber: 1, roleLabel: "Legal", byEmail: "legal@wso2.com", at: null, comment: "Did the customer agree to 60 days?" },
     };
-    const seeSpecial = { ...allMapped, version: { ...allMapped.version, billingFrequency: "SPECIAL_TERMS" as const } };
-    show({ ...submitted.quote, actions: [], actingAs: "DEAL_DESK" }, seeSpecial);
+    show({ ...submitted.quote, actions: [], actingAs: "DEAL_DESK" }, withSpecialTerms);
     expect(screen.getByText("As Deal Desk")).toBeInTheDocument(); // D127: someone else's quote
     const panel = screen.getByRole("region", { name: "Your approval as Deal Desk" });
     expect(panel).toHaveTextContent("Returned by Legal on v1 (legal@wso2.com): “Did the customer agree to 60 days?”");
-    expect(panel).toHaveTextContent("Billing says See Special Terms: switch the special terms on and describe the billing.");
-    expect(panel).toHaveTextContent("Describe the billing in the special terms, saved, before approving.");
-    expect(within(panel).getByRole("button", { name: "Approve" })).toBeDisabled();
-    expect(within(panel).getByRole("button", { name: "Save special terms" })).toBeDisabled();
+    expect(panel).toHaveTextContent("Written by the AM");
+    // D139: nothing to write before approving; the override is optional.
+    expect(within(panel).getByRole("button", { name: "Approve" })).toBeEnabled();
+    expect(within(panel).getByRole("button", { name: "Override special terms" })).toBeInTheDocument();
   });
 
   // The decision note is a toast now (2026-10-13), so it no longer belongs to a quote.
@@ -560,46 +588,6 @@ describe("QuoteDetailPage — lifecycle", () => {
     expect(decide.mutate).toHaveBeenCalledWith(expect.objectContaining({ stepId: 2, outcome: "return" }), expect.anything());
   });
 
-  it("shows a rep-chosen category on its line and in Deal Desk's summary, nowhere else", async () => {
-    const user = userEvent.setup();
-    const [first, ...rest] = submitted.version.lines;
-    const mixed: DraftResponse = {
-      ...submitted,
-      version: {
-        ...submitted.version,
-        lines: [{ ...first, categorySource: "REP" }, ...rest.map((l) => ({ ...l, categorySource: "MAPPED" as const }))],
-      },
-    };
-    workflow.data = {
-      status: "IN_PROGRESS", createdAt: "2026-10-01T09:00:00Z", completedAt: null,
-      steps: [{
-        stepId: 11, role: "DEAL_DESK", roleLabel: "Deal Desk", branches: [], dependsOn: [], status: "PENDING",
-        requestedAt: null, actedAt: null, actedByEmail: null, comment: null, canAct: true, cantActReason: null, triggers: [],
-      }],
-    };
-    show({ ...submitted.quote, actions: [] }, mixed);
-
-    // No tag on the line (D93); only a point in Deal Desk's summary.
-    expect(screen.queryByText("Category chosen by AM")).toBeNull();
-    const points = within(screen.getByRole("region", { name: "Your approval as Deal Desk" })).getByRole("list", { name: "What's non-standard" });
-    expect(points).toHaveTextContent(`Line ${first.lineNumber} · ${first.productName}`);
-    expect(points).toHaveTextContent("Category chosen by the AM");
-    // Nowhere else: no warning box, and nothing in the approval dialog.
-    expect(screen.queryByRole("region", { name: "Categories chosen by the AM" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Approve" }));
-    expect(screen.getByRole("dialog")).not.toHaveTextContent(/category/i);
-  });
-
-  it("shows no category notice when every product is mapped", () => {
-    const allMapped: DraftResponse = {
-      ...submitted,
-      version: { ...submitted.version, lines: submitted.version.lines.map((l) => ({ ...l, categorySource: "MAPPED" as const })) },
-    };
-    show(submitted.quote, allMapped);
-    expect(screen.queryByRole("region", { name: "Categories chosen by the AM" })).toBeNull();
-    expect(screen.queryByText("Category chosen by AM")).toBeNull();
-  });
-
   it("explains a closed quote", () => {
     const closed: DraftResponse = {
       ...ready,
@@ -637,8 +625,8 @@ describe("QuoteDetailPage — versions and history", () => {
 
     const table = screen.getByRole("table", { name: "Versions" });
     // The draft opens in edit mode; any other version is viewed here (2026-10-13).
-    expect(within(table).getByRole("link", { name: "Edit draft" })).toHaveAttribute("href", "/sales/cado2/quotes/5/versions/2/edit");
-    expect(within(table).getByRole("link", { name: "View" })).toHaveAttribute("href", "/sales/cado2/quotes/5/quote?version=1");
+    expect(within(table).getByRole("link", { name: "Edit draft" })).toHaveAttribute("href", "/sales/quickquote/quotes/5/versions/2/edit");
+    expect(within(table).getByRole("link", { name: "View" })).toHaveAttribute("href", "/sales/quickquote/quotes/5/quote?version=1");
 
     const diff = screen.getByRole("table", { name: "Comparison" });
     expect(within(diff).getByText("WSO2 Gateway · Quantity")).toBeInTheDocument();
@@ -650,18 +638,18 @@ describe("QuoteDetailPage — versions and history", () => {
 
   // View mode (2026-10-13): an older version is shown here, read-only, with no actions.
   it("shows an older version with a way back to the latest, and no actions", () => {
-    showAt("/sales/cado2/quotes/5/quote?version=1", v2.quote, recalledV1, v2);
+    showAt("/sales/quickquote/quotes/5/quote?version=1", v2.quote, recalledV1, v2);
 
     expect(screen.getByText("Q-26-00005 · Version 1")).toBeInTheDocument();
     expect(screen.getByText("Recalled")).toBeInTheDocument();
     expect(screen.getByText(/You're viewing version 1\. The latest is version 2\. Clone copies this version; other actions apply to the latest\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View latest version" })).toHaveAttribute("href", "/sales/cado2/quotes/5/quote");
+    expect(screen.getByRole("link", { name: "View latest version" })).toHaveAttribute("href", "/sales/quickquote/quotes/5/quote");
     expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Edit draft" })).toBeNull();
   });
 
   it("ignores a version that doesn't exist and shows the latest", () => {
-    showAt("/sales/cado2/quotes/5/quote?version=9", v2.quote, recalledV1, v2);
+    showAt("/sales/quickquote/quotes/5/quote?version=9", v2.quote, recalledV1, v2);
 
     expect(screen.getByRole("link", { name: "Edit draft" })).toBeInTheDocument();
     expect(screen.queryByText(/You're viewing version/)).toBeNull();
@@ -819,6 +807,37 @@ describe("QuoteDetailPage — order form", () => {
     show(quoteOf(submitted), submitted);
     expect(screen.queryByRole("region", { name: "Order Form" })).toBeNull();
   });
+
+  // 2026-11-07: before approval there is no order form, only the attachments.
+  it("calls the card Supporting Documents before approval", () => {
+    supporting.has = true;
+    show(quoteOf(submitted), submitted);
+    expect(screen.queryByRole("region", { name: "Order Form" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Supporting Documents" })).toHaveTextContent(/Added after the order form/);
+  });
+
+  // 2026-11-07: once issued, any approver who may open the quote downloads it.
+  it("lets an approver who doesn't work on quotes download the issued order form, and nothing else", async () => {
+    me.data.approverRoles = ["CFO"];
+    const doc = { id: 9, fileName: "Q-26-00005-v1.pdf", issueDate: "2026-10-12", status: "ACTIVE" };
+    Object.assign(documents, { data: { canPreview: false, canIssue: false, issueDate: null, expiryDate: null, documents: [doc] } });
+    files.download.mockResolvedValue(new Blob(["%PDF"]));
+    URL.createObjectURL = vi.fn(() => "blob:x");
+    URL.revokeObjectURL = vi.fn();
+    show(quoteOf(approved), approved);
+    expect(panel().getByText("Issued 12 Oct 2026")).toBeInTheDocument();
+    expect(panel().queryByRole("button", { name: "Preview PDF" })).toBeNull();
+    expect(panel().queryByRole("button", { name: "Issue order form" })).toBeNull();
+    await userEvent.setup().click(panel().getByRole("button", { name: "Download PDF" }));
+    expect(files.download).toHaveBeenCalledWith(approved.quote.id, 9);
+  });
+
+  it("shows such an approver nothing before the order form is issued", () => {
+    me.data.approverRoles = ["CFO"];
+    Object.assign(documents, { data: { canPreview: false, canIssue: false, issueDate: "2026-10-12", expiryDate: "2026-11-11", documents: [] } });
+    show(quoteOf(approved), approved);
+    expect(screen.queryByRole("region", { name: "Order Form" })).toBeNull();
+  });
 });
 
 // A failed load is an error on screen, never a wrong answer or a missing card (2026-10-13).
@@ -858,6 +877,25 @@ describe("QuoteDetailPage — load errors say so", () => {
     show({ ...approved.quote, versions: [{ versionNumber: 1, status: "APPROVED", tcv: "6480.00", submittedAt: null, updatedAt: approved.version.updatedAt }] } as unknown as QuoteView, approved);
     expect(screen.getByText(/^Couldn't load the order form\./)).toBeInTheDocument();
   });
+
+  // D164: closed in Salesforce since it was picked: the order form can't be issued.
+  it("says when an approved quote's opportunity is closed in Salesforce", () => {
+    const approved: DraftResponse = {
+      ...submitted,
+      quote: { ...submitted.quote, status: "APPROVED", actions: ["CLOSE"] },
+      version: { ...submitted.version, status: "APPROVED" },
+    };
+    opportunityState.data = { found: true, open: false, state: "Closed Won" };
+    show({ ...approved.quote, versions: [{ versionNumber: 1, status: "APPROVED", tcv: "6480.00", submittedAt: null, updatedAt: approved.version.updatedAt }] } as unknown as QuoteView, approved);
+    expect(screen.getByLabelText("Opportunity closed")).toHaveTextContent(
+      "This opportunity is Closed Won in Salesforce. This quote can't be issued while it is. Close the quote, or reopen the opportunity in Salesforce.",
+    );
+    cleanup();
+
+    // In approval nothing is said: approvers aren't asked to act on it.
+    show(submitted.quote, submitted);
+    expect(screen.queryByLabelText("Opportunity closed")).toBeNull();
+  });
 });
 
 // D129: Deal Desk sees the quote through its lens: notes beside what they
@@ -870,20 +908,18 @@ describe("QuoteDetailPage — lenses", () => {
   const note = (over: Partial<Review["lenses"][number]["notes"][number]>): Review["lenses"][number]["notes"][number] => ({
     key: "DISCOUNT.L1", rule: "DISCOUNT", lineNumber: 1,
     reasons: ["Year 1 · line 1 · WSO2 API Manager (APIM): 18% discount is above the Account Manager's 15% limit"],
-    roles: ["Regional Director · NA"], target: "line:1", yoursToWrite: false, state: "OPEN",
-    markedByEmail: null, markedAt: null, markedOnVersion: null, ...over,
+    roles: ["Regional Director · NA"], target: "line:1", yoursToWrite: false, state: "OPEN", ...over,
   });
   const deskLens = (notes: Review["lenses"][number]["notes"]) => {
-    review.data = { lenses: [{ role: "DEAL_DESK", roleLabel: "Deal Desk", canMark: true, notes }] };
+    review.data = { lenses: [{ role: "DEAL_DESK", roleLabel: "Deal Desk", notes }] };
   };
 
-  it("shows an approver the decision and the approval notes beside the quote, with no switch", async () => {
-    const user = userEvent.setup();
+  it("shows an approver the decision and the approval notes beside the quote, with no switch", () => {
     workflow.data = {
       status: "IN_PROGRESS", createdAt: "2026-10-06T09:00:00Z", completedAt: null,
       steps: [step("DEAL_DESK", 11, { status: "PENDING", canAct: true }), step("REGIONAL_DIRECTOR", 12, { roleLabel: "Regional Director · NA" })],
     };
-    deskLens([note({}), note({ key: "AM_CATEGORY.L1", rule: "AM_CATEGORY", reasons: ["Line 1 · WSO2 API Manager: category chosen by the AM: Subscription"], roles: [] })]);
+    deskLens([note({}), note({ key: "RENEWAL_START", rule: "RENEWAL_START", reasons: ["Starts 2 Feb 2027, not 1 Feb 2027, the day after Acme 2026 ends"], roles: [] })]);
     show({ ...submitted.quote, actions: [] }, allMapped);
 
     expect(screen.queryByRole("button", { name: "As Submitted" })).toBeNull();
@@ -892,15 +928,38 @@ describe("QuoteDetailPage — lenses", () => {
     const discount = within(notes).getByRole("article", { name: "18% discount" });
     expect(discount).toHaveTextContent("Above the Account Manager's 15% limit");
     expect(discount).toHaveTextContent("Regional Director · NA approves after you");
-    expect(within(notes).getByRole("article", { name: "Category chosen by the AM" })).toHaveTextContent("Only Deal Desk checks this");
+    expect(within(notes).getByRole("article", { name: "Start date" })).toHaveTextContent("Only Deal Desk checks this");
     // The decision is a card of its own; the old "Your approval" box is gone.
     const decision = screen.getByRole("region", { name: "Your decision as Deal Desk" });
     expect(decision).not.toHaveTextContent("After you");
     expect(within(decision).getByRole("button", { name: "Approve" })).toBeEnabled();
     expect(screen.queryByRole("region", { name: "Your approval" })).toBeNull();
+    // D140: nothing to mark.
+    expect(within(notes).queryByRole("button", { name: "Looks fine" })).toBeNull();
+  });
 
-    await user.click(within(discount).getByRole("button", { name: "Looks fine" }));
-    expect(markNote.mutate).toHaveBeenCalledWith({ role: "DEAL_DESK", key: "DISCOUNT.L1", fine: true });
+  // 2026-11-07: once approved, the order form leads and the notes fold away.
+  it("puts the order form first once approved, with the approval notes folded", async () => {
+    const user = userEvent.setup();
+    const approvedV: DraftResponse = {
+      ...allMapped,
+      quote: { ...allMapped.quote, status: "APPROVED", actions: ["CLOSE"] },
+      version: { ...allMapped.version, status: "APPROVED" },
+    };
+    Object.assign(documents, { data: { canPreview: true, canIssue: true, issueDate: "2026-10-12", expiryDate: "2026-11-11", documents: [] } });
+    workflow.data = {
+      status: "APPROVED", createdAt: "2026-10-06T09:00:00Z", completedAt: "2026-10-07T09:00:00Z",
+      steps: [step("DEAL_DESK", 11, { status: "APPROVED", actedByEmail: "arjun@wso2.com", actedAt: "2026-10-07T09:00:00Z" })],
+    };
+    deskLens([note({})]);
+    show({ ...approvedV.quote, versions: [{ versionNumber: 1, status: "APPROVED", tcv: "6480.00", submittedAt: null, updatedAt: approvedV.version.updatedAt }] } as unknown as QuoteView, approvedV);
+
+    const orderForm = screen.getByRole("region", { name: "Order Form" });
+    const approval = screen.getByRole("region", { name: "Approval" });
+    expect(orderForm.compareDocumentPosition(approval) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Deal Desk approval notes" })).toBeNull();
+    await user.click(within(approval).getByRole("button", { name: "Approval notes (1)" }));
+    expect(screen.getByRole("complementary", { name: "Deal Desk approval notes" })).toHaveTextContent("18% discount");
   });
 
   it("gives someone with several roles on the quote a tab per role, opening on the one whose turn it is", async () => {
@@ -915,8 +974,8 @@ describe("QuoteDetailPage — lenses", () => {
     };
     review.data = {
       lenses: [
-        { role: "DEAL_DESK", roleLabel: "Deal Desk", canMark: false, notes: [note({ state: "FINE", byApproval: true, markedByEmail: "arjun@wso2.com" })] },
-        { role: "CFO", roleLabel: "CFO", canMark: true, notes: [note({ key: "PAYMENT_TERMS", rule: "PAYMENT_TERMS", lineNumber: 0, target: "paymentTerms", roles: [], reasons: ["Net 60 payment terms"] })] },
+        { role: "DEAL_DESK", roleLabel: "Deal Desk", notes: [note({})] },
+        { role: "CFO", roleLabel: "CFO", notes: [note({ key: "PAYMENT_TERMS", rule: "PAYMENT_TERMS", lineNumber: 0, target: "paymentTerms", roles: [], reasons: ["Net 60 payment terms"] })] },
       ],
     };
     show({ ...submitted.quote, actions: [] }, allMapped);
@@ -928,22 +987,11 @@ describe("QuoteDetailPage — lenses", () => {
     expect(screen.getByRole("region", { name: "Your decision as CFO" })).toBeInTheDocument();
     expect(screen.getByRole("complementary", { name: "CFO approval notes" })).toHaveTextContent("Net 60 payment terms");
 
-    // Deal Desk already approved: its status, and its notes green by that approval.
+    // Deal Desk already approved: its status, and its notes as they are.
     await user.click(within(tabs).getByRole("tab", { name: /Deal Desk/ }));
     expect(screen.getByRole("region", { name: "Deal Desk approval: Approved" })).toHaveTextContent("By arjun@wso2.com");
-    expect(screen.getByRole("article", { name: "18% discount" })).toHaveTextContent("Approved · arjun");
+    expect(screen.getByRole("article", { name: "18% discount" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Your decision as CFO" })).toBeNull();
-  });
-
-  it("shows a green note with who marked it, and Check again", async () => {
-    const user = userEvent.setup();
-    workflow.data = { status: "IN_PROGRESS", createdAt: "2026-10-06T09:00:00Z", completedAt: null, steps: [step("DEAL_DESK", 11, { status: "PENDING", canAct: true })] };
-    deskLens([note({ state: "FINE", markedByEmail: "priya@wso2.com", markedOnVersion: 1 })]);
-    show({ ...submitted.quote, actions: [] }, allMapped);
-    const card = screen.getByRole("article", { name: "18% discount" });
-    expect(card).toHaveTextContent("Looks fine on v1 · priya");
-    await user.click(within(card).getByRole("button", { name: "Check again" }));
-    expect(markNote.mutate).toHaveBeenCalledWith({ role: "DEAL_DESK", key: "DISCOUNT.L1", fine: false });
   });
 
   it("says in the notes panel that a standard quote needs only Deal Desk", () => {
@@ -956,19 +1004,17 @@ describe("QuoteDetailPage — lenses", () => {
     expect(within(screen.getByRole("region", { name: "Your decision as Deal Desk" })).getByRole("button", { name: "Approve" })).toBeEnabled();
   });
 
-  it("puts the special terms in the quote as Deal Desk's to write, and holds Approve for See Special Terms billing", () => {
+  // D139: the AM's special terms, in place, for Deal Desk to check and maybe override.
+  it("puts the AM's special terms in the quote for Deal Desk to review, without holding Approve", () => {
     workflow.data = { status: "IN_PROGRESS", createdAt: "2026-10-06T09:00:00Z", completedAt: null, steps: [step("DEAL_DESK", 11, { status: "PENDING", canAct: true })] };
-    deskLens([note({ key: "SEE_SPECIAL_TERMS", rule: "SEE_SPECIAL_TERMS", lineNumber: 0, target: "billingFrequency", roles: [], yoursToWrite: true,
-      reasons: ["Billing says See Special Terms: describe the billing in the special terms"] })]);
-    const seeSpecial = { ...allMapped, version: { ...allMapped.version, billingFrequency: "SPECIAL_TERMS" as const } };
-    show({ ...submitted.quote, actions: [] }, seeSpecial);
-    expect(screen.getByRole("region", { name: "Special terms: yours to write" })).toBeInTheDocument();
-    const card = screen.getByRole("article", { name: "Billing: See Special Terms" });
-    expect(card).toHaveTextContent("Yours to write");
-    expect(within(card).queryByRole("button", { name: "Looks fine" })).toBeNull();
+    deskLens([note({ key: "SPECIAL_TERMS", rule: "SPECIAL_TERMS", lineNumber: 0, target: "specialTerms", roles: ["Legal"],
+      reasons: ["The quote includes special terms", "The AM added special terms. Check them, override if needed"] })]);
+    show({ ...submitted.quote, actions: [] }, withSpecialTerms);
+    expect(screen.getByRole("region", { name: /^Special terms/ })).toHaveTextContent("Override special terms");
+    const card = screen.getByRole("article", { name: "Special terms from the AM" });
+    expect(card).toHaveTextContent("Check them, override if needed");
     const bar = screen.getByRole("region", { name: "Your decision as Deal Desk" });
-    expect(bar).toHaveTextContent("Billing says See Special Terms: write the special terms first");
-    expect(within(bar).getByRole("button", { name: "Approve" })).toBeDisabled();
+    expect(within(bar).getByRole("button", { name: "Approve" })).toBeEnabled();
   });
 
   // D120 on the Quote tab: Deal Desk, having approved, may step in for an away approver.
@@ -981,7 +1027,7 @@ describe("QuoteDetailPage — lenses", () => {
         step("CFO", 13, { status: "PENDING" }),
       ],
     };
-    deskLens([note({ state: "FINE", byApproval: true, markedByEmail: "arjun@wso2.com" })]);
+    deskLens([note({})]);
     show({ ...submitted.quote, actions: [] }, allMapped);
     const card = screen.getByRole("region", { name: "Approval" });
     const stepIn = within(card).getByRole("region", { name: "Approve on behalf" });
@@ -994,11 +1040,11 @@ describe("QuoteDetailPage — lenses", () => {
   // D130: "Recall as Deal Desk" on the board opens the quote with its Recall confirmation, once.
   it("opens the confirmation the board asked for, with a Deal Desk back link", async () => {
     const user = userEvent.setup();
-    showAt("/sales/cado2/quotes/5/quote?from=desk&do=recall", { ...submitted.quote, actions: ["RECALL"] }, submitted);
+    showAt("/sales/quickquote/quotes/5/quote?from=desk&do=recall", { ...submitted.quote, actions: ["RECALL"] }, submitted);
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent(/Recall version 1\?/);
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).toBeNull(); // once, not again
-    expect(screen.getByRole("link", { name: /Deal Desk/ })).toHaveAttribute("href", "/sales/cado2/desk");
+    expect(screen.getByRole("link", { name: /Deal Desk/ })).toHaveAttribute("href", "/sales/quickquote/desk");
   });
 });

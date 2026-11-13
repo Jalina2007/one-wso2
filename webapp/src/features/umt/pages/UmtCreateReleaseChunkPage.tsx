@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useLocation, useNavigate } from "react-router";
 import {
   Alert,
@@ -27,46 +27,86 @@ import {
   DialogContentText,
   DialogTitle,
   IconButton,
+  InputAdornment,
   LinearProgress,
+  MenuItem,
   Paper,
+  TextField,
   Tooltip,
   Stack,
   Typography,
 } from "@wso2/oxygen-ui";
-import { EyeIcon } from "@wso2/oxygen-ui-icons-react";
+import { EyeIcon, SearchIcon } from "@wso2/oxygen-ui-icons-react";
 import { describeError } from "@api/errors";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useNotifications } from "@context/notifications/NotificationsContext";
 import type { UmtUpdateSummary } from "../api/umtUpdates";
+import { UMT_LIFECYCLES } from "../api/umtTypes";
 import { useUmtUpdatesByLifecycleState } from "../api/useUmtUpdates";
 import { useUmtCreateReleaseChunk } from "../api/useUmtReleaseChunkActions";
 import { useUmtGate } from "../api/useUmtGate";
 import { umtReleaseChunkCollisionProducts } from "../lib/umtReleaseChunks";
 import { umtPaths } from "../lib/umtPaths";
+import { UMT_ALL_ROWS_GRID_PROPS, UMT_GRID_PAPER_SX } from "../lib/umtGrid";
 import UmtShell from "../components/UmtShell";
 import type { UmtBackLinkState } from "../lib/umtBackLink";
 import { ChunkCell, ChunkLine } from "../components/release-chunks/umtReleaseChunkGridPrimitives";
 import { UMT_CHUNK_GRID_SX } from "../components/release-chunks/umtReleaseChunkGridSx";
-
 const { DataGrid: DataGridComponent } = DataGrid;
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50];
+// The release-chunk grids pin cell content to the top, so that per-level
+// entries line up across columns. This grid has no per-level columns, and its
+// checkbox cell makes each row taller than one line of text, so its cells are
+// centred vertically instead.
+const GRID_SX = {
+  ...UMT_CHUNK_GRID_SX,
+  "& .MuiDataGrid-cell": {
+    ...UMT_CHUNK_GRID_SX["& .MuiDataGrid-cell"],
+    alignItems: "center",
+  },
+} as const;
 
-// The grid reports selection as an include/exclude set (GridRowSelectionModel),
-// not a plain id array — resolving it against the rows on screen keeps
-// select-all correct even when it arrives as an empty exclude-set.
-function selectedRowIds(
-  model: { type: "include" | "exclude"; ids: Set<DataGrid.GridRowId> },
-  rows: { id: number }[],
-): number[] {
-  if (model.type === "include") return [...model.ids].map(Number);
-  return rows.map((row) => row.id).filter((id) => !model.ids.has(id));
+// What this page keeps in its history entry, so that leaving to read an update
+// and coming back finds the same ticks and filters.
+interface UmtCreateReleaseChunkPageState {
+  selectedIds: number[];
+  search: string;
+  lifecycle: string;
 }
 
-function restoredSelectedIds(state: unknown): number[] {
-  if (!state || typeof state !== "object" || !("selectedIds" in state)) return [];
-  const { selectedIds } = state as { selectedIds: unknown };
-  return Array.isArray(selectedIds) ? selectedIds.filter((id): id is number => typeof id === "number") : [];
+// Location state can hold anything, so each field is checked and falls back
+// to its empty value.
+function restoredPageState(state: unknown): UmtCreateReleaseChunkPageState {
+  const saved = state && typeof state === "object" ? (state as Record<string, unknown>) : {};
+  const { selectedIds, search, lifecycle } = saved;
+  return {
+    selectedIds: Array.isArray(selectedIds)
+      ? selectedIds.filter((id): id is number => typeof id === "number")
+      : [],
+    search: typeof search === "string" ? search : "",
+    lifecycle: UMT_LIFECYCLES.find((value) => value === lifecycle) ?? "",
+  };
+}
+
+// How long the page waits after the last change before it writes its state to
+// the history entry. Writing on every keystroke would call
+// history.replaceState too often, and browsers limit how often it can be
+// called.
+const SAVE_STATE_DELAY_MS = 300;
+
+// The search text with all whitespace removed and in lower case, so that it
+// can be compared with the "name-version" text that matchesSearch builds.
+function searchTerm(search: string): string {
+  return search.replace(/\s+/g, "").toLowerCase();
+}
+
+// The search term matches any of an update's products written as
+// "name-version" (e.g. "wso2is-7.2.0.4.full"), ignoring case.
+function matchesSearch(row: UmtUpdateSummary, term: string): boolean {
+  if (term === "") return true;
+  return (row.products ?? []).some((item) =>
+    `${item.product?.name ?? ""}-${item.product?.version ?? ""}`.toLowerCase().includes(term),
+  );
 }
 
 export default function UmtCreateReleaseChunkPage() {
@@ -100,19 +140,48 @@ function UmtCreateReleaseChunkForm() {
   // UATStaging, and checked against everything in UAT.
   const uatStaging = useUmtUpdatesByLifecycleState("UATStaging");
   const uat = useUmtUpdatesByLifecycleState("UAT");
-  const rows = uatStaging.data?.data ?? [];
+  const uatStagingUpdates = uatStaging.data?.data;
+  const rows = useMemo(() => uatStagingUpdates ?? [], [uatStagingUpdates]);
 
   const location = useLocation();
-  // The selection lives in this page's history entry as well, so leaving to
-  // read an update and coming back (by the back arrow or the browser) finds
-  // it still ticked.
-  const [selectedIds, setSelectedIds] = useState<number[]>(() => restoredSelectedIds(location.state));
+  // The ticks and filters live in this page's history entry as well, so
+  // leaving to read an update and coming back (by the back arrow or the
+  // browser) finds them as they were.
+  const [restored] = useState(() => restoredPageState(location.state));
+  const [selectedIds, setSelectedIds] = useState(restored.selectedIds);
+  const [search, setSearch] = useState(restored.search);
+  const [lifecycle, setLifecycle] = useState(restored.lifecycle);
 
-  function changeSelection(ids: number[]) {
-    setSelectedIds(ids);
-    void navigate(location, { replace: true, state: { selectedIds: ids } });
-  }
+  // The URL parts are listed one by one, not as `location`: each save makes a
+  // new `location`, which would start the save again.
+  const { pathname, search: urlSearch, hash } = location;
+  const savePageState = useCallback(() => {
+    const state: UmtCreateReleaseChunkPageState = { selectedIds, search, lifecycle };
+    void navigate({ pathname, search: urlSearch, hash }, { replace: true, state });
+  }, [navigate, pathname, urlSearch, hash, selectedIds, search, lifecycle]);
+
+  useEffect(() => {
+    const timer = setTimeout(savePageState, SAVE_STATE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [savePageState]);
+
   const [collisionProducts, setCollisionProducts] = useState<string[] | null>(null);
+
+  // A new array only when the list or a filter changes. A new array on every
+  // render would make the grid rebuild all its rows on every render.
+  const visibleRows = useMemo(() => {
+    const term = searchTerm(search);
+    return rows.filter((row) => matchesSearch(row, term) && (lifecycle === "" || row.lifecycle === lifecycle));
+  }, [rows, search, lifecycle]);
+
+  // The ticks the grid shows: only updates that are in the UATStaging list. A
+  // restored tick for an update that has left UATStaging is dropped here, so
+  // the grid's "rows selected" count matches what Create submits. Ticks on
+  // rows the filters hide are kept.
+  const gridSelectionModel = useMemo(() => {
+    const listedIds = new Set(rows.map((row) => row.id));
+    return { type: "include" as const, ids: new Set<DataGrid.GridRowId>(selectedIds.filter((id) => listedIds.has(id))) };
+  }, [rows, selectedIds]);
 
   // Creating is held until the UAT list is actually in hand. Without it the
   // collision check compares the selection against nothing, finds nothing,
@@ -121,11 +190,19 @@ function UmtCreateReleaseChunkForm() {
   // selection, so it blocks rather than passes.
   const uatUpdates = uat.data?.data;
   // The selection is restored from history, so it can name updates that are
-  // not on screen: ones that have since left UATStaging, or all of them while
-  // the list is still loading or has failed to. Only the ticked rows actually
-  // shown are checked and submitted.
-  const selectedUpdates = rows.filter((row) => selectedIds.includes(row.id));
+  // no longer in UATStaging, or all of them while the list is still loading or
+  // has failed to. Only ticked updates that are in the UATStaging list are
+  // checked and submitted. That includes ticked updates the search or
+  // lifecycle filter hides, so Create lists every one of them for
+  // confirmation first.
+  // A new array only when the list or the ticks change, since the
+  // confirmation dialog's grid takes it as its rows.
+  const selectedUpdates = useMemo(() => {
+    const ids = new Set(selectedIds);
+    return rows.filter((row) => ids.has(row.id));
+  }, [rows, selectedIds]);
   const canCreate = selectedUpdates.length > 0 && uatUpdates !== undefined && !createChunk.isPending;
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function submitCreate(updateIds: number[]) {
     try {
@@ -137,11 +214,29 @@ function UmtCreateReleaseChunkForm() {
     }
   }
 
+  // Shows why the selection is refused, and returns true, when a selected
+  // update collides with an update already in UAT.
+  function refuseCollisions(uatList: UmtUpdateSummary[]): boolean {
+    const collisions = umtReleaseChunkCollisionProducts(selectedUpdates, uatList);
+    if (collisions.length === 0) return false;
+    setCollisionProducts(collisions);
+    return true;
+  }
+
+  // A selection that collides with an update already in UAT is refused before
+  // the confirmation, so nobody confirms a chunk that cannot be created.
   function handleCreateClick() {
+    if (!canCreate || uatUpdates === undefined || refuseCollisions(uatUpdates)) return;
+    setConfirmOpen(true);
+  }
+
+  // The UATStaging and UAT lists can change while the confirmation is open,
+  // for example when a retry of a failed load finishes, so the selection is
+  // checked again before creating.
+  function handleConfirmCreate() {
     if (!canCreate || uatUpdates === undefined) return;
-    const collisions = umtReleaseChunkCollisionProducts(selectedUpdates, uatUpdates);
-    if (collisions.length > 0) {
-      setCollisionProducts(collisions);
+    if (refuseCollisions(uatUpdates)) {
+      setConfirmOpen(false);
       return;
     }
     void submitCreate(selectedUpdates.map((row) => row.id));
@@ -210,9 +305,19 @@ function UmtCreateReleaseChunkForm() {
               <IconButton
                 size="small"
                 aria-label={`View update ${params.row.id}`}
+                sx={{ mx: "auto" }}
                 component={RouterLink}
                 to={umtPaths.update(params.row.id)}
-                state={{ backTo: umtPaths.newReleaseChunk, backState: { selectedIds } } satisfies UmtBackLinkState}
+                // Leaving the page cancels a save still waiting on its timer,
+                // so the browser's Back would find the state before the last
+                // change. Saving here, before the link navigates, keeps it.
+                onClick={savePageState}
+                state={
+                  {
+                    backTo: umtPaths.newReleaseChunk,
+                    backState: { selectedIds, search, lifecycle } satisfies UmtCreateReleaseChunkPageState,
+                  } satisfies UmtBackLinkState
+                }
               >
                 <EyeIcon size={16} />
               </IconButton>
@@ -246,42 +351,68 @@ function UmtCreateReleaseChunkForm() {
         </ErrorNotice>
       )}
 
-      <Typography variant="body2" color="text.secondary">
-        Select the UATStaging updates to include in a new release chunk.
-      </Typography>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ width: "100%" }}>
+        <TextField
+          size="small"
+          placeholder="Search by product (e.g. wso2is-7.2.0.4.full)"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          sx={{ flex: 1 }}
+          slotProps={{
+            htmlInput: { "aria-label": "Search updates by product" },
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon size={16} />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Lifecycle"
+          value={lifecycle}
+          onChange={(event) => setLifecycle(event.target.value)}
+          sx={{ minWidth: { sm: 240 } }}
+        >
+          <MenuItem value="">All</MenuItem>
+          {UMT_LIFECYCLES.map((value) => (
+            <MenuItem key={value} value={value}>
+              {value}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Stack>
 
-      <Paper
-        variant="outlined"
-        sx={{
-          display: "flex",
-          flex: 1,
-          flexDirection: "column",
-          minHeight: 0,
-          minWidth: 0,
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
+      <Paper variant="outlined" sx={UMT_GRID_PAPER_SX}>
         {uatStaging.isFetching && !uatStaging.isPending && (
           <LinearProgress sx={{ left: 0, position: "absolute", right: 0, top: 0, zIndex: 4 }} />
         )}
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <DataGridComponent
+            disableVirtualization
             checkboxSelection
             columnHeaderHeight={40}
             columns={columns}
             disableColumnMenu
             disableRowSelectionOnClick
             getRowHeight={() => "auto"}
-            initialState={{ pagination: { paginationModel: { pageSize: PAGE_SIZE_OPTIONS[0], page: 0 } } }}
+            // The backend returns every UATStaging update in one response, so
+            // the grid shows them all on one page.
+            {...UMT_ALL_ROWS_GRID_PROPS}
+            hideFooterPagination
             loading={uatStaging.isPending}
-            pageSizeOptions={PAGE_SIZE_OPTIONS}
-            rows={rows}
-            sx={UMT_CHUNK_GRID_SX}
-            rowSelectionModel={{ type: "include", ids: new Set(selectedIds) }}
-            onRowSelectionModelChange={(model) =>
-              changeSelection(selectedRowIds(model as { type: "include" | "exclude"; ids: Set<DataGrid.GridRowId> }, rows))
-            }
+            rows={visibleRows}
+            sx={GRID_SX}
+            // The grid holds ticks on rows the filters hide. With these two
+            // props it never drops them on its own, and select-all or
+            // unselect-all only adds or removes the rows on screen.
+            keepNonExistentRowsSelected
+            disableRowSelectionExcludeModel
+            rowSelectionModel={gridSelectionModel}
+            onRowSelectionModelChange={(model) => setSelectedIds([...model.ids].map(Number))}
           />
         </Box>
       </Paper>
@@ -302,7 +433,72 @@ function UmtCreateReleaseChunkForm() {
         products={collisionProducts ?? []}
         onClose={() => setCollisionProducts(null)}
       />
+
+      <UmtConfirmCreateDialog
+        open={confirmOpen}
+        updates={selectedUpdates}
+        columns={columns.filter((column) => column.field !== "action")}
+        busy={createChunk.isPending}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={handleConfirmCreate}
+      />
     </Stack>
+  );
+}
+
+// The last check before a chunk is created. Creating a chunk locks its updates
+// out of further editing, and a filter can hide some of the ticked updates, so
+// this lists every update that goes in. The list can be long: the dialog stays
+// within the window, and its content scrolls between the fixed title and
+// buttons. The grid holds every row on one page, so none are cut off.
+function UmtConfirmCreateDialog({
+  open,
+  updates,
+  columns,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  updates: UmtUpdateSummary[];
+  columns: DataGrid.GridColDef<UmtUpdateSummary>[];
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onClose={busy ? undefined : onCancel} maxWidth="md" fullWidth scroll="paper">
+      <DialogTitle>Create Release Chunk</DialogTitle>
+      <DialogContent dividers>
+        <DialogContentText sx={{ mb: 2 }}>
+          The new release chunk will include the following updates.
+        </DialogContentText>
+        <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden" }}>
+          <DataGridComponent
+            autoHeight
+            {...UMT_ALL_ROWS_GRID_PROPS}
+            aria-label="Updates to include in the release chunk"
+            disableVirtualization
+            columnHeaderHeight={40}
+            columns={columns}
+            disableColumnMenu
+            disableRowSelectionOnClick
+            getRowHeight={() => "auto"}
+            hideFooter
+            rows={updates}
+            sx={GRID_SX}
+          />
+        </Paper>
+      </DialogContent>
+      <DialogActions>
+        <Button variant="outlined" onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="contained" loading={busy} disabled={busy || updates.length === 0} onClick={onConfirm}>
+          Create
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 

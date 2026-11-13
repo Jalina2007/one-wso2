@@ -18,6 +18,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
   type UseQueryResult,
@@ -28,9 +29,9 @@ import { problemOf } from "./errors";
 import { httpRetry } from "@api/errors";
 import { cado2ServiceUrls } from "@config/apiConfig";
 import { useCado2Basis } from "@features/sales/cado2/api/cado2Basis";
+import { DEFAULT_SORT, type QuoteSort } from "@features/sales/cado2/quotes/list/quoteListModel";
 import type {
   Account,
-  BundleChildren,
   LegalConfig,
   ActiveLegalEntity,
   Contact,
@@ -41,8 +42,11 @@ import type {
   DraftResponse,
   Issue,
   Opportunity,
+  OpportunityLines,
+  OpportunityState,
   OpportunityQuote,
   PricebookOption,
+  SyncPreview,
   PricingFormula,
   PricingPreview,
   Product,
@@ -110,6 +114,34 @@ export function useOpportunityContacts(opportunityId: string | null) {
   );
 }
 
+/** Whether the opportunity is still open in Salesforce (D164), read fresh while `enabled`. */
+export function useOpportunityState(opportunityId: string | null, enabled: boolean) {
+  return useAuthedQuery<OpportunityState>(
+    ["opportunity-state", opportunityId],
+    enabled && opportunityId ? cado2ServiceUrls.opportunityState(opportunityId) : null,
+    "live",
+  );
+}
+
+/**
+ * The previous opportunities' product lines as they are in Salesforce now
+ * (D159), one query per opportunity, in the order given: read fresh while
+ * `enabled`.
+ */
+export function usePreviousOpportunityLines(opportunityIds: readonly string[], enabled: boolean) {
+  const { getToken, ready, key } = useCado2Basis();
+  return useQueries({
+    queries: opportunityIds.map((id) => ({
+      queryKey: key("opportunity-lines", id),
+      queryFn: async () => authedGet<OpportunityLines>(cado2ServiceUrls.opportunityLines(id), await getToken()),
+      enabled: ready && enabled,
+      staleTime: 0,
+      refetchOnMount: "always" as const,
+      retry: httpRetry,
+    })),
+  });
+}
+
 /** How many products one page of the Add-line list loads. */
 export const PRODUCT_PAGE = 50;
 
@@ -125,7 +157,7 @@ export function useLegalConfig() {
   });
 }
 
-/** Legal writes the non-standard terms (and may reword the special terms) during their approval. */
+/** Legal writes the non-standard terms (and may override the special terms, D139) during their approval. */
 export function useWriteLegalTerms(quoteId: number, versionNumber: number) {
   const { getToken, key } = useCado2Basis();
   const queryClient = useQueryClient();
@@ -140,7 +172,7 @@ export function useWriteLegalTerms(quoteId: number, versionNumber: number) {
 export function useWriteSpecialTerms(quoteId: number, versionNumber: number) {
   const { getToken, key } = useCado2Basis();
   const queryClient = useQueryClient();
-  return useMutation<DraftResponse, Error, { enabled: boolean; specialTerms: string }>({
+  return useMutation<DraftResponse, Error, { specialTerms: string }>({
     mutationFn: async (body) =>
       cado2Send<DraftResponse>("PUT", cado2ServiceUrls.specialTerms(quoteId, versionNumber), await getToken(), body),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key() }),
@@ -148,16 +180,15 @@ export function useWriteSpecialTerms(quoteId: number, versionNumber: number) {
 }
 
 /**
- * The children a bundle parent brings, priced from the quote's
- * book; none for a product without a bundle. Idle until a product is chosen.
+ * Particular products of the quote's price book, each with that book's price
+ * only: the support plans' (D155). Idle until there are ids.
  */
-export function useBundleChildren(productId: string | null, currency: string, pricebookId: string) {
+export function useProductsByIds(ids: readonly string[], currency: string, pricebookId: string) {
   const { getToken, ready, key } = useCado2Basis();
-  return useQuery<BundleChildren, Error>({
-    queryKey: key("bundle-children", productId, currency, pricebookId),
-    queryFn: async () =>
-      authedGet<BundleChildren>(cado2ServiceUrls.bundleChildren(productId!, currency, pricebookId), await getToken()),
-    enabled: ready && Boolean(productId && currency && pricebookId),
+  return useQuery<Product[], Error>({
+    queryKey: key("products-by-ids", [...ids].sort().join(","), currency, pricebookId),
+    queryFn: async () => authedGet<Product[]>(cado2ServiceUrls.productsByIds(currency, pricebookId, ids), await getToken()),
+    enabled: ready && ids.length > 0 && Boolean(currency && pricebookId),
     staleTime: LOOKUP_STALE_MS,
     retry: httpRetry,
   });
@@ -194,8 +225,9 @@ export function usePricebooks(currency: string) {
   return useAuthedQuery<PricebookOption[]>(["pricebooks", currency], currency ? cado2ServiceUrls.pricebooks(currency) : null);
 }
 
-export function useCurrencies() {
-  return useAuthedQuery<string[]>(["currencies"], cado2ServiceUrls.currencies);
+/** The quote currencies: those Salesforce's price books price in (D143). Read when enabled. */
+export function useCurrencies(enabled = true) {
+  return useAuthedQuery<string[]>(["currencies"], enabled ? cado2ServiceUrls.currencies : null);
 }
 
 /** The quote rules shown ahead of time, e.g. the validity period. */
@@ -216,9 +248,50 @@ export function usePricingFormulas(): UseQueryResult<PricingFormula[], Error> {
   return useAuthedQuery<PricingFormula[]>(["pricing-formulas"], cado2ServiceUrls.pricingFormulas);
 }
 
-/** My Quotes: the caller's own quotes, filtered by the latest version's status. */
-export function useQuoteList(status = "", scope: QuoteScope = "mine") {
-  return useAuthedQuery<QuoteList>(["quotes", "list", scope, status], cado2ServiceUrls.quoteList(status, scope), "live");
+/** Rows on a page of the Quotes list (D148). */
+export const QUOTE_PAGE = 50;
+/** Accounts on a page of the tree, each with all its quotes (D148). */
+export const ACCOUNT_PAGE = 20;
+
+export interface QuoteListQuery {
+  readonly search?: string;
+  readonly sort?: QuoteSort;
+  /** Page accounts, each with all its quotes, instead of quotes (the tree). */
+  readonly byAccount?: boolean;
+  /** From 0. */
+  readonly page?: number;
+  readonly limit?: number;
+}
+
+/**
+ * A page of the Quotes list (D70): the caller's quotes or everyone's,
+ * searched, sorted and paged by the backend (D148): by quote, or by account
+ * for the tree, so an account never splits across pages. The previous page
+ * stays on screen while the next loads.
+ */
+export function useQuoteList(scope: QuoteScope = "mine", query: QuoteListQuery = {}) {
+  const { getToken, ready, key } = useCado2Basis();
+  const byAccount = query.byAccount ?? false;
+  const limit = query.limit ?? (byAccount ? ACCOUNT_PAGE : QUOTE_PAGE);
+  const sort = query.sort ?? DEFAULT_SORT;
+  const url = cado2ServiceUrls.quoteList({
+    scope,
+    q: query.search?.trim() ?? "",
+    sort: sort.key,
+    order: sort.dir,
+    byAccount,
+    limit,
+    offset: (query.page ?? 0) * limit,
+  });
+  return useQuery<QuoteList, Error>({
+    queryKey: key("quotes", "list", url),
+    queryFn: async () => authedGet<QuoteList>(url, await getToken()),
+    enabled: ready,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+    refetchOnMount: "always",
+    retry: httpRetry,
+  });
 }
 
 /** A quote with its version list and the caller's actions. */
@@ -390,6 +463,15 @@ export function useSubmitVersion() {
       void queryClient.invalidateQueries({ queryKey: key("quotes") });
     },
   });
+}
+
+/** What syncing a saved draft would change on its opportunity (D138); read live, when enabled. */
+export function useSyncPreview(quoteId: number | null, version: number | null, enabled: boolean) {
+  return useAuthedQuery<SyncPreview>(
+    ["sync-preview", quoteId, version],
+    enabled && quoteId !== null && version !== null ? cado2ServiceUrls.quoteSyncPreview(quoteId, version) : null,
+    "live",
+  );
 }
 
 /** "Sync to Salesforce" (D77): writes a saved draft of the primary quote to its opportunity. */

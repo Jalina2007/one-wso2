@@ -32,6 +32,7 @@ import { useUmtReleaseChunkDockerBuildStatus } from "../../api/useUmtReleaseChun
 import type { UmtDockerBuildStatus } from "../../api/umtReleaseChunks";
 import { BuildStatusChip, ChunkCell, ChunkLine } from "./umtReleaseChunkGridPrimitives";
 import { UMT_CHUNK_GRID_BORDERED_SX } from "./umtReleaseChunkGridSx";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -127,6 +128,7 @@ export default function UmtReleaseChunkBuildInfoDialog({
           <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden" }}>
             <DataGridComponent
               autoHeight
+              {...UMT_ALL_ROWS_GRID_PROPS}
               columnHeaderHeight={40}
               columns={columns}
               disableColumnMenu

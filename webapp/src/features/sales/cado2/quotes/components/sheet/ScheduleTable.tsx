@@ -33,11 +33,14 @@ export default function ScheduleTable({
   years,
   lines,
   netOfCommission = false,
+  commissionRates = null,
 }: {
   years: readonly PricingYear[];
   lines: readonly SheetLine[];
   /** A partner-led quote: "Billed" is what WSO2 invoices, after the commission (A6). */
   netOfCommission?: boolean;
+  /** The commission rate of each year, or one for all (D151): the Partner commission row's captions. */
+  commissionRates?: readonly string[] | null;
 }): JSX.Element {
   return (
     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
@@ -95,6 +98,21 @@ export default function ScheduleTable({
               </TableCell>
             ))}
           </TableRow>
+          {netOfCommission ? (
+            <TableRow>
+              <TableCell>Partner commission</TableCell>
+              {years.map((y, i) => (
+                <TableCell key={y.yearNumber} align="right" sx={num}>
+                  − {formatMoney(y.commission ?? "0")}
+                  {commissionRates?.length ? (
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      {Number(commissionRates[i] ?? commissionRates[0])}%
+                    </Typography>
+                  ) : null}
+                </TableCell>
+              ))}
+            </TableRow>
+          ) : null}
           <TableRow>
             <TableCell sx={{ borderBottom: 0 }}>{netOfCommission ? "Billed, net of commission" : "Billed"}</TableCell>
             {years.map((y) => (

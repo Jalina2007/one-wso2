@@ -108,6 +108,19 @@ function itemFields(item: CalendarItem): { heading: string; fields: Field[] } {
           { label: "Email body copy", value: item.details.bodyCopy, kind: "text" },
         ],
       };
+    case "release":
+      return {
+        heading: item.title,
+        fields: [
+          { label: "Product name", value: item.details.productName },
+          { label: "Version", value: item.details.version },
+          bu,
+          { label: "Release type", value: item.details.releaseType },
+          { label: "Tier", value: item.details.tier },
+          { label: "Website Availability Date", value: item.details.websiteDate, kind: "date" },
+          date,
+        ],
+      };
   }
 }
 

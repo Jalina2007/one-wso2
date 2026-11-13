@@ -205,7 +205,7 @@ export function usePerspectiveVisibility(): PerspectiveVisibility {
   const salesGate = useSalesRailGate(active.key === "sales");
   // CadO2, also under Sales: rows decided by CadO2's own /me, and only while
   // its preview flag is on -- see useCado2RailGate.
-  const cado2Gate = useCado2RailGate(active.key === "sales" && isPreviewEnabled("cado2"));
+  const cado2Gate = useCado2RailGate(active.key === "sales" && isPreviewEnabled("quickquote"));
 
   // Subscriptions (PickMe Commute / LaaS) is the same shape of problem once
   // more, with one extra wrinkle worth naming: its backend publishes the

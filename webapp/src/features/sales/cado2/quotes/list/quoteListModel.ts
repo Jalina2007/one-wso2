@@ -15,29 +15,17 @@
 // under the License.
 
 // The Quotes page (My Quotes 2026-09-25; tabs, list and tree layouts, D70):
-// the list is loaded once and searched, sorted and grouped in the browser
-// (the status chips were removed on 2026-10-15). Pure functions, unit-tested.
+// the backend searches, sorts and pages the list (D148); the page groups the
+// rows it is shown (the status chips were removed on 2026-10-15). Pure
+// functions, unit-tested.
 //
 // A list, not a report (D70): one row per quote with its own figures; groups
 // only organise rows, with no totals.
-//
-// Known limit: the list endpoint returns at most 200 quotes per call; past
-// that, search needs server-side paging.
 
 import type { QuoteListItem } from "@features/sales/cado2/quotes/api/quoteTypes";
-import { quoteStatusLabel } from "@features/sales/cado2/quotes/lifecycle/lifecycle";
 
 /** How the quotes are laid out (D70): one row each, or the account › opportunity › quote tree. */
 export type QuoteLayout = "list" | "tree";
-
-/** Case-insensitive match on quote number, account, opportunity or owner. */
-export function filterQuotes(items: readonly QuoteListItem[], search: string): QuoteListItem[] {
-  const term = search.trim().toLowerCase();
-  if (!term) return [...items];
-  return items.filter((q) =>
-    [q.quoteNumber, q.accountName, q.opportunityName, q.ownerEmail].some((f) => f?.toLowerCase().includes(term)),
-  );
-}
 
 export interface OpportunityGroup {
   readonly opportunityId: string;
@@ -105,29 +93,5 @@ export interface QuoteSort {
   readonly key: QuoteSortKey;
   readonly dir: "asc" | "desc";
 }
-/** Most recently changed first, as the list arrives. */
+/** Most recently changed first. The backend sorts (D148); ties keep this order. */
 export const DEFAULT_SORT: QuoteSort = { key: "updated", dir: "desc" };
-
-const sortValue: Record<QuoteSortKey, (q: QuoteListItem) => string> = {
-  quote: (q) => q.quoteNumber ?? "",
-  account: (q) => (q.accountName ?? "").toLowerCase(),
-  opportunity: (q) => (q.opportunityName ?? "").toLowerCase(),
-  status: (q) => quoteStatusLabel(q.status, q.versionNumber).toLowerCase(),
-  owner: (q) => q.ownerEmail.toLowerCase(),
-  // ISO timestamps sort as text.
-  created: (q) => q.createdAt,
-  updated: (q) => q.updatedAt,
-};
-
-/**
- * Sorted on one column, either way; ties keep the list's order (the newest
- * change first). The tree groups the sorted rows, so its branches follow too.
- */
-export function sortQuotes(items: readonly QuoteListItem[], sort: QuoteSort): QuoteListItem[] {
-  const value = sortValue[sort.key];
-  const sign = sort.dir === "asc" ? 1 : -1;
-  return items
-    .map((q, i) => ({ q, i }))
-    .sort((a, b) => sign * value(a.q).localeCompare(value(b.q)) || a.i - b.i)
-    .map((x) => x.q);
-}

@@ -20,6 +20,7 @@ import type { UmtUpdateSummary } from "../../../api/umtUpdates";
 import { useUmtGate } from "../../../api/useUmtGate";
 import { useUmtPullRequestAnalysis } from "../../../api/useUmtUpdateViewData";
 import { umtLifecycleState } from "../../../lib/umtLifecycleState";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -76,6 +77,7 @@ export default function UmtFileApprovalStep({ id, update }: { id: string; update
       <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden" }}>
         <DataGridComponent
           autoHeight
+          {...UMT_ALL_ROWS_GRID_PROPS}
           columnHeaderHeight={40}
           disableColumnMenu
           disableRowSelectionOnClick

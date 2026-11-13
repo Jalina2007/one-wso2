@@ -5,7 +5,7 @@ the flag on per environment, and deleting it once CadO2 is released. This docume
 behaviour and what is deliberately done differently.
 
 **In One WSO2:** a collapsible **CadO2** group under Sales, with **My Quotes**, **My Approvals** and
-**Admin** under `/sales/cado2`. The backend is the CadO2 Go service, unchanged in shape, configured as
+**Admin** under `/sales/quickquote`. The backend is the CadO2 Go service, unchanged in shape, configured as
 `ONE_WSO2_CADO2_BACKEND_URL`. The whole feature sits behind the `cado2` preview flag.
 
 CadO2 (Cadence + WSO2) is WSO2's quote tool: an account manager builds a quote from a Salesforce
@@ -30,7 +30,7 @@ all (§4).
 
 ## 2. Route map
 
-All paths below are relative to `/sales/cado2`. Paths are built in one place,
+All paths below are relative to `/sales/quickquote`. Paths are built in one place,
 `features/sales/cado2/cado2Paths.ts`, so no component writes a CadO2 URL by hand.
 
 ### 2.1 Rail
@@ -47,7 +47,7 @@ sections only while the flag is on. The group uses `ReceiptTextIcon` (not the pe
 Echo's Video icon) and `alwaysGroup: true`, so a person who can open only one child still sees it
 under **CadO2**.
 
-`/sales/cado2` itself redirects to `/quotes` for a rep, otherwise to `/approvals` for an approver,
+`/sales/quickquote` itself redirects to `/quotes` for a rep, otherwise to `/approvals` for an approver,
 otherwise to `/admin`.
 
 ### 2.2 Quotes
@@ -84,7 +84,8 @@ content.
 | | Approval SLAs | `/admin/approval-slas` |
 | Reference data | Legal entities | `/admin/legal-entities` |
 | | Currencies | `/admin/currencies` |
-| | Product categories | `/admin/product-categories` |
+| | Product classifications | `/admin/product-classifications` |
+| | Support plans | `/admin/support-plans` |
 
 `/admin` and any unknown section → `/admin/approval-matrix` (an absolute redirect: a relative one from
 the catch-all route would resolve under itself and loop). Adding a section is one entry in
@@ -94,7 +95,7 @@ section renders its own heading, and the tab title reads "Currencies · CadO2 Ad
 ### 2.5 Routing rules
 
 - Code lives in `features/sales/cado2/`; routes are exported as a `cado2Routes` fragment rooted at
-  `sales/cado2` and mounted in `App.tsx` only while `isPreviewEnabled("cado2")`.
+  `sales/quickquote` and mounted in `App.tsx` only while `isPreviewEnabled("quickquote")`.
 - Every leaf is wrapped in the CadO2 shell (§4), which runs the gate ladder before rendering. A hidden
   item is refused at its URL too.
 - Heavy leaves are lazy with a `Skeleton` fallback: the wizard, the quote page and the approval
@@ -186,7 +187,7 @@ built in `cado2ServiceUrls` in `src/config/apiConfig.ts`.
 | Quotes | `GET /quotes?limit&status&scope=all`, `POST /quotes`, `GET /quotes/{id}`, `POST /quotes/{id}/revise`, `POST /quotes/{id}/close`, `GET /quotes/{id}/audit-events`, `GET/PUT/DELETE /quotes/{id}/versions/{v}`, `POST …/submit`, `POST …/recall` |
 | Documents | `GET/POST /quotes/{id}/versions/{v}/documents` (list, issue), `POST …/documents/preview` (PDF), `GET /quotes/{id}/documents/{docId}/file` (PDF) |
 | Approvals | `POST /approvals/preview`, `GET …/versions/{v}/approval-preview`, `GET …/versions/{v}/approval`, `POST …/approval/steps/{stepId}/approve\|reject\|request-changes`, `GET /approvals/inbox` |
-| Admin | `GET/PUT /admin/approval-matrix`, `GET /admin/approval-matrix/changes`, `GET/PUT /admin/approval-slas`, `GET /admin/approval-slas/changes`, `GET/POST /admin/currencies`, `PATCH /admin/currencies/{code}`, `GET /admin/product-categories`, `GET /admin/product-categories/search?q`, `PUT/DELETE /admin/product-categories/{productId}`, `POST /legal-entities`, `PATCH /legal-entities/{id}` |
+| Admin | `GET/PUT /admin/approval-matrix`, `GET /admin/approval-matrix/changes`, `GET/PUT /admin/approval-slas`, `GET /admin/approval-slas/changes`, `GET/POST /admin/currencies`, `PATCH /admin/currencies/{code}`, `GET /admin/product-classifications`, `PUT /admin/product-classifications/{classification}`, `GET/PUT /admin/support-plans`, `POST /legal-entities`, `PATCH /legal-entities/{id}` |
 
 Writes that change a draft or a version send `expectedUpdatedAt`; a newer copy on the server answers
 409. A refused save or submit answers 422 with `{message, issues: [{field, message}]}`.

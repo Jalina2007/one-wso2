@@ -72,7 +72,7 @@ env vars use the `ONE_WSO2_` prefix (`vite.config.ts`).
 | `ONE_WSO2_ASGARDEO_MYACCOUNT_URL` | optional; defaults to the auth base URL with `api.` swapped for `myaccount.` | |
 | `ONE_WSO2_THEME` | `wso2` (default), `acrylicOrange`, `acrylicPurple`, `classic`, `highContrast`, `paleIndigo`, `paleGray` | `wso2` |
 | `ONE_WSO2_IDLE_AUTO_SIGN_OUT` | optional; `true` signs out 30 minutes after inactivity instead of waiting at the idle prompt | `false` |
-| `ONE_WSO2_PREVIEW_FEATURES` | features built but not released; absent or `false` hides them | `{ cado2: false }` |
+| `ONE_WSO2_PREVIEW_FEATURES` | features built but not released; absent or `false` hides them | `{ quickquote: false }` |
 
 ### Feature backends
 
@@ -95,7 +95,8 @@ naming the key and makes no requests.
 | Security: Evidence Portal | `ONE_WSO2_EVIDENCE_PORTAL_BACKEND_URL` |
 | UMT | `ONE_WSO2_UMT_BACKEND_URL` |
 | Sales meetings | `ONE_WSO2_REVOPS_BACKEND_URL` |
-| CadO2 (quotes and approvals) | `ONE_WSO2_CADO2_BACKEND_URL`, `ONE_WSO2_SALESFORCE_BASE_URL` (also needs `cado2` in `ONE_WSO2_PREVIEW_FEATURES`) |
+| CadO2 (quotes and approvals) | `ONE_WSO2_CADO2_BACKEND_URL`, `ONE_WSO2_SALESFORCE_BASE_URL` (also needs `quickquote` in `ONE_WSO2_PREVIEW_FEATURES`) |
+| Swag Store | `ONE_WSO2_SWAG_STORE_BACKEND_URL` (also needs `swagStore` in `ONE_WSO2_PREVIEW_FEATURES`) |
 | Marketing Ops | `ONE_WSO2_MARKETINGOPS_BACKEND_URL`, `ONE_WSO2_MARKETINGOPS_ISAC_URL`, `ONE_WSO2_PARDOT_BASE_URL`, `ONE_WSO2_SALESFORCE_BASE_URL` |
 | Due Diligence | `ONE_WSO2_DUE_DILIGENCE_BACKEND_URL` |
 | Finance MIS | `ONE_WSO2_MIS_ARR_BACKEND_URL` |

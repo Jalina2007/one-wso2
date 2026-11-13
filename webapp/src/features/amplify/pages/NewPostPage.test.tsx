@@ -23,7 +23,7 @@ vi.mock("../api/useAmplifyData", () => ({
   useAmplifyCategories: () => ({ data: [{ code: "PRODUCT", label: "Product" }] }),
   useAmplifyConfig: () => ({
     linkedinOrgUrn: "urn:li:organization:1",
-    postLinkOrigins: ["https://www.linkedin.com", "https://linkedin.com"],
+    campaignLinkOrigins: ["https://www.linkedin.com", "https://linkedin.com"],
   }),
 }));
 vi.mock("@context/notifications/NotificationsContext", () => ({

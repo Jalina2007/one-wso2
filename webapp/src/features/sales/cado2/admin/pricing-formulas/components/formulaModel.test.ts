@@ -28,15 +28,17 @@ describe("formulaModel", () => {
 
   it("sends one binding per placeholder, sorted as the backend sorts them, without leftovers", () => {
     const drafts = {
-      $1: { kind: "VALUE" as const, value: " 25000 ", products: [] },
-      $2: { kind: "PRODUCTS" as const, value: "9", products: [{ id: "01tA", name: "A", code: null }] },
-      $9: { kind: "VALUE" as const, value: "1", products: [] },
+      $1: { kind: "VALUE" as const, value: " 25000 ", products: [], category: "" as const },
+      $2: { kind: "PRODUCTS" as const, value: "9", products: [{ id: "01tA", name: "A", code: null }], category: "" as const },
+      $3: { kind: "CATEGORY" as const, value: "", products: [], category: "SUBSCRIPTION" as const },
+      $9: { kind: "VALUE" as const, value: "1", products: [], category: "" as const },
     };
     // "$10" sorts before "$2" as text: the backend's "bindings[1]" is $10.
-    expect(bindingInputs("max($1, $10) + $2", drafts)).toEqual([
-      { name: "$1", kind: "VALUE", value: "25000", productIds: [] },
-      { name: "$10", kind: "VALUE", value: "", productIds: [] },
-      { name: "$2", kind: "PRODUCTS", value: "", productIds: ["01tA"] },
+    expect(bindingInputs("max($1, $10) + $2 * $3", drafts)).toEqual([
+      { name: "$1", kind: "VALUE", value: "25000", productIds: [], category: "" },
+      { name: "$10", kind: "VALUE", value: "", productIds: [], category: "" },
+      { name: "$2", kind: "PRODUCTS", value: "", productIds: ["01tA"], category: "" },
+      { name: "$3", kind: "CATEGORY", value: "", productIds: [], category: "SUBSCRIPTION" },
     ]);
   });
 
@@ -52,12 +54,14 @@ describe("formulaModel", () => {
       bindings: [
         { name: "$1", kind: "VALUE", value: "25000" },
         { name: "$2", kind: "PRODUCTS", products: [{ id: "01tA", name: "A", code: null }] },
+        { name: "$3", kind: "CATEGORY", category: "SUPPORT" },
       ],
       unitOfMeasure: "Annual",
       updatedByEmail: "admin@wso2.com",
       updatedAt: "2026-10-15T10:00:00Z",
     });
-    expect(drafts.$1).toEqual({ kind: "VALUE", value: "25000", products: [] });
+    expect(drafts.$1).toEqual({ kind: "VALUE", value: "25000", products: [], category: "" });
+    expect(drafts.$3).toEqual({ kind: "CATEGORY", value: "", products: [], category: "SUPPORT" });
     expect(drafts.$2.products).toHaveLength(1);
     expect(draftsOf(null)).toEqual({});
   });

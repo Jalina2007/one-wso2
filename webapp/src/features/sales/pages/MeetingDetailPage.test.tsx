@@ -19,7 +19,12 @@ import type { ReactNode } from "react";
 
 // Everything around the tabs is stubbed: these tests are about which pane opens, and
 // what the URL says about it.
-const state = { echoConfigured: true };
+type Part = { id: number; startTime: string | null; endTime: string | null; state: "ATTACHED" };
+const state: { echoConfigured: boolean; recordings: Part[]; smartNotes: Part[] } = {
+  echoConfigured: true,
+  recordings: [],
+  smartNotes: [],
+};
 vi.mock("../components/SalesShell", () => ({
   default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
@@ -31,17 +36,23 @@ vi.mock("../api/useSalesData", () => ({
       startTime: "2026-09-24 07:30:00", endTime: "2026-09-24 08:30:00",
       internalParticipants: "ravi@wso2.com", externalParticipants: null,
       meetingStatus: "ACTIVE", isRecurring: false,
+      recordings: state.recordings, transcripts: [], smartNotes: state.smartNotes,
     },
     isLoading: false,
     error: null,
   }),
+  useTranscripts: () => [],
 }));
 vi.mock("../meddpicc/api/useCallMeddpicc", () => ({
   useCallMeddpicc: () => ({ configured: state.echoConfigured, opportunityId: "006X", insight: { markers: [] } }),
 }));
-vi.mock("../components/RecordingPlayer", () => ({ default: () => <div>player</div> }));
+vi.mock("../components/RecordingPlayer", () => ({
+  default: ({ recordingId }: { recordingId?: number }) => <div>player {recordingId ?? "default"}</div>,
+}));
 vi.mock("../components/SpeakerTimeline", () => ({ default: () => <div>timeline</div> }));
-vi.mock("../components/SmartNotesPanel", () => ({ default: () => <div>smart notes</div> }));
+vi.mock("../components/SmartNotesPanel", () => ({
+  default: ({ smartNoteId }: { smartNoteId?: number }) => <div>smart notes {smartNoteId ?? "default"}</div>,
+}));
 vi.mock("../components/TranscriptPanel", () => ({ default: () => <div>transcript pane</div> }));
 vi.mock("../meddpicc/components/CallMeddpiccStrip", () => ({ default: () => <div>strip</div> }));
 vi.mock("../meddpicc/components/CallMeddpiccTab", () => ({
@@ -70,13 +81,17 @@ const renderAt = (path: string) =>
 
 beforeEach(() => {
   state.echoConfigured = true;
+  state.recordings = [];
+  state.smartNotes = [];
 });
+
+const part = (id: number): Part => ({ id, startTime: null, endTime: null, state: "ATTACHED" });
 
 describe("MeetingDetailPage tabs", () => {
   it("opens on Summary by default", () => {
     renderAt("/sales/meetings/7");
     expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("smart notes")).toBeInTheDocument();
+    expect(screen.getByText("smart notes default")).toBeInTheDocument();
   });
 
   // The meetings table sends a row here: the call's analysis, at a Letter from a circle.
@@ -103,5 +118,33 @@ describe("MeetingDetailPage tabs", () => {
     state.echoConfigured = true;
     renderAt("/sales/meetings/7?tab=nonsense");
     expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+// A call stopped and started again has a recording and notes for each part.
+describe("MeetingDetailPage parts", () => {
+  it("shows no part choice for a call recorded in one go", () => {
+    state.recordings = [part(11)];
+    renderAt("/sales/meetings/7");
+    expect(screen.queryByRole("tab", { name: /^Part / })).not.toBeInTheDocument();
+    expect(screen.getByText("player 11")).toBeInTheDocument();
+  });
+
+  it("offers every recording and plays the one picked", async () => {
+    state.recordings = [part(11), part(12)];
+    renderAt("/sales/meetings/7");
+    expect(screen.getByRole("tab", { name: "Part 1" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("player 11")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("tab", { name: "Part 2" }));
+    expect(screen.getByText("player 12")).toBeInTheDocument();
+  });
+
+  it("shows every smart notes of the call", () => {
+    state.smartNotes = [part(21), part(22)];
+    renderAt("/sales/meetings/7");
+    expect(screen.getByText("Notes 1")).toBeInTheDocument();
+    expect(screen.getByText("smart notes 21")).toBeInTheDocument();
+    expect(screen.getByText("smart notes 22")).toBeInTheDocument();
   });
 });

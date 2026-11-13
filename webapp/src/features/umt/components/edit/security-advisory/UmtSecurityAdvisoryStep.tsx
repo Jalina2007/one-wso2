@@ -38,6 +38,7 @@ import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import type { UmtSecurityAdvisory, UmtUpdateSummary } from "../../../api/umtUpdates";
 import { useUmtSaveSecurityAdvisories, useUmtValidateSecurityAdvisory } from "../../../api/useUmtSecurityAdvisory";
 import { umtSecurityAdvisoryFormatValid } from "../../../lib/umtSecurityAdvisory";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -187,6 +188,7 @@ export default function UmtSecurityAdvisoryStep({
       <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden" }}>
         <DataGridComponent
           autoHeight
+          {...UMT_ALL_ROWS_GRID_PROPS}
           columnHeaderHeight={40}
           columns={columns}
           disableColumnMenu

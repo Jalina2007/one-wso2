@@ -23,7 +23,6 @@ import {
   CircularProgress,
   Dialog,
   DialogContent,
-  IconButton,
   InputAdornment,
   Link,
   Paper,
@@ -33,24 +32,15 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
-  TableSortLabel,
   Tabs,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from "@wso2/oxygen-ui";
 import {
-  ChevronDownIcon,
-  ChevronRightIcon,
-  ChevronsDownUpIcon,
-  ChevronsUpDownIcon,
+  CopyIcon,
   FileTextIcon,
-  ListIcon,
-  ListTreeIcon,
   PlusIcon,
   SearchIcon,
   StarIcon,
@@ -63,9 +53,14 @@ import EmptyState from "@features/sales/cado2/components/empty-state/EmptyState"
 import PageHeader from "@features/sales/cado2/components/page-header/PageHeader";
 import { useDocumentTitle } from "@hooks/useDocumentTitle";
 import {
+  ACCOUNT_PAGE,
+  QUOTE_PAGE,
+  useCloneQuote,
   useQuoteList,
   useQuoteVersion,
 } from "@features/sales/cado2/quotes/api/useQuoteApi";
+import LifecycleDialog from "@features/sales/cado2/quotes/components/detail/LifecycleDialog";
+import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import DeleteDraftDialog from "@features/sales/cado2/quotes/components/detail/DeleteDraftDialog";
 import PrimaryDialog from "@features/sales/cado2/quotes/components/detail/PrimaryDialog";
 import QuoteActionsMenu from "@features/sales/cado2/quotes/components/detail/QuoteActionsMenu";
@@ -84,35 +79,27 @@ import { formatDate } from "@features/sales/cado2/quotes/form/draftForm";
 import {
   DEFAULT_SORT,
   changedAgo,
-  filterQuotes,
   groupQuotes,
-  sortQuotes,
   type QuoteLayout,
   type QuoteSort,
   type QuoteSortKey,
 } from "@features/sales/cado2/quotes/list/quoteListModel";
 import { cado2Paths } from "@features/sales/cado2/cado2Paths";
+import SortableHead from "@features/sales/cado2/components/list-table/SortableHead";
+import BranchRow from "@features/sales/cado2/components/list-table/BranchRow";
+import LayoutControls from "@features/sales/cado2/components/list-table/LayoutControls";
+import {
+  LIST_CELL,
+  layoutFrom,
+  storeLayout,
+  type ListColumn,
+} from "@features/sales/cado2/components/list-table/listTable";
 import { cado2Access, useCado2Me } from "@features/sales/cado2/api/useCado2Me";
 
-/** The last layout chosen, for next time; the page works without storage. */
+/** The last layout chosen, for next time. */
 const LAYOUT_KEY = "cado2.quotes.layout";
-function storedLayout(): QuoteLayout {
-  try {
-    return localStorage.getItem(LAYOUT_KEY) === "tree" ? "tree" : "list";
-  } catch {
-    return "list";
-  }
-}
-function storeLayout(layout: QuoteLayout): void {
-  try {
-    localStorage.setItem(LAYOUT_KEY, layout);
-  } catch {
-    // Not remembered: the page works the same.
-  }
-}
 
-// Compact rows (2026-10-12 feedback: "everything is a little bit bigger than it should be").
-const CELL = { py: 1, px: 1.5 } as const;
+const CELL = LIST_CELL;
 const day = (iso: string) => formatDate(iso.slice(0, 10));
 
 /**
@@ -124,21 +111,33 @@ const day = (iso: string) => formatDate(iso.slice(0, 10));
  * Rendered only when `q.canEdit`, so "Draft" here is the quote page's
  * "Draft and CLOSE allowed".
  */
-function RowMenu({ q }: { q: QuoteListItem }): JSX.Element {
+/**
+ * A row's actions: Clone quote for anyone who may quote, also on others'
+ * quotes (D108: any AM who can read a quote may clone it); Make primary and
+ * Delete draft for whoever may change the quote.
+ */
+function RowMenu({ q, canClone }: { q: QuoteListItem; canClone: boolean }): JSX.Element {
   const [deleting, setDeleting] = useState(false);
   const [primary, setPrimary] = useState(false);
+  const [cloning, setCloning] = useState(false);
   return (
     <>
       <QuoteActionsMenu
         inRow
         label={`Actions for ${quoteLabel(q.quoteNumber, q.accountName, q.opportunityName)}`}
         actions={[
-          { label: q.isPrimary ? "Remove primary" : "Make primary", icon: <StarIcon size={16} />, onClick: () => setPrimary(true) },
+          ...(canClone ? [{ label: "Clone quote", icon: <CopyIcon size={16} />, onClick: () => setCloning(true) }] : []),
+          ...(q.canEdit
+            ? [{ label: q.isPrimary ? "Remove primary" : "Make primary", icon: <StarIcon size={16} />, onClick: () => setPrimary(true) }]
+            : []),
         ]}
         destructive={
-          q.status === "DRAFT" ? [{ label: "Delete draft", icon: <Trash2Icon size={16} />, onClick: () => setDeleting(true) }] : []
+          q.canEdit && q.status === "DRAFT"
+            ? [{ label: "Delete draft", icon: <Trash2Icon size={16} />, onClick: () => setDeleting(true) }]
+            : []
         }
       />
+      {cloning ? <CloneFromList q={q} onClose={() => setCloning(false)} /> : null}
       {deleting ? (
         <DeleteFromList q={q} onClose={() => setDeleting(false)} />
       ) : null}
@@ -147,10 +146,41 @@ function RowMenu({ q }: { q: QuoteListItem }): JSX.Element {
           quoteId={q.id}
           opportunityId={q.sfOpportunityId}
           isPrimary={q.isPrimary}
+          status={q.status}
           onClose={() => setPrimary(false)}
         />
       ) : null}
     </>
+  );
+}
+
+/** Clones the row's latest version, as the quote page does (D108), then opens the new draft. */
+function CloneFromList({ q, onClose }: { q: QuoteListItem; onClose: () => void }): JSX.Element {
+  const clone = useCloneQuote();
+  const navigate = useNavigate();
+  const from = `${q.quoteNumber ?? "the quote"} v${q.versionNumber}`;
+  return (
+    <LifecycleDialog
+      title={`Clone ${q.quoteNumber ?? "this quote"} v${q.versionNumber}?`}
+      confirmLabel="Clone"
+      pending={clone.isPending}
+      error={clone.error}
+      onClose={onClose}
+      onConfirm={() =>
+        clone.mutate(
+          { quoteId: q.id, version: q.versionNumber },
+          {
+            onSuccess: (res) => {
+              onClose();
+              navigate(cado2Paths.editVersion(res.quote.id, res.version.versionNumber), { state: { clonedFrom: from } });
+            },
+          },
+        )
+      }
+    >
+      A new draft quote is created on the same account and opportunity, with everything from version {q.versionNumber} at
+      the same prices. You can change anything except the account and opportunity. This quote stays as it is.
+    </LifecycleDialog>
   );
 }
 
@@ -244,60 +274,24 @@ function StatusCell({ q }: { q: QuoteListItem }): JSX.Element {
   );
 }
 
-/** A column: its header, and the key it sorts on (D70). */
-interface Column {
-  readonly label: string;
-  readonly sort: QuoteSortKey;
-}
-
-/** Headers that sort: click once for ascending, again for descending. */
-function Head({
-  columns,
-  sort,
-  onSort,
-}: {
-  columns: readonly Column[];
-  sort: QuoteSort;
-  onSort: (s: QuoteSort) => void;
-}): JSX.Element {
+/**
+ * When the issued order form expires (D44): set only once it is issued, a
+ * dash before; in red once the day has passed (D160).
+ */
+function ExpiryCell({ expiryDate, now }: { expiryDate: string | null; now: Date }): JSX.Element {
+  if (!expiryDate) {
+    return <TableCell sx={{ color: "text.secondary" }}>—</TableCell>;
+  }
+  const passed = expiryDate.slice(0, 10) < now.toISOString().slice(0, 10);
   return (
-    <TableHead>
-      <TableRow
-        sx={{
-          "& th": {
-            ...CELL,
-            color: "text.secondary",
-            fontWeight: 600,
-            fontSize: 12,
-            whiteSpace: "nowrap",
-          },
-        }}
-      >
-        {columns.map((c) => (
-          <TableCell
-            key={c.sort}
-            sortDirection={sort.key === c.sort ? sort.dir : false}
-          >
-            <TableSortLabel
-              active={sort.key === c.sort}
-              direction={sort.key === c.sort ? sort.dir : "asc"}
-              onClick={() =>
-                onSort({
-                  key: c.sort,
-                  dir:
-                    sort.key === c.sort && sort.dir === "asc" ? "desc" : "asc",
-                })
-              }
-            >
-              {c.label}
-            </TableSortLabel>
-          </TableCell>
-        ))}
-        <TableCell aria-label="Actions" />
-      </TableRow>
-    </TableHead>
+    <TableCell sx={{ whiteSpace: "nowrap", color: passed ? "error.main" : "text.secondary" }} title={passed ? "Expired" : undefined}>
+      {day(expiryDate)}
+    </TableCell>
   );
 }
+
+/** A column: its header, and the key it sorts on (D70). */
+type Column = ListColumn<QuoteSortKey>;
 
 /** A quote's row; clicking anywhere on it opens the quote. */
 function QuoteTableRow({
@@ -310,6 +304,8 @@ function QuoteTableRow({
   cells: ReactNode;
 }): JSX.Element {
   const navigate = useNavigate();
+  // Any AM may clone a quote they can read (D108).
+  const canClone = cado2Access(useCado2Me().data).canQuote;
   return (
     <TableRow
       hover
@@ -317,6 +313,7 @@ function QuoteTableRow({
       sx={{ cursor: "pointer", "& td": CELL }}
     >
       {cells}
+      <ExpiryCell expiryDate={q.expiryDate} now={now} />
       <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
         {day(q.createdAt)}
       </TableCell>
@@ -324,7 +321,13 @@ function QuoteTableRow({
         {changedAgo(q.updatedAt, now)}
       </TableCell>
       <TableCell align="right" sx={{ width: 48 }}>
-        {q.canEdit ? <RowMenu q={q} /> : null}
+        {q.canEdit || canClone ? (
+          // A dialog opened from the menu shows outside the row, but its clicks
+          // still reach the row in React: they must not open the quote.
+          <span onClick={(e) => e.stopPropagation()}>
+            <RowMenu q={q} canClone={canClone} />
+          </span>
+        ) : null}
       </TableCell>
     </TableRow>
   );
@@ -341,6 +344,8 @@ function OwnerCell({ q }: { q: QuoteListItem }): JSX.Element {
 }
 
 const DATES: readonly Column[] = [
+  // Not sorted: the list sorts on the server, which doesn't sort on it.
+  { label: "Expires" },
   { label: "Created", sort: "created" },
   { label: "Updated", sort: "updated" },
 ];
@@ -371,7 +376,7 @@ function ListLayout({
   ];
   return (
     <Table size="small" aria-label="Quotes">
-      <Head columns={columns} sort={sort} onSort={onSort} />
+      <SortableHead columns={columns} sort={sort} onSort={onSort} actionsColumn />
       <TableBody>
         {rows.map((q) => (
           <QuoteTableRow
@@ -403,61 +408,6 @@ function ListLayout({
         ))}
       </TableBody>
     </Table>
-  );
-}
-
-/** A branch's row: a chevron that opens and closes it, and its name across the table. */
-function BranchRow({
-  depth,
-  open,
-  onToggle,
-  title,
-  detail,
-  span,
-}: {
-  depth: 0 | 1;
-  open: boolean;
-  onToggle: () => void;
-  title: string;
-  detail?: ReactNode;
-  span: number;
-}): JSX.Element {
-  return (
-    <TableRow sx={{ bgcolor: depth === 0 ? "action.hover" : undefined }}>
-      <TableCell colSpan={span} sx={{ ...CELL, pl: 1 + depth * 3 }}>
-        <Stack direction="row" spacing={0.5} alignItems="center">
-          <IconButton
-            size="small"
-            onClick={onToggle}
-            aria-expanded={open}
-            aria-label={`${open ? "Collapse" : "Expand"} ${title}`}
-          >
-            {open ? (
-              <ChevronDownIcon size={16} />
-            ) : (
-              <ChevronRightIcon size={16} />
-            )}
-          </IconButton>
-          <Typography
-            variant="body2"
-            sx={{ fontWeight: depth === 0 ? 600 : 500 }}
-            noWrap
-          >
-            {title}
-          </Typography>
-          {detail ? (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              noWrap
-              sx={{ pl: 1 }}
-            >
-              {detail}
-            </Typography>
-          ) : null}
-        </Stack>
-      </TableCell>
-    </TableRow>
   );
 }
 
@@ -510,7 +460,7 @@ function TreeLayout({
   );
   return (
     <Table size="small" aria-label="Quotes by account and opportunity">
-      <Head columns={columns} sort={sort} onSort={onSort} />
+      <SortableHead columns={columns} sort={sort} onSort={onSort} actionsColumn />
       <TableBody>
         {groupQuotes(rows).map((a) => (
           <Fragment key={a.accountId}>
@@ -569,9 +519,11 @@ function ScopeLabel({ icon, label, count, on }: { icon: ReactNode; label: string
  * included, D69), each with its count, then search (owners too, on All
  * quotes) and the List / Tree icons; the table is right under it, so the
  * tabs read as being about the table (2026-10-15: Sales hadn't noticed
- * them; the status chips were removed). Every column sorts. Loaded once and
- * searched, sorted and grouped in the browser. The tab and layout are in the
- * URL, so a link or Back keeps them; the layout is also remembered.
+ * them; the status chips were removed). Every column sorts. The backend
+ * searches, sorts and pages the list (D148): 50 quotes a page, or for the
+ * tree 20 accounts a page, each with all its quotes, so an account never
+ * splits across pages. The tab and layout are in the URL, so a link or
+ * Back keeps them; the layout is also remembered.
  */
 export default function MyQuotesPage(): JSX.Element {
   useDocumentTitle("Quotes");
@@ -580,11 +532,7 @@ export default function MyQuotesPage(): JSX.Element {
   // so it sees All quotes only and no New Quote.
   const { canQuote } = cado2Access(useCado2Me().data);
   const scope: QuoteScope = !canQuote || params.get("scope") === "all" ? "all" : "mine";
-  const layoutParam = params.get("layout");
-  const layout: QuoteLayout =
-    layoutParam === "tree" || layoutParam === "list"
-      ? layoutParam
-      : storedLayout();
+  const layout: QuoteLayout = layoutFrom(params.get("layout"), LAYOUT_KEY);
   const setParam = (key: string, value: string, fallback: string) =>
     setParams(
       (cur) => {
@@ -597,18 +545,36 @@ export default function MyQuotesPage(): JSX.Element {
     );
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<QuoteSort>(DEFAULT_SORT);
+  const [page, setPage] = useState(0);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  // Both tabs show their count, so both lists load.
-  const mineList = useQuoteList("", "mine");
-  const allList = useQuoteList("", "all");
-  const { data, error, isPending, isFetching, refetch } =
-    scope === "all" ? allList : mineList;
+  const debounced = useDebouncedValue(search, 300);
+  // Each tab shows its whole count, whatever the search: one row is enough.
+  const mineCount = useQuoteList("mine", { limit: 1 });
+  const allCount = useQuoteList("all", { limit: 1 });
+  const byAccount = layout === "tree";
+  const pageSize = byAccount ? ACCOUNT_PAGE : QUOTE_PAGE;
+  const { data, error, isPending, isFetching, refetch } = useQuoteList(scope, {
+    search: debounced,
+    sort,
+    page,
+    byAccount,
+  });
   const now = new Date();
   const mine = scope === "mine";
 
-  const items = data?.items ?? [];
-  const shown = sortQuotes(filterQuotes(items, search), sort);
-  const searching = search.trim() !== "";
+  const shown = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const searching = debounced.trim() !== "";
+  // A page emptied by a delete steps back one (adjusted while rendering).
+  if (data && !isFetching && shown.length === 0 && page > 0) setPage(page - 1);
+  const changeSearch = (v: string) => {
+    setSearch(v);
+    setPage(0);
+  };
+  const changeSort = (v: QuoteSort) => {
+    setSort(v);
+    setPage(0);
+  };
   const accountIds = [...new Set(shown.map((q) => q.sfAccountId))];
   const allCollapsed =
     accountIds.length > 0 && accountIds.every((id) => collapsed.has(id));
@@ -648,7 +614,7 @@ export default function MyQuotesPage(): JSX.Element {
           <Tabs
             value={scope}
             onChange={(_, v: QuoteScope) => {
-              setSearch("");
+              changeSearch("");
               setParam("scope", v, "mine");
             }}
             aria-label="Whose quotes"
@@ -662,12 +628,12 @@ export default function MyQuotesPage(): JSX.Element {
             {canQuote ? (
               <Tab
                 value="mine"
-                label={<ScopeLabel icon={<UserIcon size={18} />} label="My quotes" count={mineList.data?.total} on={mine} />}
+                label={<ScopeLabel icon={<UserIcon size={18} />} label="My quotes" count={mineCount.data?.total} on={mine} />}
               />
             ) : null}
             <Tab
               value="all"
-              label={<ScopeLabel icon={<UsersIcon size={18} />} label="All quotes" count={allList.data?.total} on={!mine} />}
+              label={<ScopeLabel icon={<UsersIcon size={18} />} label="All quotes" count={allCount.data?.total} on={!mine} />}
             />
           </Tabs>
           {/* Wide: beside the tabs. Narrow: its own line, full width. */}
@@ -675,7 +641,7 @@ export default function MyQuotesPage(): JSX.Element {
             size="small"
             placeholder={mine ? "Search quote, account or opportunity" : "Search quote, account, opportunity or owner"}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => changeSearch(e.target.value)}
             sx={{ order: { xs: 3, md: 2 }, ml: { md: "auto" }, width: { xs: "100%", md: 340 }, mb: { xs: 1.5, md: 0 } }}
             slotProps={{
               htmlInput: { "aria-label": "Search quotes" },
@@ -688,46 +654,19 @@ export default function MyQuotesPage(): JSX.Element {
               },
             }}
           />
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ order: { xs: 2, md: 3 }, ml: { xs: "auto", md: 0 } }}>
-            {layout === "tree" ? (
-              <Tooltip title={allCollapsed ? "Expand all" : "Collapse all"}>
-                <IconButton
-                  size="small"
-                  aria-label={allCollapsed ? "Expand all" : "Collapse all"}
-                  onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(accountIds))}
-                >
-                  {allCollapsed ? <ChevronsUpDownIcon size={18} /> : <ChevronsDownUpIcon size={18} />}
-                </IconButton>
-              </Tooltip>
-            ) : null}
-            <ToggleButtonGroup
-              size="small"
-              exclusive
-              value={layout}
-              onChange={(_, v: QuoteLayout | null) => {
-                if (!v) return;
-                storeLayout(v);
+          <Box sx={{ order: { xs: 2, md: 3 }, ml: { xs: "auto", md: 0 } }}>
+            <LayoutControls
+              layout={layout}
+              onLayout={(v) => {
+                storeLayout(LAYOUT_KEY, v);
                 setParam("layout", v, "");
+                setPage(0);
               }}
-              aria-label="Layout"
-            >
-              {/* The tooltip sits inside the button: a group passes its state to its direct children. */}
-              <ToggleButton value="list" aria-label="List" sx={{ px: 1 }}>
-                <Tooltip title="List">
-                  <Box component="span" sx={{ display: "flex" }}>
-                    <ListIcon size={18} />
-                  </Box>
-                </Tooltip>
-              </ToggleButton>
-              <ToggleButton value="tree" aria-label="Tree" sx={{ px: 1 }}>
-                <Tooltip title="Tree: account › opportunity › quote">
-                  <Box component="span" sx={{ display: "flex" }}>
-                    <ListTreeIcon size={18} />
-                  </Box>
-                </Tooltip>
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Stack>
+              treeLabel="account › opportunity › quote"
+              allCollapsed={allCollapsed}
+              onCollapseAll={(collapse) => setCollapsed(collapse ? new Set(accountIds) : new Set())}
+            />
+          </Box>
         </Stack>
 
         {error ? (
@@ -742,7 +681,7 @@ export default function MyQuotesPage(): JSX.Element {
               <Skeleton key={i} variant="rounded" height={36} sx={{ my: 1 }} />
             ))}
           </Box>
-        ) : items.length === 0 ? (
+        ) : total === 0 && !searching ? (
           <Box sx={{ p: 3 }}>
             <EmptyState
               icon={<FileTextIcon size={28} />}
@@ -755,13 +694,13 @@ export default function MyQuotesPage(): JSX.Element {
               }
             />
           </Box>
-        ) : shown.length === 0 ? (
+        ) : total === 0 ? (
           <Box sx={{ p: 3 }}>
             <EmptyState
               icon={<SearchIcon size={28} />}
               title="No quotes match"
               body="Try another search term."
-              action={<Button onClick={() => setSearch("")}>Clear search</Button>}
+              action={<Button onClick={() => changeSearch("")}>Clear search</Button>}
             />
           </Box>
         ) : (
@@ -772,16 +711,41 @@ export default function MyQuotesPage(): JSX.Element {
                 now={now}
                 showOwner={!mine}
                 sort={sort}
-                onSort={setSort}
+                onSort={changeSort}
                 collapsed={collapsed}
                 toggle={toggleBranch}
                 searching={searching}
               />
             ) : (
-              <ListLayout rows={shown} now={now} showOwner={!mine} sort={sort} onSort={setSort} />
+              <ListLayout rows={shown} now={now} showOwner={!mine} sort={sort} onSort={changeSort} />
             )}
           </Box>
         )}
+        {total > 0 ? (
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ px: 2, py: 1.25, borderTop: 1, borderColor: "divider" }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              {`${byAccount ? "Accounts " : ""}${page * pageSize + 1}–${Math.min((page + 1) * pageSize, total)} of ${total.toLocaleString()}`}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Button size="small" variant="outlined" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                Previous
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                disabled={(page + 1) * pageSize >= total}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </Stack>
+          </Stack>
+        ) : null}
       </Paper>
     </Stack>
   );

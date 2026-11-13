@@ -52,8 +52,8 @@ export interface AmplifyAppConfig {
   linkedinOrgUrn: string;
   /** Privacy notice link for the consent pop-up. Empty shows plain text. */
   privacyNoticeUrl: string;
-  /** Origins a post link may use (`scheme://host[:port]`, lowercase). */
-  postLinkOrigins: string[];
+  /** GET /me `campaignLinkOrigins`: origins a post link may use (`scheme://host[:port]`, lowercase), and the only ones the consent popup follows. */
+  campaignLinkOrigins: string[];
 }
 
 export type CampaignStatus = "SCHEDULED" | "OPEN" | "CLOSED" | "ARCHIVED";
@@ -134,6 +134,8 @@ export interface LeaderboardEntry {
   email: string;
   points: number;
   rank: number;
+  /** When the person reached these points (their latest points entry); ties are ordered by it. Only for Amplify dashboard readers. */
+  reachedAt?: string | null;
 }
 
 export interface PersonalStanding {

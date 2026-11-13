@@ -21,7 +21,7 @@ import ErrorNotice from "@components/error-notice/ErrorNotice";
 import type { UmtBaseProduct } from "../api/umtProducts";
 import { useUmtBaseProducts } from "../api/useUmtProducts";
 import { formatDate } from "../lib/umtDates";
-import { gridCellContentSx } from "../lib/umtGrid";
+import { gridCellContentSx, UMT_FROSTED_HEADER_SX, UMT_GRID_PAPER_SX } from "../lib/umtGrid";
 import { productRowId } from "../lib/umtProducts";
 import UmtAddProductDialog from "../components/UmtAddProductDialog";
 import UmtDeprecateProductDialog from "../components/UmtDeprecateProductDialog";
@@ -168,23 +168,13 @@ function UmtProductsBody() {
         </ErrorNotice>
       )}
 
-      <Paper
-        variant="outlined"
-        sx={{
-          display: "flex",
-          flex: 1,
-          flexDirection: "column",
-          minHeight: 0,
-          minWidth: 0,
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
+      <Paper variant="outlined" sx={UMT_GRID_PAPER_SX}>
         {baseProducts.isFetching && !baseProducts.isPending && (
           <LinearProgress sx={{ left: 0, position: "absolute", right: 0, top: 0, zIndex: 4 }} />
         )}
         <Box sx={{ flex: 1, minHeight: 240 }}>
           <DataGridComponent
+            disableVirtualization
             columnHeaderHeight={40}
             columns={columns}
             disableRowSelectionOnClick
@@ -195,7 +185,7 @@ function UmtProductsBody() {
             pageSizeOptions={[10, 20, 30, 50]}
             rows={rows}
             slots={{ noRowsOverlay: baseProducts.isError ? NoOverlay : ProductsEmptyState }}
-            sx={{ border: 0 }}
+            sx={{ border: 0, ...UMT_FROSTED_HEADER_SX }}
           />
         </Box>
       </Paper>

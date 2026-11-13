@@ -22,8 +22,10 @@ import type { UmtUpdateSummary } from "../api/umtUpdates";
 export const UMT_CHUNK_PAGE_SIZE_OPTIONS = [20, 30, 50];
 
 // How a build status reads on screen. The backend's vocabulary is open-ended,
-// so anything not listed below — including a status that never arrived — is
-// reported as a failure rather than silently rendering as blank.
+// so a status that arrived but is not listed below (FAILURE, ABORTED, ...) is
+// reported as a failure. N/A is for a build with no status at all: the request
+// that carries it failed or has not answered yet, or its answer has no status
+// for the build.
 //
 // Two of these are the same state under two names: a product or TG build in
 // flight reports BUILDING and one that finished reports SUCCESS, while the
@@ -32,10 +34,10 @@ export const UMT_CHUNK_PAGE_SIZE_OPTIONS = [20, 30, 50];
 // send someone chasing a problem that isn't there.
 //
 // One colour per status, carried by the chip's outline and its text alike.
-// The colours have to hold up without a fill behind them, so the two that are
-// merely waiting (not triggered, no build job) are greys, and the two that
-// are unfinished business (pending, unstable) are ambers kept far enough
-// apart to tell apart at a glance.
+// The colours have to hold up without a fill behind them, so the ones that
+// report nothing in progress (not triggered, no build job, N/A) are greys, and
+// the two that are unfinished business (pending, unstable) are ambers kept far
+// enough apart to tell apart at a glance. N/A shares No Build Job's grey.
 export interface UmtBuildStatusChip {
   text: string;
   color: string;
@@ -59,8 +61,14 @@ const FAILED_BUILD_STATUS_CHIP: UmtBuildStatusChip = {
   color: "#F64E60",
 };
 
+const NO_STATUS_CHIP: UmtBuildStatusChip = {
+  text: "N/A",
+  color: "#757575",
+};
+
 export function umtBuildStatusChip(status: string | null | undefined): UmtBuildStatusChip {
-  return (status && BUILD_STATUS_CHIPS[status]) || FAILED_BUILD_STATUS_CHIP;
+  if (!status) return NO_STATUS_CHIP;
+  return Object.hasOwn(BUILD_STATUS_CHIPS, status) ? BUILD_STATUS_CHIPS[status] : FAILED_BUILD_STATUS_CHIP;
 }
 
 // Whether a build can be retriggered. There is nothing to retry while a build

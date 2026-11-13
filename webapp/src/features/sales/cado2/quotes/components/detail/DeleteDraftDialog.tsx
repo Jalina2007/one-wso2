@@ -15,10 +15,11 @@
 // under the License.
 
 import type { JSX } from "react";
+import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from "@wso2/oxygen-ui";
 import LifecycleDialog from "@features/sales/cado2/quotes/components/detail/LifecycleDialog";
 import { useDeleteDraft } from "@features/sales/cado2/quotes/api/useQuoteApi";
 import { useCado2Toast } from "@features/sales/cado2/components/toast/toastContext";
-import { STATUS_LABEL } from "@features/sales/cado2/quotes/lifecycle/lifecycle";
+import { STATUS_LABEL, syncedDraft } from "@features/sales/cado2/quotes/lifecycle/lifecycle";
 import type { DeleteDraftResult, QuoteView } from "@features/sales/cado2/quotes/api/quoteTypes";
 
 interface DeleteDraftDialogProps {
@@ -41,6 +42,23 @@ interface DeleteDraftDialogProps {
 export default function DeleteDraftDialog({ quote, name, versionNumber, updatedAt, onDeleted, onClose }: DeleteDraftDialogProps): JSX.Element {
   const del = useDeleteDraft();
   const notify = useCado2Toast();
+  // A synced draft can't be deleted (2026-11-11); the backend refuses it too.
+  if (syncedDraft(quote, versionNumber)) {
+    return (
+      <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+        <DialogTitle>Can&apos;t delete this draft</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            This draft was synced to Salesforce, so deleting it would leave its changes to the opportunity with no trace in
+            QuickQuote. Close the quote instead: it keeps the quote and its history.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose}>OK</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
   const previous = quote.versions.find((v) => v.versionNumber === versionNumber - 1);
   const only = !previous;
   return (

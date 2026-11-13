@@ -56,7 +56,7 @@ import {
 } from "../api/umtUpdates";
 import { useUmtUpdates } from "../api/useUmtUpdates";
 import { formatCalendarDate, formatDate } from "../lib/umtDates";
-import { gridCellContentSx } from "../lib/umtGrid";
+import { gridCellContentSx, UMT_FROSTED_HEADER_SX, UMT_GRID_PAPER_BLUR_RESET_SX } from "../lib/umtGrid";
 import { umtLifecycleState } from "../lib/umtLifecycleState";
 import { writePersistedSelectedTab } from "../lib/umtLocalState";
 import { umtPaths } from "../lib/umtPaths";
@@ -319,11 +319,20 @@ function UmtUpdatesBody() {
         </ErrorNotice>
       )}
 
-      <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden", position: "relative" }}>
+      <Paper
+        variant="outlined"
+        sx={{
+          ...UMT_GRID_PAPER_BLUR_RESET_SX,
+          minWidth: 0,
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
         {search.isFetching && !search.isPending && <LinearProgress sx={{ left: 0, position: "absolute", right: 0, top: 0, zIndex: 4 }} />}
         <Box sx={{ height: { xs: "calc(100dvh - 360px)", md: "calc(100dvh - 310px)" }, minHeight: 240 }}>
           <OpenActionsRowContext.Provider value={actionAnchor ? (actionRow?.id ?? null) : null}>
             <DataGridComponent
+              disableVirtualization
               columnHeaderHeight={40}
               columns={gridColumns}
               disableRowSelectionOnClick
@@ -403,6 +412,7 @@ function UpdatesEmptyState() {
 // so it still looks right in dark mode.
 const updatesGridSx = {
   border: 0,
+  ...UMT_FROSTED_HEADER_SX,
   '& .MuiDataGrid-cell[data-field="actions"]': {
     position: "sticky",
     right: 0,

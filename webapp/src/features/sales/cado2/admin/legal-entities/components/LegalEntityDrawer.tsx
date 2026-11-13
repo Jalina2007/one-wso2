@@ -58,8 +58,8 @@ const FIELDS: readonly { name: FieldName; label: string; required?: boolean; max
   { name: "stateProvince", label: "State / province", max: 100, section: "address", half: true },
   { name: "postalCode", label: "Postal code", max: 20, section: "address", half: true },
   { name: "country", label: "Country", required: true, max: 100, section: "address", half: true },
-  { name: "taxId", label: "Tax ID", max: 50, section: "registration", half: true },
-  { name: "registrationNumber", label: "Registration number", max: 50, section: "registration", half: true },
+  { name: "taxId", label: "Tax ID", max: 255, section: "registration", half: true },
+  { name: "registrationNumber", label: "Registration number", max: 255, section: "registration", half: true },
   { name: "phone", label: "Phone", max: 50, section: "registration" },
 ];
 

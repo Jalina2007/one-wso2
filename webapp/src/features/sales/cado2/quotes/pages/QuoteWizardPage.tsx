@@ -35,6 +35,7 @@ import {
   Typography,
 } from "@wso2/oxygen-ui";
 import { CloudUploadIcon, PencilIcon, ShieldCheckIcon, Trash2Icon } from "@wso2/oxygen-ui-icons-react";
+import OpportunityClosedNotice from "@features/sales/cado2/quotes/components/OpportunityClosedNotice";
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import { useDebouncedValue } from "@hooks/useDebouncedValue";
 import { useLeaveGuard } from "@features/sales/cado2/quotes/form/useLeaveGuard";
@@ -45,12 +46,14 @@ import {
   useQuoteSettings,
   useQuoteVersion,
   useSaveDraft,
+  useSyncPreview,
   useSyncToSalesforce,
   useSubmitVersion,
 } from "@features/sales/cado2/quotes/api/useQuoteApi";
 import { isConflict, problemOf } from "@features/sales/cado2/quotes/api/errors";
 import type { DraftResponse, Issue, QuoteView } from "@features/sales/cado2/quotes/api/quoteTypes";
 import {
+  discountedLines,
   formatDateTime,
   emptyDraftForm,
   fromVersion,
@@ -65,6 +68,7 @@ import {
 import { FieldIssuesContext, issueMap } from "@features/sales/cado2/quotes/components/fieldIssues";
 import DeleteDraftDialog from "@features/sales/cado2/quotes/components/detail/DeleteDraftDialog";
 import SummaryPanel from "@features/sales/cado2/quotes/components/SummaryPanel";
+import SyncChanges from "@features/sales/cado2/quotes/components/SyncChanges";
 import { scrollMainToTop } from "@features/sales/cado2/utils/scroll";
 import OverviewStep from "@features/sales/cado2/quotes/components/steps/OverviewStep";
 import ProductsStep from "@features/sales/cado2/quotes/components/steps/ProductsStep";
@@ -83,7 +87,13 @@ import { nextHint, reachableStep, stepChecks } from "@features/sales/cado2/quote
 import PageHeader from "@features/sales/cado2/components/page-header/PageHeader";
 import ActingAsChip from "@features/sales/cado2/quotes/components/detail/ActingAsChip";
 import StatusChip from "@features/sales/cado2/components/status-chip/StatusChip";
-import { STATUS_COLOR, STATUS_LABEL, quoteLabel } from "@features/sales/cado2/quotes/lifecycle/lifecycle";
+import {
+  STATUS_COLOR,
+  STATUS_LABEL,
+  SYNCED_DRAFT_NOTE,
+  quoteLabel,
+  syncedDraft,
+} from "@features/sales/cado2/quotes/lifecycle/lifecycle";
 import { cado2Paths } from "@features/sales/cado2/cado2Paths";
 
 const { LocalizationProvider } = DatePickers;
@@ -92,6 +102,8 @@ const { LocalizationProvider } = DatePickers;
 const PREVIEW_DEBOUNCE_MS = 500;
 
 const REVIEW_STEP = 4;
+// Products & Pricing: Sync to SF shows from here on, not on Overview (2026-11-08).
+const PRODUCTS_STEP = 1;
 
 /** "Last synced 13 Oct 2026, 10:42 (v1)", or "Not synced yet" (D77). */
 function lastSynced(q: QuoteView): string {
@@ -161,6 +173,8 @@ export default function QuoteWizardPage(): JSX.Element {
   const [conflict, setConflict] = useState(false);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
   const [confirmingSync, setConfirmingSync] = useState(false);
+  // The submit dialog's folded Salesforce changes (D138).
+  const [submitChangesOpen, setSubmitChangesOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   // Load a saved version into the form (and again after a save or a reload).
@@ -179,7 +193,7 @@ export default function QuoteWizardPage(): JSX.Element {
     PREVIEW_DEBOUNCE_MS,
   );
   const preview = usePricingPreview(previewBody);
-  // Lined up with the form's lines: lines waiting for a category aren't priced (D72).
+  // Lined up with the form's lines, one for one.
   const priced = useMemo(
     () => alignPreview(preview.data?.kind === "priced" ? preview.data.preview : null, values.lines),
     [preview.data, values.lines],
@@ -190,19 +204,15 @@ export default function QuoteWizardPage(): JSX.Element {
   );
   const stored = useMemo(() => (saved ? storedPricing(saved) : null), [saved]);
 
-  // A product mapped (or unmapped) since its line was added: the preview
-  // priced it with the Admin's current mapping, so the form follows.
+  // A classification set up or changed since its line was added: the
+  // preview priced it with the Admin's current setting (D152), so the form
+  // follows.
   useEffect(() => {
     if (!editable || !priced) return;
     priced.lines.forEach((p, i) => {
       const l = form.getValues(`lines.${i}`);
-      if (!p || !l || l.pricebookEntryId !== p.pricebookEntryId || !p.categorySource) return;
-      if (p.categorySource === "MAPPED" && p.category && (l.category !== p.category || l.categorySource !== "MAPPED")) {
-        form.setValue(`lines.${i}.category`, p.category, { shouldDirty: true });
-        form.setValue(`lines.${i}.categorySource`, "MAPPED", { shouldDirty: true });
-      } else if (p.categorySource === "REP" && l.categorySource === "MAPPED") {
-        form.setValue(`lines.${i}.categorySource`, "REP", { shouldDirty: true });
-      }
+      if (!p || !l || l.pricebookEntryId !== p.pricebookEntryId || p.category === undefined) return;
+      if (l.category !== p.category) form.setValue(`lines.${i}.category`, p.category, { shouldDirty: true });
     });
   }, [editable, priced, form]);
 
@@ -373,6 +383,33 @@ export default function QuoteWizardPage(): JSX.Element {
     }
   });
 
+  // The sync and submit dialogs show what Salesforce will get (D138), from
+  // the saved draft: unsaved changes are saved first, then the dialog opens.
+  const savedForDialog = async (): Promise<DraftResponse | null> => {
+    setRefusal(null);
+    submit.reset();
+    if (saved && !isDirty) return saved;
+    const res = await persist(form.getValues());
+    if (res) leaveNewQuoteFor(res);
+    return res;
+  };
+  const openSync = async () => {
+    if (await savedForDialog()) setConfirmingSync(true);
+  };
+  const openSubmit = async () => {
+    if (await savedForDialog()) {
+      setSubmitChangesOpen(false);
+      setConfirmingSubmit(true);
+    }
+  };
+  const syncPreview = useSyncPreview(
+    saved?.quote.id ?? null,
+    saved?.version.versionNumber ?? null,
+    Boolean(saved?.quote.canSync) && (confirmingSync || confirmingSubmit),
+  );
+  // A preview refused with reasons (422), e.g. "Add products before syncing to Salesforce".
+  const syncPreviewRefusal = problemOf(syncPreview.error);
+
   const reloadLatest = () => {
     setConflict(false);
     setRefusal(null);
@@ -423,6 +460,8 @@ export default function QuoteWizardPage(): JSX.Element {
   const canSave = hasIdentity && (Boolean(saved) || Boolean(values.accountSalesRegion));
   const nextVersion = saved?.version.versionNumber ?? 1;
   const blockedByIssues = !isDirty && issues.length > 0;
+  // D141, D58: a discount needs the justification, written on Review.
+  const needsJustification = editable && discountedLines(values.lines) > 0 && !values.justification.trim();
   const version = saved?.version;
 
   return (
@@ -466,28 +505,47 @@ export default function QuoteWizardPage(): JSX.Element {
               }
               actions={
                 <>
-                  {/* One main button, the rest under "⋯", destructive last (2026-10-13, as on the quote page). */}
+                  {/* One main button, the rest under "Actions", destructive last (2026-10-13, as on the quote page);
+                      Sync to Salesforce is the exception, a button of its own (D137); it says "SF"
+                      to save room (2026-11-08), the full name on hover and for screen readers. */}
+                  {saved && saved.quote.syncSwitchOn && editable && step >= PRODUCTS_STEP ? (
+                    <Stack alignItems={{ xs: "flex-start", sm: "flex-end" }} spacing={0.25}>
+                      <Button
+                        variant="outlined"
+                        startIcon={<CloudUploadIcon size={16} />}
+                        onClick={() => void openSync()}
+                        disabled={busy || !canSave || !saved.quote.canSync || values.lines.length === 0}
+                        aria-label="Sync to Salesforce"
+                        title="Sync to Salesforce"
+                      >
+                        {sync.isPending ? "Syncing…" : "Sync to SF"}
+                      </Button>
+                      <Typography variant="caption" color="text.secondary">
+                        {!saved.quote.canSync
+                          ? "Only the primary quote syncs. Mark it primary on Overview."
+                          : values.lines.length === 0
+                            ? "Add products first"
+                            : lastSynced(saved.quote)}
+                      </Typography>
+                    </Stack>
+                  ) : null}
                   <Button variant="contained" onClick={() => void onSave()} disabled={busy || !canSave}>
-                    {save.isPending ? "Saving…" : sync.isPending ? "Syncing…" : "Save draft"}
+                    {save.isPending ? "Saving…" : "Save draft"}
                   </Button>
                   <QuoteActionsMenu
-                    actions={[
-                      // D77: the primary quote's sync, saved first.
-                      ...(saved?.quote.canSync
-                        ? [
-                            {
-                              label: "Sync to Salesforce",
-                              icon: <CloudUploadIcon size={16} />,
-                              detail: lastSynced(saved.quote),
-                              disabled: busy || !canSave,
-                              onClick: () => setConfirmingSync(true),
-                            },
-                          ]
-                        : []),
-                    ]}
+                    actions={[]}
                     destructive={
                       saved && saved.version.status === "DRAFT" && saved.quote.actions.includes("CLOSE")
-                        ? [{ label: "Delete draft", icon: <Trash2Icon size={16} />, disabled: busy, onClick: () => setDeleting(true) }]
+                        ? [
+                            {
+                              label: "Delete draft",
+                              icon: <Trash2Icon size={16} />,
+                              disabled: busy || syncedDraft(saved.quote, saved.version.versionNumber),
+                              // A synced draft can't be deleted (2026-11-11).
+                              detail: syncedDraft(saved.quote, saved.version.versionNumber) ? SYNCED_DRAFT_NOTE : undefined,
+                              onClick: () => setDeleting(true),
+                            },
+                          ]
                         : []
                     }
                   />
@@ -495,6 +553,11 @@ export default function QuoteWizardPage(): JSX.Element {
               }
             />
 
+            {/* D164: closed in Salesforce since it was picked. */}
+            <OpportunityClosedNotice
+              opportunityId={values.opportunityId || null}
+              blocked={version?.status === "DRAFT" ? "submitted or synced to Salesforce" : null}
+            />
             {version?.status === "DRAFT" && clonedFrom ? (
               <Alert severity="info" variant="outlined">
                 Cloned from {clonedFrom}, with its prices. Choose whether this quote is the primary one, then check the rest.
@@ -567,6 +630,7 @@ export default function QuoteWizardPage(): JSX.Element {
                     ) : null}
                     <ReviewStep
                       quoteId={saved?.quote.id ?? null}
+                      editable={editable}
                       preview={shown}
                       savedLegalEntityName={legalEntityName(saved)}
                       approvals={
@@ -633,11 +697,15 @@ export default function QuoteWizardPage(): JSX.Element {
                           Fix the {issues.length + approvalBlockers.length === 1 ? "item" : `${issues.length + approvalBlockers.length} items`}{" "}
                           above first
                         </Typography>
+                      ) : needsJustification ? (
+                        <Typography variant="caption" color="text.secondary">
+                          Write the justification first
+                        </Typography>
                       ) : null}
                       <Button
                         variant="contained"
-                        onClick={() => setConfirmingSubmit(true)}
-                        disabled={busy || !hasIdentity || blockedByIssues || approvalBlockers.length > 0}
+                        onClick={() => void openSubmit()}
+                        disabled={busy || !hasIdentity || blockedByIssues || needsJustification || approvalBlockers.length > 0}
                       >
                         Submit version {nextVersion}
                       </Button>
@@ -691,10 +759,27 @@ export default function QuoteWizardPage(): JSX.Element {
                   Version {nextVersion} will be frozen and can&apos;t be edited. Once approved, you issue the order form to
                   the customer; its {settings.data ? `${settings.data.validityDays}-day ` : ""}expiry starts then.
                 </Typography>
-                {isDirty || !saved ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Your unsaved changes will be saved first.
-                  </Typography>
+                {/* D138: a primary quote is synced on submit; say so, with what changes, folded. */}
+                {saved?.quote.canSync ? (
+                  <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "action.hover" }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <CloudUploadIcon size={16} />
+                      <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                        Submitting also updates the Salesforce opportunity
+                        {syncPreview.data ? `: ${syncPreview.data.changes} ${syncPreview.data.changes === 1 ? "change" : "changes"}` : ""}.
+                      </Typography>
+                      {syncPreview.data && syncPreview.data.changes > 0 ? (
+                        <Button size="small" onClick={() => setSubmitChangesOpen((v) => !v)}>
+                          {submitChangesOpen ? "Hide changes" : "See changes"}
+                        </Button>
+                      ) : null}
+                    </Stack>
+                    {submitChangesOpen && syncPreview.data ? (
+                      <Box sx={{ mt: 1.5 }}>
+                        <SyncChanges preview={syncPreview.data} />
+                      </Box>
+                    ) : null}
+                  </Paper>
                 ) : null}
               </Stack>
             </DialogContent>
@@ -708,25 +793,40 @@ export default function QuoteWizardPage(): JSX.Element {
             </DialogActions>
           </Dialog>
 
-          {/* D77: the manual sync asks first; Salesforce is made to match the quote. */}
-          <Dialog open={confirmingSync} onClose={() => !busy && setConfirmingSync(false)}>
+          {/* D77, D138: the manual sync shows what changes in Salesforce first. */}
+          <Dialog open={confirmingSync} onClose={() => !busy && setConfirmingSync(false)} maxWidth="md" fullWidth>
             <DialogTitle>Sync to Salesforce?</DialogTitle>
             <DialogContent>
-              <Stack spacing={1}>
-                <Typography variant="body2">
-                  Version {nextVersion} of this quote is written to
-                  {saved?.version.opportunityName ? ` ${saved.version.opportunityName}` : " its opportunity"} in Salesforce:
-                  the subscription dates, and each product with its units, price, discounts, dates and commission.
+              <Stack spacing={2}>
+                <Typography variant="body2" color="text.secondary">
+                  {saved?.version.opportunityName ?? "The opportunity"} in Salesforce will match this quote. Here&apos;s what
+                  changes:
                 </Typography>
-                <Typography variant="body2">
-                  The opportunity then matches this quote: products on it that aren&apos;t on this quote are removed in
-                  Salesforce.
-                </Typography>
-                {isDirty ? (
+                {syncPreview.isPending ? (
                   <Typography variant="body2" color="text.secondary">
-                    Your unsaved changes will be saved first.
+                    Reading the opportunity in Salesforce…
                   </Typography>
+                ) : syncPreviewRefusal ? (
+                  // Refused for a reason the AM can fix, e.g. no products yet: say that, not "couldn't read".
+                  <Alert severity="warning">
+                    {syncPreviewRefusal.issues.map((i) => (
+                      <div key={`${i.field}-${i.message}`}>{i.message.endsWith(".") ? i.message : `${i.message}.`}</div>
+                    ))}
+                  </Alert>
+                ) : syncPreview.error ? (
+                  <ErrorNotice error={syncPreview.error} onRetry={() => void syncPreview.refetch()} retrying={syncPreview.isFetching}>
+                    Couldn&apos;t read what Salesforce has now.
+                  </ErrorNotice>
+                ) : syncPreview.data && syncPreview.data.changes === 0 ? (
+                  <Alert severity="success" variant="outlined">
+                    Salesforce already matches this quote. Nothing changes.
+                  </Alert>
+                ) : syncPreview.data ? (
+                  <SyncChanges preview={syncPreview.data} />
                 ) : null}
+                <Typography variant="caption" color="text.secondary">
+                  All or nothing: if Salesforce refuses any part, nothing changes there.
+                </Typography>
               </Stack>
             </DialogContent>
             <DialogActions>
@@ -736,9 +836,13 @@ export default function QuoteWizardPage(): JSX.Element {
               <Button
                 variant="contained"
                 onClick={() => void onSync().finally(() => setConfirmingSync(false))}
-                disabled={busy}
+                disabled={busy || !syncPreview.data || syncPreview.data.changes === 0}
               >
-                {save.isPending ? "Saving…" : sync.isPending ? "Syncing…" : "Sync"}
+                {sync.isPending
+                  ? "Syncing…"
+                  : syncPreview.data && syncPreview.data.changes > 0
+                    ? `Sync ${syncPreview.data.changes} ${syncPreview.data.changes === 1 ? "change" : "changes"}`
+                    : "Sync"}
               </Button>
             </DialogActions>
           </Dialog>

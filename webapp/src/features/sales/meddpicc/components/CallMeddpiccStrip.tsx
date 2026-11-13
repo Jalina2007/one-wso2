@@ -77,6 +77,13 @@ export default function CallMeddpiccStrip({
       </Typography>,
     );
   }
+  if (coverage.status === "EMPTY") {
+    return frame(
+      <Typography variant="body2" color="text.secondary">
+        No MEDDPICC: this call&apos;s transcript is empty, so there was nothing to analyse.
+      </Typography>,
+    );
+  }
   if (coverage.status === "PENDING" || coverage.status === "RUNNING") {
     return frame(
       <Stack direction="row" spacing={1} sx={{ alignItems: "center" }} role="status">

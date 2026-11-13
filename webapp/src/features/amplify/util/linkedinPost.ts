@@ -14,6 +14,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import type { Campaign } from "../api/amplifyTypes";
+
 /**
  * Origins a post link (and the LinkedIn sign-in redirect) may use until amplify-api's list arrives in `GET /me`
  * (`campaignLinkOrigins`): LinkedIn only. amplify-api applies the same rule; this keeps the UI from sending or
@@ -96,6 +98,33 @@ function decodeOrSame(text: string): string {
   } catch {
     return text;
   }
+}
+
+/** The id part of `urn:li:<kind>:<id>`, or null when the value is not a post URN. */
+function urnIdOf(value: string | null | undefined): string | null {
+  const parts = value?.split(":") ?? [];
+  return parts.length >= 4 && parts[0] === "urn" && parts[1] === "li" && parts[3] ? parts[3] : null;
+}
+
+/**
+ * The campaign a `/amplify/celebrate?share=` value names.
+ *
+ * Novera's card button sends the campaign id. A hand-made or older link may carry the LinkedIn post instead — its
+ * bare id (`7411000001`), its `urn:li:<kind>:<id>` or a post URL — so those resolve too. Only the campaigns given
+ * (the open list) are searched; anything else returns null rather than guessing at a campaign.
+ */
+export function campaignForShareParam(
+  param: string | null | undefined,
+  campaigns: readonly Campaign[],
+  origins: readonly string[] = DEFAULT_POST_LINK_ORIGINS,
+): Campaign | null {
+  const value = param?.trim();
+  if (!value) return null;
+  const byId = campaigns.find((c) => c.id === value);
+  if (byId) return byId;
+  const urn = postUrnFromUrl(value, origins);
+  if (urn) return campaigns.find((c) => c.resourceUrn === urn) ?? null;
+  return POST_ID.test(value) ? (campaigns.find((c) => urnIdOf(c.resourceUrn) === value) ?? null) : null;
 }
 
 /** The post kinds the New Post form offers. amplify-api also reads article, video, document, event and activity. */

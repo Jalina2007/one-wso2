@@ -72,6 +72,7 @@ const ITEM_CAPABILITY: Record<
   "mops-email-blocks": "emailworkbench",
   // Phase 4 — `events` and `events-review` are siblings, not a hierarchy:
   // holding one does not imply the other.
+  "mops-events-lead-import": "events",
   "mops-events-mine": "events",
   "mops-events-review": "events-review",
   // Phase 5

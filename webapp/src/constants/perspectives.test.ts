@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 type Perspectives = typeof import("./perspectives");
 
 async function load(
-  preview: { cado2?: boolean; nda?: boolean } = {},
+  preview: { quickquote?: boolean; nda?: boolean } = {},
 ): Promise<Perspectives> {
   vi.resetModules();
   window.config = {
@@ -116,20 +116,21 @@ describe("CadO2's rail entries", () => {
       .map((section) => section.id);
 
   it("are a CadO2 group under Sales once the flag is on", async () => {
-    const perspectives = await load({ cado2: true });
+    const perspectives = await load({ quickquote: true });
     const group = perspectives.findPerspectiveByKey("sales")?.sections?.find((s) => s.id === "sec-app-cado2");
     expect(group?.label).toBe("QuickQuote");
     expect(group?.alwaysGroup).toBe(true);
     expect(group?.children?.map((c) => [c.label, c.path])).toEqual([
-      ["Quotes", "/sales/cado2/quotes"],
-      ["My Approvals", "/sales/cado2/approvals"],
-      ["Insights", "/sales/cado2/insights/operations"],
-      ["Admin", "/sales/cado2/admin"],
+      ["Quotes", "/sales/quickquote/quotes"],
+      ["Deal Desk", "/sales/quickquote/desk"], // D130
+      ["My Approvals", "/sales/quickquote/approvals"],
+      ["Insights", "/sales/quickquote/insights/operations"],
+      ["Admin", "/sales/quickquote/admin"],
     ]);
   });
 
   it("are gone when the flag is off, or never mentioned", async () => {
-    for (const preview of [{ cado2: false }, {}]) {
+    for (const preview of [{ quickquote: false }, {}]) {
       expect(salesIdsIn(await load(preview))).toEqual([
         "sales-echo",
         "sales-meetings",
@@ -141,7 +142,7 @@ describe("CadO2's rail entries", () => {
   });
 
   it("never join the Echo gate's ids", async () => {
-    const { SALES_ITEM_IDS } = await load({ cado2: true });
+    const { SALES_ITEM_IDS } = await load({ quickquote: true });
     // Echo and Deals are the Sales rows gated through ONE_WSO2_REVOPS_BACKEND_URL;
     // nothing of CadO2's joins them.
     expect([...SALES_ITEM_IDS]).toEqual(["sales-echo", "sales-meetings", "sales-deals"]);
@@ -165,7 +166,7 @@ describe("the Ask Sales rail entry", () => {
   });
 
   it("sits before CadO2 when its flag is on", async () => {
-    expect(salesIdsIn(await load({ cado2: true }))).toEqual([
+    expect(salesIdsIn(await load({ quickquote: true }))).toEqual([
       "sales-echo",
       "sales-pitstop",
       "sec-app-cado2",
@@ -173,7 +174,7 @@ describe("the Ask Sales rail entry", () => {
   });
 
   it("is not affected by the other preview flags being off", async () => {
-    expect(salesIdsIn(await load({ cado2: false }))).toEqual(["sales-echo", "sales-pitstop"]);
+    expect(salesIdsIn(await load({ quickquote: false }))).toEqual(["sales-echo", "sales-pitstop"]);
   });
 
   it("never joins the Echo gate's ids", async () => {
@@ -305,7 +306,7 @@ describe("a rail row does one thing", () => {
     window.config = {
       ...(window.config ?? {}),
       ONE_WSO2_PREVIEW_FEATURES: previewOn
-        ? { cado2: true, nda: true }
+        ? { quickquote: true, nda: true }
         : {},
       // ISAC and CSM are only in the registry once their addresses are set.
       ONE_WSO2_MARKETINGOPS_ISAC_URL: "https://isac.example",
@@ -360,5 +361,35 @@ describe("the Marketing Ops rail", () => {
       (section) => section.id,
     );
     expect(ids?.slice(0, 3)).toEqual(["sec-app-marketing-calendar", "mops-isac", "sec-app-email-workbench"]);
+  });
+});
+
+describe("the Swag Store perspective", () => {
+  async function loadWithStore(on: boolean): Promise<Perspectives> {
+    vi.resetModules();
+    window.config = {
+      ...(window.config ?? {}),
+      ONE_WSO2_PREVIEW_FEATURES: on ? { swagStore: true } : {},
+    } as Window["config"];
+    return import("./perspectives");
+  }
+
+  it("is absent while its preview flag is off, so /store opens no rail", async () => {
+    const perspectives = await loadWithStore(false);
+    expect(perspectives.findPerspectiveByKey("store")).toBeUndefined();
+    expect(perspectives.findPerspectiveByPath("/store")).toBeUndefined();
+  });
+
+  it("is reachable at /store with the Shop row first once the flag is on", async () => {
+    const perspectives = await loadWithStore(true);
+    const store = perspectives.findPerspectiveByKey("store");
+    expect(store?.path).toBe("/store");
+    expect(perspectives.reachablePerspectives().map((p) => p.key)).toContain("store");
+    expect(store?.sections?.[0]).toMatchObject({ id: "swag-store-shop", label: "Shop", path: "/store" });
+  });
+
+  it("owns every store page, so product pages keep the store rail", async () => {
+    const perspectives = await loadWithStore(true);
+    expect(perspectives.findPerspectiveByPath("/store/p/hoodie")?.key).toBe("store");
   });
 });

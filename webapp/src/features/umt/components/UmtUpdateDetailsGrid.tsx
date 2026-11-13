@@ -43,6 +43,7 @@ import type { UmtUpdateFieldChange } from "../api/useUmtUpdateFieldMutation";
 import { useUmtWorstCaseEstimateLog } from "../api/useUmtWorstCaseEstimateLog";
 import { formatCalendarDate, formatTimestamp, parseCalendarDate } from "../lib/umtDates";
 import { umtIssueLink } from "../lib/umtIssueLink";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../lib/umtGrid";
 import { renderLinkValue } from "./umtViewSectionPrimitives";
 
 const { DatePicker, LocalizationProvider } = DatePickers;
@@ -448,6 +449,7 @@ function EtaLogDialog({
           <Box sx={{ border: 1, borderColor: "divider", borderRadius: 1, maxHeight: 400, overflow: "auto" }}>
             <DataGridComponent
               autoHeight
+              {...UMT_ALL_ROWS_GRID_PROPS}
               columnHeaderHeight={40}
               columns={etaLogColumns}
               disableRowSelectionOnClick

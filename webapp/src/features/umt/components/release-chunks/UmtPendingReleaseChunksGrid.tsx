@@ -76,6 +76,7 @@ import {
   ChunkCell,
   ChunkLine,
 } from "./umtReleaseChunkGridPrimitives";
+import { UMT_GRID_PAPER_SX } from "../../lib/umtGrid";
 import { UMT_CHUNK_GRID_BORDERED_SX } from "./umtReleaseChunkGridSx";
 import { useChunkGridPagination } from "./useChunkGridPagination";
 
@@ -137,7 +138,7 @@ function releaseReadinessAnswered(readiness: UmtReleaseReadiness, showWarning: (
   showWarning(
     readiness === "blocked"
       ? "One or more update levels have not built successfully. Check their build status before releasing."
-      : "Build status for this release chunk is unavailable, so it cannot be released yet. Refresh the table and try again.",
+      : "Build status for this release chunk is unavailable, so it cannot be released yet. Try again in a moment.",
   );
   return false;
 }
@@ -149,23 +150,42 @@ function releaseReadinessAnswered(readiness: UmtReleaseReadiness, showWarning: (
 // list the same ones, and a positional match that slips shows one product's
 // build status against another product's name with nothing to reveal it.
 //
-// Two kinds of "missing" stay apart. A product the status response does not
-// mention reads as not triggered, since there is no build to report; a
-// product it mentions without a TG status reads as a failure, which is what
-// an empty status on a build that should have one means.
+// Every build status on a row comes from the build status request alone.
+// Until that request answers, when it fails, or when its answer does not list
+// the level or lists it without a status, there is no status and the cell
+// reads N/A.
 function tgBuildStatusOf(
   status: UmtReleaseChunkRowStatus | undefined,
   level: UmtReleaseChunkUpdateLevel,
-): string {
-  const levels = status?.buildStatus?.updateLevels;
-  if (!levels) return "UNKNOWN";
-  const match = levels.find(
+): string | null | undefined {
+  return statusLevelOf(status, level)?.tgBuildStatus;
+}
+
+// One update level's product build status, read the same way as its TG build
+// status. The list that loads the chunks carries one too, but it is not read:
+// it only has a value once the level's product build has been triggered.
+function productBuildStatusOf(
+  status: UmtReleaseChunkRowStatus | undefined,
+  level: UmtReleaseChunkUpdateLevel,
+): string | null | undefined {
+  return statusLevelOf(status, level)?.buildStatus;
+}
+
+// The chunk's CST build status, from the same request.
+function cstBuildStatusOf(status: UmtReleaseChunkRowStatus | undefined): string | null | undefined {
+  return status?.buildStatus?.overallCstBuildStatus;
+}
+
+function statusLevelOf(
+  status: UmtReleaseChunkRowStatus | undefined,
+  level: UmtReleaseChunkUpdateLevel,
+) {
+  return status?.buildStatus?.updateLevels.find(
     (candidate) =>
       candidate.productName === level.productName &&
-      candidate.productVersion === level.productVersion,
+      candidate.productVersion === level.productVersion &&
+      (candidate.channel ?? null) === (level.channel ?? null),
   );
-  if (!match) return "UNKNOWN";
-  return match.tgBuildStatus || "N/A";
 }
 
 // The six per-update-level columns sit under one "Build Details" title, so it
@@ -379,15 +399,22 @@ export default function UmtPendingReleaseChunksGrid() {
         headerName: "Build Status",
         width: 150,
         sortable: false,
-        renderCell: (params) => (
-          <ChunkCell divided>
-            {params.row.updateLevels.map((level, index) => (
-              <ChunkLine key={index}>
-                <BuildStatusChip status={level.buildStatus} />
-              </ChunkLine>
-            ))}
-          </ChunkCell>
-        ),
+        renderCell: (params) => {
+          const status = rowStatuses[params.row.id];
+          return (
+            <ChunkCell divided>
+              {params.row.updateLevels.map((level, index) => (
+                <ChunkLine key={index}>
+                  {status?.buildStatusLoading ? (
+                    <Skeleton variant="text" width={80} />
+                  ) : (
+                    <BuildStatusChip status={productBuildStatusOf(status, level)} />
+                  )}
+                </ChunkLine>
+              ))}
+            </ChunkCell>
+          );
+        },
       },
       ...(gate.isAdmin
         ? [
@@ -398,17 +425,21 @@ export default function UmtPendingReleaseChunksGrid() {
               sortable: false,
               renderCell: (
                 params: DataGrid.GridRenderCellParams<UmtReleaseChunk>,
-              ) => (
-                <ChunkCell divided>
-                  {params.row.updateLevels.map((level, index) => (
-                    <ProductBuildRetriggerButton
-                      key={index}
-                      chunkId={params.row.id}
-                      level={level}
-                    />
-                  ))}
-                </ChunkCell>
-              ),
+              ) => {
+                const status = rowStatuses[params.row.id];
+                return (
+                  <ChunkCell divided>
+                    {params.row.updateLevels.map((level, index) => (
+                      <ProductBuildRetriggerButton
+                        key={index}
+                        chunkId={params.row.id}
+                        level={level}
+                        status={productBuildStatusOf(status, level)}
+                      />
+                    ))}
+                  </ChunkCell>
+                );
+              },
             } as DataGrid.GridColDef<UmtReleaseChunk>,
           ]
         : []),
@@ -474,11 +505,7 @@ export default function UmtPendingReleaseChunksGrid() {
                 {status?.buildStatusLoading ? (
                   <Skeleton variant="text" width={80} />
                 ) : (
-                  <BuildStatusChip
-                    status={
-                      status?.buildStatus?.overallCstBuildStatus ?? "UNKNOWN"
-                    }
-                  />
+                  <BuildStatusChip status={cstBuildStatusOf(status)} />
                 )}
               </ChunkLine>
             </ChunkCell>
@@ -496,8 +523,7 @@ export default function UmtPendingReleaseChunksGrid() {
                 params: DataGrid.GridRenderCellParams<UmtReleaseChunk>,
               ) => {
                 const status = rowStatuses[params.row.id];
-                const cstStatus =
-                  status?.buildStatus?.overallCstBuildStatus ?? "UNKNOWN";
+                const cstStatus = cstBuildStatusOf(status);
                 return (
                   <ChunkCell>
                     <ChunkLine>
@@ -577,18 +603,7 @@ export default function UmtPendingReleaseChunksGrid() {
         </ErrorNotice>
       )}
 
-      <Paper
-        variant="outlined"
-        sx={{
-          display: "flex",
-          flex: 1,
-          flexDirection: "column",
-          minHeight: 0,
-          minWidth: 0,
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
+      <Paper variant="outlined" sx={UMT_GRID_PAPER_SX}>
         {chunks.isFetching && !chunks.isPending && (
           <LinearProgress
             sx={{ left: 0, position: "absolute", right: 0, top: 0, zIndex: 4 }}
@@ -596,6 +611,7 @@ export default function UmtPendingReleaseChunksGrid() {
         )}
         <Box sx={{ flex: 1, minHeight: 0 }}>
           <DataGridComponent
+            disableVirtualization
             columnHeaderHeight={40}
             columnGroupingModel={groupingModel}
             columns={columns}
@@ -808,9 +824,11 @@ function UnlockChunkButton({ chunkId }: { chunkId: number }) {
 function ProductBuildRetriggerButton({
   chunkId,
   level,
+  status,
 }: {
   chunkId: number;
   level: UmtReleaseChunkUpdateLevel;
+  status: string | null | undefined;
 }) {
   const trigger = useUmtTriggerProductBuild(chunkId);
   return (
@@ -818,7 +836,7 @@ function ProductBuildRetriggerButton({
       label="Retrigger Job"
       title="Retrigger Build"
       successMessage="Build triggered successfully!"
-      canRetrigger={umtCanRetriggerBuild(level.buildStatus)}
+      canRetrigger={umtCanRetriggerBuild(status)}
       chunkId={chunkId}
       level={level}
       trigger={trigger}
@@ -849,32 +867,41 @@ function TgBuildRetriggerButton({
   );
 }
 
-// A retrigger for one update level. Like every other build action on this
-// screen it starts a job outside the app, so it asks first.
-function LevelBuildRetriggerButton({
-  label,
-  title,
-  successMessage,
-  canRetrigger,
-  chunkId,
-  level,
-  trigger,
-}: {
+interface LevelBuildRetriggerProps {
   label: string;
   title: string;
   successMessage: string;
-  canRetrigger: boolean;
   chunkId: number;
   level: UmtReleaseChunkUpdateLevel;
   trigger: ReturnType<typeof useUmtTriggerProductBuild>;
-}) {
+}
+
+// A retrigger for one update level. Like every other build action on this
+// screen it starts a job outside the app, so it asks first.
+//
+// Still a line, even with nothing to offer: the levels below it have to stay
+// on the same rows as their names and statuses in the columns beside. The
+// control, and the state of its dialog, exist only while the level can be
+// retriggered. A status that hides the button discards them, so a level that
+// becomes retriggerable again does not reopen the dialog unasked.
+function LevelBuildRetriggerButton({
+  canRetrigger,
+  ...props
+}: LevelBuildRetriggerProps & { canRetrigger: boolean }) {
+  if (!canRetrigger) return <ChunkLine />;
+  return <LevelBuildRetriggerControl {...props} />;
+}
+
+function LevelBuildRetriggerControl({
+  label,
+  title,
+  successMessage,
+  chunkId,
+  level,
+  trigger,
+}: LevelBuildRetriggerProps) {
   const { showSuccess, showError } = useNotifications();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  // Still a line, even with nothing to offer: the levels below it have to
-  // stay on the same rows as their names and statuses in the columns beside.
-  if (!canRetrigger) {
-    return <ChunkLine />;
-  }
   const levelName = `${level.productName ?? "N/A"} ${level.productVersion ?? ""}`.trim();
 
   async function handleConfirm() {

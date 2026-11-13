@@ -60,6 +60,7 @@ import {
   zipTargetDirectory,
   type UmtPendingManualUpload,
 } from "../../../lib/umtPrAnalysis";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../../lib/umtGrid";
 import type { UmtBundleInfoChange, UmtFileOperation } from "../../../api/umtUpdates";
 import { renderLinkValue } from "../../umtViewSectionPrimitives";
 
@@ -382,6 +383,7 @@ export default function UmtAddManualFilesSection({
       {files.length > 0 ? (
         <DataGridComponent
           autoHeight
+          {...UMT_ALL_ROWS_GRID_PROPS}
           columnHeaderHeight={40}
           disableColumnMenu
           disableRowSelectionOnClick
@@ -456,6 +458,7 @@ export default function UmtAddManualFilesSection({
       {bundlesInfoChanges.length > 0 && (
         <DataGridComponent
           autoHeight
+          {...UMT_ALL_ROWS_GRID_PROPS}
           columnHeaderHeight={40}
           disableColumnMenu
           disableRowSelectionOnClick

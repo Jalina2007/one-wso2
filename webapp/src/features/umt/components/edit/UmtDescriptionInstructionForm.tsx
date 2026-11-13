@@ -14,7 +14,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Autocomplete,
   Box,
@@ -41,6 +41,8 @@ import { useNotifications } from "@context/notifications/NotificationsContext";
 import type { UmtBehaviorChangeRequest, UmtProductDetailsRequest, UmtUpdateProduct, UmtUpdateSummary } from "../../api/umtUpdates";
 import { useUmtSaveDescriptionInstruction } from "../../api/useUmtDescriptionInstruction";
 import { umtProductHasDescriptionInstruction } from "../../lib/umtDescriptionInstruction";
+import { GridCellContent } from "../umtViewSectionPrimitives";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -334,28 +336,40 @@ export default function UmtDescriptionInstructionForm({
       headerName: "Product Name",
       flex: 2,
       sortable: false,
-      renderCell: (params) => <CellCenter>{params.row.productName ?? "N/A"}</CellCenter>,
+      renderCell: (params) => (
+        <GridCellContent alignTop>{params.row.productName ?? "N/A"}</GridCellContent>
+      ),
     },
     {
       field: "version",
       headerName: "Version",
       flex: 1,
       sortable: false,
-      renderCell: (params) => <CellCenter>{params.row.version ?? "N/A"}</CellCenter>,
+      renderCell: (params) => (
+        <GridCellContent alignTop>{params.row.version ?? "N/A"}</GridCellContent>
+      ),
     },
     {
       field: "description",
       headerName: "Description",
       flex: 3,
       sortable: false,
-      renderCell: (params) => <CellCenter>{params.row.description}</CellCenter>,
+      renderCell: (params) => (
+        <GridCellContent alignTop>
+          <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{params.row.description}</Box>
+        </GridCellContent>
+      ),
     },
     {
       field: "instruction",
       headerName: "Instruction",
       flex: 3,
       sortable: false,
-      renderCell: (params) => <CellCenter>{params.row.instruction}</CellCenter>,
+      renderCell: (params) => (
+        <GridCellContent alignTop>
+          <Box sx={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{params.row.instruction}</Box>
+        </GridCellContent>
+      ),
     },
     {
       field: "delete",
@@ -363,7 +377,7 @@ export default function UmtDescriptionInstructionForm({
       width: 52,
       sortable: false,
       renderCell: (params) => (
-        <CellCenter>
+        <GridCellContent alignTop>
           <IconButton
             aria-label="Delete row"
             size="small"
@@ -374,7 +388,7 @@ export default function UmtDescriptionInstructionForm({
           >
             <TrashIcon size={16} />
           </IconButton>
-        </CellCenter>
+        </GridCellContent>
       ),
     },
   ];
@@ -384,6 +398,7 @@ export default function UmtDescriptionInstructionForm({
       <Box>
         <DataGridComponent
           autoHeight
+          {...UMT_ALL_ROWS_GRID_PROPS}
           columnHeaderHeight={40}
           columns={columns}
           disableColumnMenu
@@ -577,8 +592,4 @@ export default function UmtDescriptionInstructionForm({
       </Dialog>
     </Stack>
   );
-}
-
-function CellCenter({ children }: { children: ReactNode }) {
-  return <Stack sx={{ justifyContent: "center", minHeight: "100%", py: 0.75, width: "100%" }}>{children}</Stack>;
 }

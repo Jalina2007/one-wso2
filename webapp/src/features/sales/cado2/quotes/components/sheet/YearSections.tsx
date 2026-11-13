@@ -17,7 +17,7 @@
 import type { JSX, ReactNode } from "react";
 import { Box, Chip, Stack, Typography } from "@wso2/oxygen-ui";
 import { ChevronRightIcon } from "@wso2/oxygen-ui-icons-react";
-import { durationShort, durationText, formatDate } from "@features/sales/cado2/quotes/form/draftForm";
+import { commissionRatesText, durationShort, durationText, formatDate } from "@features/sales/cado2/quotes/form/draftForm";
 import { orderForm, type SheetLine } from "@features/sales/cado2/quotes/sheet/sheetModel";
 import { formatMoney } from "@features/sales/cado2/utils/money";
 import OrderFormTable from "./OrderFormTable";
@@ -48,7 +48,7 @@ interface YearSectionsProps {
   /** A line's buttons and problems, by its position in `lines`. */
   readonly lineActions?: (index: number) => ReactNode;
   readonly below?: (index: number) => ReactNode;
-  readonly flagUncategorised?: boolean;
+  readonly flagNotSetUp?: boolean;
 }
 
 /**
@@ -73,7 +73,7 @@ export default function YearSections({
   empty,
   lineActions,
   below,
-  flagUncategorised = false,
+  flagNotSetUp = false,
 }: YearSectionsProps): JSX.Element {
   return (
     <Box sx={{ borderTop: 1, borderColor: "divider" }}>
@@ -85,7 +85,14 @@ export default function YearSections({
         // Only the last year can be shorter than 12 months; say so beside its dates.
         const short = y.start && y.end && durationShort(y.start, y.end) !== "1Y" ? durationText(y.start, y.end) : "";
         return (
-          <Box key={y.number} component="section" aria-label={`Year ${y.number}`} sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Box
+            key={y.number}
+            component="section"
+            aria-label={`Year ${y.number}`}
+            // A Deal Desk note about the year points here, e.g. its support plan (D155).
+            data-note-target={`year:${y.number}`}
+            sx={{ borderBottom: 1, borderColor: "divider" }}
+          >
             {/* The row folds the year on a click; the toggle itself (keyboard,
                 screen readers) holds only its name, and the controls in the row
                 (a clickable end date, the actions) sit beside it, not inside a
@@ -128,10 +135,10 @@ export default function YearSections({
                 </Typography>
               ) : null}
               {short ? <Chip size="small" color="warning" variant="outlined" label={short} /> : null}
+              {/* Folded, the header carries the year's total; open, the table's last row does. No product
+                  count (2026-11-08). The empty box still pushes the year's buttons to the right. */}
               <Typography variant="body2" color="text.secondary" sx={{ ml: "auto !important", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
-                {ofYear.length} product{ofYear.length === 1 ? "" : "s"}
-                {/* Folded, the header carries the year's total; open, the table's last row does. */}
-                {!open && total ? ` · ${currency} ${formatMoney(total)}` : ""}
+                {!open && total ? `${currency} ${formatMoney(total)}` : ""}
               </Typography>
               {yearActions ? (
                 // Its buttons don't fold the year.
@@ -156,7 +163,7 @@ export default function YearSections({
                     commissionPercent={commissionPercent}
                     showTotals={false}
                     closingTotalLabel={y.number ? `Year ${y.number} total` : "Total"}
-                    flagUncategorised={flagUncategorised}
+                    flagNotSetUp={flagNotSetUp}
                     actions={lineActions ? (k) => lineActions(indexes[k]) : undefined}
                     below={below ? (k) => below(indexes[k]) : undefined}
                   />
@@ -179,11 +186,14 @@ export function OrderTotalsFooter({
   lines,
   currency,
   commissionPercent,
+  commissionRates = null,
   yearCount,
 }: {
   lines: readonly SheetLine[];
   currency: string;
   commissionPercent: string | null;
+  /** D151: each year's rate, when they differ. */
+  commissionRates?: readonly string[] | null;
   yearCount: number;
 }): JSX.Element {
   const form = orderForm(lines, commissionPercent);
@@ -213,7 +223,7 @@ export function OrderTotalsFooter({
       {form.commission !== null ? (
         <Stack spacing={0.5}>
           {row(total, form.total)}
-          {row(`Partner commission (${commissionPercent}%)`, form.commission, false, "− ")}
+          {row(`Partner commission (${commissionRates?.length ? commissionRatesText(commissionRates) : `${commissionPercent}%`})`, form.commission, false, "− ")}
           {row("Net order value", form.netOrderValue, true)}
         </Stack>
       ) : (

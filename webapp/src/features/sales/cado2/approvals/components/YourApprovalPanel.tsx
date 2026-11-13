@@ -27,7 +27,6 @@ import {
   ReceiptIcon,
   RefreshCwIcon,
   ShieldCheckIcon,
-  TagIcon,
   TrendingDownIcon,
 } from "@wso2/oxygen-ui-icons-react";
 import SectionCard from "@features/sales/cado2/components/section-card/SectionCard";
@@ -47,10 +46,10 @@ interface YourApprovalPanelProps {
   /** The steps the viewer may decide now; usually one. */
   readonly actionable: readonly ApprovalStep[];
   /**
-   * Deal Desk: what they verify themselves: the lines whose category the rep
-   * chose (repCategoryPoints) and a renewal starting another day (renewalStartPoints).
+   * Deal Desk: what they verify themselves: a renewal starting another day
+   * (renewalStartPoints).
    */
-  readonly repCategories?: readonly ReasonRow[];
+  readonly deskPoints?: readonly ReasonRow[];
   /** Opens the confirmation for a decision on one of the viewer's steps. */
   readonly onDecide: (outcome: ApprovalOutcome, step: ApprovalStep) => void;
   /** Legal's editor for the terms they write, under their reasons. */
@@ -75,7 +74,6 @@ const ICON: Record<ReasonKind, ReactNode> = {
   term: <CalendarClockIcon size={16} />,
   downsell: <TrendingDownIcon size={16} />,
   payment: <ReceiptIcon size={16} />,
-  category: <TagIcon size={16} />,
   other: <ShieldCheckIcon size={16} />,
 };
 
@@ -213,14 +211,14 @@ function ReturnedNote({ r }: { readonly r: PreviousReturn }): JSX.Element {
 function DeskReview({
   steps,
   step,
-  repCategories,
+  deskPoints,
 }: {
   readonly steps: readonly ApprovalStep[];
   readonly step: ApprovalStep;
-  readonly repCategories: readonly ReasonRow[];
+  readonly deskPoints: readonly ReasonRow[];
 }): JSX.Element {
   // What Deal Desk verifies themselves first, then what later approvers will check.
-  const points = [...repCategories, ...deskSummary(steps, step)];
+  const points = [...deskPoints, ...deskSummary(steps, step)];
   // A resubmission says what changed since the earlier version (D119).
   const resubmitted = resubmissionNote(step);
   const note = resubmitted ? <ResubmissionNote text={resubmitted} /> : null;
@@ -279,7 +277,7 @@ function OwnReasons({ step }: { readonly step: ApprovalStep }): JSX.Element {
 export default function YourApprovalPanel({
   steps,
   actionable,
-  repCategories = [],
+  deskPoints = [],
   onDecide,
   legalEditor,
   legalApproveBlock = "",
@@ -312,7 +310,7 @@ export default function YourApprovalPanel({
               stretch
             >
               {deskReview && previousReturn ? <ReturnedNote r={previousReturn} /> : null}
-              {deskReview ? <DeskReview steps={steps} step={s} repCategories={repCategories} /> : <OwnReasons step={s} />}
+              {deskReview ? <DeskReview steps={steps} step={s} deskPoints={deskPoints} /> : <OwnReasons step={s} />}
               {s.role === "LEGAL" && legalEditor ? <Box sx={{ mt: 2 }}>{legalEditor}</Box> : null}
               {deskReview && deskEditor ? <Box sx={{ mt: 2 }}>{deskEditor}</Box> : null}
               {/* The decision sits with its reasons; the card already names the role. */}

@@ -17,17 +17,19 @@
 // The editor's model: which placeholders a formula uses, and the bindings it
 // sends. Kept apart from the dialog so it can be tested on its own.
 
-import type { FormulaBinding, FormulaProduct, PricingFormula } from "@features/sales/cado2/quotes/api/quoteTypes";
+import type { FormulaBinding, FormulaProduct, LineCategory, PricingFormula } from "@features/sales/cado2/quotes/api/quoteTypes";
 import type { FormulaBindingInput } from "@features/sales/cado2/admin/pricing-formulas/api/pricingFormulaTypes";
 
 /** One placeholder's value as the editor holds it, whichever kind is showing. */
 export interface BindingDraft {
-  readonly kind: "VALUE" | "PRODUCTS";
+  readonly kind: "VALUE" | "PRODUCTS" | "CATEGORY";
   readonly value: string;
   readonly products: readonly FormulaProduct[];
+  /** CATEGORY: the category whose price-book lines it adds up (D153). */
+  readonly category: LineCategory | "";
 }
 
-export const EMPTY_BINDING: BindingDraft = { kind: "VALUE", value: "", products: [] };
+export const EMPTY_BINDING: BindingDraft = { kind: "VALUE", value: "", products: [], category: "" };
 
 /** The placeholders a formula uses, once each, in number order: "max($2, $1 * $2)" → ["$1", "$2"]. */
 export function placeholdersOf(expression: string): string[] {
@@ -46,7 +48,7 @@ export function draftsOf(f: PricingFormula | null): Record<string, BindingDraft>
 }
 
 function draftOf(b: FormulaBinding): BindingDraft {
-  return { kind: b.kind, value: b.value ?? "", products: b.products ?? [] };
+  return { kind: b.kind, value: b.value ?? "", products: b.products ?? [], category: b.category ?? "" };
 }
 
 /**
@@ -59,8 +61,13 @@ export function bindingInputs(expression: string, drafts: Record<string, Binding
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((name) => {
       const d = drafts[name] ?? EMPTY_BINDING;
-      return d.kind === "VALUE"
-        ? { name, kind: "VALUE", value: d.value.trim(), productIds: [] }
-        : { name, kind: "PRODUCTS", value: "", productIds: d.products.map((p) => p.id) };
+      switch (d.kind) {
+        case "VALUE":
+          return { name, kind: "VALUE", value: d.value.trim(), productIds: [], category: "" };
+        case "PRODUCTS":
+          return { name, kind: "PRODUCTS", value: "", productIds: d.products.map((p) => p.id), category: "" };
+        case "CATEGORY":
+          return { name, kind: "CATEGORY", value: "", productIds: [], category: d.category };
+      }
     });
 }

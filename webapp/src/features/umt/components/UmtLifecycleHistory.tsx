@@ -24,6 +24,7 @@ import {
 import ErrorNotice from "@components/error-notice/ErrorNotice";
 import type { UmtLifecycleHistoryEntry } from "../api/umtUpdates";
 import { useUmtLifecycleHistory } from "../api/useUmtLifecycleHistory";
+import { UMT_ALL_ROWS_GRID_PROPS } from "../lib/umtGrid";
 
 const { DataGrid: DataGridComponent } = DataGrid;
 
@@ -55,6 +56,7 @@ export default function UmtLifecycleHistory({ id }: { id: string }) {
     <Paper variant="outlined" sx={{ minWidth: 0, overflow: "hidden" }}>
       <DataGridComponent
         autoHeight
+        {...UMT_ALL_ROWS_GRID_PROPS}
         columnHeaderHeight={40}
         columns={lifecycleColumns}
         disableRowSelectionOnClick

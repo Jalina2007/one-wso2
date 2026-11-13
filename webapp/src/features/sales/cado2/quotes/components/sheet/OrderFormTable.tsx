@@ -16,13 +16,16 @@
 
 import { Fragment, type JSX, type ReactNode } from "react";
 import { alpha, Box, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from "@wso2/oxygen-ui";
-import { CircleAlertIcon, PencilIcon } from "@wso2/oxygen-ui-icons-react";
+import { CircleAlertIcon } from "@wso2/oxygen-ui-icons-react";
 import { orderForm, type SheetLine } from "@features/sales/cado2/quotes/sheet/sheetModel";
-import { durationShort, formatDate } from "@features/sales/cado2/quotes/form/draftForm";
+import { commissionRatesText, durationShort, formatDate } from "@features/sales/cado2/quotes/form/draftForm";
 import { formatMoney } from "@features/sales/cado2/utils/money";
 import { visuallyHidden } from "@features/sales/cado2/utils/visuallyHidden";
 
 const num = { fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" } as const;
+
+/** A unit price after its discount, to the cent: 32,000 less 5% → "30400.00". */
+const afterDiscount = (price: string, pct: string) => (Math.round(Number(price) * (100 - Number(pct))) / 100).toFixed(2);
 
 interface OrderFormTableProps {
   readonly lines: readonly SheetLine[];
@@ -33,6 +36,8 @@ interface OrderFormTableProps {
   readonly below?: (index: number) => ReactNode;
   /** A partner-led quote's commission %, e.g. "15": adds the commission and net rows. */
   readonly commissionPercent?: string | null;
+  /** D151: each year's rate, when they differ. */
+  readonly commissionRates?: readonly string[] | null;
   /** The totals box's label. */
   readonly totalLabel?: string;
   /** False inside a year: the Products card closes with the totals over every year. */
@@ -40,11 +45,11 @@ interface OrderFormTableProps {
   /** A last row inside the table with the lines' total, e.g. "Year 1 total": quieter than the order totals. */
   readonly closingTotalLabel?: string;
   /**
-   * The wizard: frame the "Uncategorised" group in red and say how to fix it
-   * (D93, D95). Elsewhere (Review, the quote page) the group still shows,
-   * with a plain heading.
+   * The wizard: frame the "Not set up" group in red and say what it means
+   * (D93, D95, D152). Elsewhere (Review, the quote page) the group still
+   * shows, with a plain heading.
    */
-  readonly flagUncategorised?: boolean;
+  readonly flagNotSetUp?: boolean;
 }
 
 /**
@@ -65,7 +70,8 @@ export default function OrderFormTable({
   actions,
   below,
   commissionPercent = null,
-  flagUncategorised = false,
+  commissionRates = null,
+  flagNotSetUp = false,
   totalLabel = "Total order value",
   showTotals = true,
   closingTotalLabel,
@@ -107,19 +113,18 @@ export default function OrderFormTable({
   );
 
 
-  // The uncategorised group's heading (D93, D95): in the error colour, saying
-  // what to do, so it reads as something to fix, not just another section.
-  const uncategorisedHeader = (
+  // The "Not set up" group's heading (D93, D95, D152): in the error colour,
+  // saying what it means, so it reads as something to fix, not just another
+  // section. Only an Admin can fix it; the AM can remove the line.
+  const notSetUpHeader = (
     <TableRow>
       <TableCell colSpan={cols} sx={{ bgcolor: (t) => alpha(t.palette.error.main, 0.06), py: 0.75 }}>
         <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", columnGap: 1, color: "error.main" }}>
           <CircleAlertIcon size={16} aria-hidden />
           <Typography variant="overline" sx={{ fontWeight: 700, lineHeight: 1.6 }}>
-            Uncategorised
+            Not set up
           </Typography>
-          <Typography variant="body2" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-            · Click <PencilIcon size={14} aria-label="Edit" /> to choose a category
-          </Typography>
+          <Typography variant="body2">· Classification not set up · ask an Admin</Typography>
         </Box>
       </TableCell>
     </TableRow>
@@ -140,19 +145,19 @@ export default function OrderFormTable({
                 {l.productCode}
               </Typography>
             ) : null}
-            {/* A bundle child: it comes with, and leaves with, its parent. */}
-            {l.parentName ? (
-              <Typography variant="caption" color="text.secondary" display="block" aria-label="Bundled">
-                Comes with {l.parentName}
-              </Typography>
-            ) : null}
-            {/* How a formula line's unit price was worked out (D81); it has no discount. */}
+            {/* How a formula line's unit price was worked out (D81), and
+                what its discount brings it to (D149). */}
             {l.formula ? (
               <Typography variant="caption" color="text.secondary" display="block" aria-label="Priced by formula">
                 Formula {l.formula.version}:{" "}
                 <Box component="span" sx={{ fontFamily: "monospace" }}>
                   {l.formula.explanation}
                 </Box>
+              </Typography>
+            ) : null}
+            {l.formula && Number(l.discountPercent) > 0 ? (
+              <Typography variant="caption" display="block" sx={{ color: "primary.main" }} aria-label="After discount">
+                After {l.discountPercent}% discount: {formatMoney(afterDiscount(l.unitPrice, l.discountPercent))}
               </Typography>
             ) : null}
           </TableCell>
@@ -166,12 +171,12 @@ export default function OrderFormTable({
           <TableCell align="right" sx={num}>
             {Number(l.discountPercent) ? `${l.discountPercent}%` : "–"}
           </TableCell>
-          {/* Each line's term (D113): its dates, its length below like the
-              SKU under the name; a one-off line shows its date and "One-time". */}
+          {/* Each line's term (D113): its start and end (D146), its length
+              below like the SKU under the name; a one-off line "One-time". */}
           <TableCell sx={{ whiteSpace: "nowrap" }}>
             {!l.startDate
               ? "–"
-              : l.recurring && l.endDate
+              : l.endDate
                 ? `${formatDate(l.startDate)} – ${formatDate(l.endDate)}`
                 : formatDate(l.startDate)}
             {l.startDate && (!l.recurring || l.endDate) ? (
@@ -224,7 +229,7 @@ export default function OrderFormTable({
           size="small"
           aria-label="Products"
           // Light lines between columns (D97); not after the last cell, so the
-          // Uncategorised group's red frame keeps its right edge.
+          // "Not set up" group's red frame keeps its right edge.
           sx={{ "& th:not(:last-child), & td:not(:last-child)": { borderRight: 1, borderRightColor: "divider" } }}
         >
           <TableHead
@@ -255,11 +260,11 @@ export default function OrderFormTable({
               ) : null}
             </TableRow>
           </TableHead>
-          {/* Lines waiting for a category come first, under a plain heading, with no
-              subtotal, framed by a thin red line until each has one (D72, D93). */}
-          {pending.length > 0 && flagUncategorised ? (
+          {/* Lines whose classification isn't set up come first, with no
+              subtotal, framed by a thin red line (D93, D152). */}
+          {pending.length > 0 && flagNotSetUp ? (
             <TableBody
-              aria-label="Uncategorised"
+              aria-label="Not set up"
               sx={(t) => {
                 const line = `1px solid ${t.palette.error.main}`;
                 return {
@@ -272,14 +277,14 @@ export default function OrderFormTable({
                 };
               }}
             >
-              {uncategorisedHeader}
+              {notSetUpHeader}
               {pending.map(lineRow)}
             </TableBody>
           ) : null}
           {/* Read-only views: the same lines under a plain heading. */}
-          {pending.length > 0 && !flagUncategorised ? (
-            <TableBody aria-label="Uncategorised">
-              {groupHeader("Uncategorised")}
+          {pending.length > 0 && !flagNotSetUp ? (
+            <TableBody aria-label="Not set up">
+              {groupHeader("Not set up")}
               {pending.map(lineRow)}
             </TableBody>
           ) : null}
@@ -317,7 +322,12 @@ export default function OrderFormTable({
             <>
               <Box sx={{ pt: 0.75 }}>
                 {summaryRow(totalLabel, form.total)}
-                {summaryRow(`Partner commission (${commissionPercent}%)`, form.commission, false, "− ")}
+                {summaryRow(
+                  `Partner commission (${commissionRates?.length ? commissionRatesText(commissionRates) : `${commissionPercent}%`})`,
+                  form.commission,
+                  false,
+                  "− ",
+                )}
               </Box>
               {summaryRow("Net order value", form.netOrderValue, true)}
             </>

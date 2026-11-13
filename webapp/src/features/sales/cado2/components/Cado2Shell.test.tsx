@@ -47,7 +47,6 @@ vi.mock("../api/useCado2Me", async (importOriginal) => ({
 vi.mock("../quotes/pages/MyQuotesPage", () => ({ default: () => <h1>My Quotes</h1> }));
 vi.mock("../approvals/pages/MyApprovalsPage", () => ({ default: () => <h1>My Approvals</h1> }));
 vi.mock("../admin/approval-matrix/pages/ApprovalMatrixPage", () => ({ default: () => <h1>Approval matrix page</h1> }));
-vi.mock("../admin/currencies/pages/CurrenciesPage", () => ({ default: () => <h1>Currencies page</h1> }));
 vi.mock("../quotes/pages/QuoteDetailPage", async () => {
   const { useParams } = await import("react-router");
   return {
@@ -92,21 +91,21 @@ beforeEach(() => {
 describe("the CadO2 access ladder", () => {
   it("names the key to set when the backend isn't configured", () => {
     state.configured = false;
-    open("/sales/cado2/quotes");
+    open("/sales/quickquote/quotes");
     expect(screen.getByText(/isn.t connected yet/)).toBeInTheDocument();
     expect(screen.getByText("ONE_WSO2_CADO2_BACKEND_URL")).toBeInTheDocument();
   });
 
   it("holds the page, and redirects nothing, while access is being checked", () => {
     state.me = { ...state.me, data: undefined, isPending: true };
-    open("/sales/cado2/admin/currencies");
+    open("/sales/quickquote/admin/approval-matrix");
     expect(screen.getByText("Checking your QuickQuote access…")).toBeInTheDocument();
-    expect(where()).toBe("/sales/cado2/admin/currencies");
+    expect(where()).toBe("/sales/quickquote/admin/approval-matrix");
   });
 
   it("offers Retry when the check itself failed, rather than claiming no access", () => {
     state.me = { ...state.me, data: undefined, isError: true, error: new Error("timeout") };
-    open("/sales/cado2/quotes");
+    open("/sales/quickquote/quotes");
     expect(screen.getByText(/Couldn't check your QuickQuote access\./)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     expect(screen.queryByText("Nothing here for you yet")).toBeNull();
@@ -114,73 +113,73 @@ describe("the CadO2 access ladder", () => {
 
   it("shows the shared no-access card to someone with no CadO2 role", () => {
     state.me.data = me([]);
-    open("/sales/cado2/quotes");
+    open("/sales/quickquote/quotes");
     expect(screen.getByText("Nothing here for you yet")).toBeInTheDocument();
   });
 
   it("renders the page once allowed", () => {
-    open("/sales/cado2/quotes");
+    open("/sales/quickquote/quotes");
     expect(screen.getByText("My Quotes")).toBeInTheDocument();
   });
 });
 
 describe("CadO2 routing", () => {
   it("lands a rep on My Quotes", () => {
-    open("/sales/cado2");
-    expect(where()).toBe("/sales/cado2/quotes");
+    open("/sales/quickquote");
+    expect(where()).toBe("/sales/quickquote/quotes");
   });
 
   it("lands an approver who doesn't quote on My Approvals", () => {
     state.me.data = me([], ["LEGAL"]);
-    open("/sales/cado2");
-    expect(where()).toBe("/sales/cado2/approvals");
+    open("/sales/quickquote");
+    expect(where()).toBe("/sales/quickquote/approvals");
   });
 
   it("lands an admin-only person on Admin", () => {
     state.me.data = me(["ADMIN"]);
-    open("/sales/cado2");
-    expect(where()).toBe("/sales/cado2/admin/approval-matrix");
+    open("/sales/quickquote");
+    expect(where()).toBe("/sales/quickquote/admin/approval-matrix");
   });
 
   it("refuses My Quotes to an admin-only person: ADMIN is the admin panel only", () => {
     state.me.data = me(["ADMIN"]);
-    open("/sales/cado2/quotes");
-    expect(where()).toBe("/sales/cado2/admin/approval-matrix");
+    open("/sales/quickquote/quotes");
+    expect(where()).toBe("/sales/quickquote/admin/approval-matrix");
   });
 
   it("refuses Admin to a rep at its URL, not just in the rail", () => {
-    open("/sales/cado2/admin/currencies");
-    expect(where()).toBe("/sales/cado2/quotes");
+    open("/sales/quickquote/admin/approval-matrix");
+    expect(where()).toBe("/sales/quickquote/quotes");
   });
 
   it("refuses My Quotes to an approver who doesn't quote", () => {
     state.me.data = me([], ["CFO"]);
-    open("/sales/cado2/quotes/new");
-    expect(where()).toBe("/sales/cado2/approvals");
+    open("/sales/quickquote/quotes/new");
+    expect(where()).toBe("/sales/quickquote/approvals");
   });
 
   it("opens Admin on its first section, inside the section list", () => {
     state.me.data = me(["ADMIN"]);
-    open("/sales/cado2/admin");
-    expect(where()).toBe("/sales/cado2/admin/approval-matrix");
+    open("/sales/quickquote/admin");
+    expect(where()).toBe("/sales/quickquote/admin/approval-matrix");
     expect(screen.getByText("Approval matrix page")).toBeInTheDocument();
   });
 
   it("sends an unknown Admin section to the first one", () => {
     state.me.data = me(["ADMIN"]);
-    open("/sales/cado2/admin/regions");
-    expect(where()).toBe("/sales/cado2/admin/approval-matrix");
+    open("/sales/quickquote/admin/regions");
+    expect(where()).toBe("/sales/quickquote/admin/approval-matrix");
   });
 
   it("opens a quote on its Quote tab, and each tab has its own address", async () => {
-    open("/sales/cado2/quotes/42");
-    expect(where()).toBe("/sales/cado2/quotes/42/quote");
-    open("/sales/cado2/quotes/42/history");
+    open("/sales/quickquote/quotes/42");
+    expect(where()).toBe("/sales/quickquote/quotes/42/quote");
+    open("/sales/quickquote/quotes/42/history");
     expect(await screen.findByText("Quote tab history")).toBeInTheDocument();
   });
 
   it("sends an unknown CadO2 address to the landing", () => {
-    open("/sales/cado2/nowhere");
-    expect(where()).toBe("/sales/cado2/quotes");
+    open("/sales/quickquote/nowhere");
+    expect(where()).toBe("/sales/quickquote/quotes");
   });
 });

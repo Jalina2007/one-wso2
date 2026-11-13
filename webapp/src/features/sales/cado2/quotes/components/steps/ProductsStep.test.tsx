@@ -14,9 +14,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JSX } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FormProvider, useForm, useWatch } from "react-hook-form";
 import { AdapterDateFns, DatePickers } from "@wso2/oxygen-ui";
@@ -29,6 +29,33 @@ import ProductsStep from "./ProductsStep";
 
 // D72: products brought in from the opportunity.
 
+// D159: a previous opportunity's line items in Salesforce.
+const previousLines = {
+  opportunityName: "Acme - Integration 2026", subsStartDate: "2026-01-01", subsEndDate: "2026-12-31", currency: "USD",
+  lines: [{ id: "00kA", productName: "API Manager", productCode: "P-APIM", quantity: "4", salesPrice: "9000", discount: "25", totalPrice: "27000.00",
+    commissionPercent: null, serviceStartDate: "2026-01-01", serviceEndDate: "2026-12-31" }],
+};
+// D155: Admin → Support Plans, and those products in the quote's book.
+const supportProduct = (id: string, name: string, code: string) => ({
+  id, name, productCode: code, description: null, family: null, unitOfMeasure: null, classification: "ES",
+  category: "SUPPORT" as const, recurring: true, classificationProblem: null as string | null,
+  pricebookEntries: [{ id: `01u${id}`, unitPrice: "25000", currencyIsoCode: "USD", isActive: true, pricebook: { id: "01sUSD", name: "USD Price Book" } }],
+});
+const plans = {
+  enterprise: { productId: "01tENT", name: "WSO2 Enterprise Support Plan", code: "SU-E" },
+  standard: { productId: "01tSTD", name: "WSO2 Standard Support Plan", code: "SU-S" },
+  premium: [{ productId: "01tPRE", name: "Premium Support Subscription", code: "SV-PREMIUM-SUPPORT" }],
+  updatedByEmail: null,
+  updatedAt: null,
+};
+const quoteSettings: { supportPlans: unknown; error: Error | null } = { supportPlans: null, error: null };
+const supportProducts = {
+  data: [
+    supportProduct("01tENT", "WSO2 Enterprise Support Plan", "SU-E"),
+    supportProduct("01tSTD", "WSO2 Standard Support Plan", "SU-S"),
+    supportProduct("01tPRE", "Premium Support Subscription", "SV-PREMIUM-SUPPORT"),
+  ],
+};
 const empty = {
   data: [],
   error: null,
@@ -38,8 +65,13 @@ const empty = {
 };
 vi.mock("@features/sales/cado2/quotes/api/useQuoteApi", () => ({
   useAccountOpportunities: () => empty,
+  usePreviousOpportunityLines: (ids: readonly string[]) => ids.map(() => ({ ...empty, data: previousLines })),
   usePricingFormulas: () => empty,
-  useBundleChildren: () => ({ data: { children: [], missing: [] }, isFetching: false }),
+  useQuoteSettings: () =>
+    quoteSettings.error
+      ? { ...empty, data: undefined, error: quoteSettings.error }
+      : { ...empty, data: { validityDays: 30, supportPlans: quoteSettings.supportPlans } },
+  useProductsByIds: () => ({ ...empty, data: supportProducts.data }),
   useCurrencies: () => ({ ...empty, data: ["USD"] }),
   usePricebooks: () => empty,
   useProducts: () => ({
@@ -60,7 +92,6 @@ const line = (name: string, category: LineValue["category"]): LineValue => ({
   pricebookName: "USD Price Book",
   unitPrice: "360",
   category,
-  categorySource: category ? "MAPPED" : "REP",
   recurring: category !== "PROFESSIONAL_SERVICE",
   classification: "PS",
   unitOfMeasure: "",
@@ -71,8 +102,6 @@ const line = (name: string, category: LineValue["category"]): LineValue => ({
   endDate: "",
   salesPrice: "",
   key: `k-${Math.random()}`,
-  parentKey: "",
-  bundleFixedQuantity: null,
 });
 
 /** Each line's quantity, by key, to check what the form holds. */
@@ -112,6 +141,122 @@ function Harness({
 }
 
 describe("ProductsStep (Products & Pricing)", () => {
+  beforeEach(() => {
+    quoteSettings.supportPlans = null;
+    quoteSettings.error = null;
+    supportProducts.data = supportProducts.data.map((p) => ({ ...p, classificationProblem: null }));
+  });
+
+  // A failed lookup says so, instead of looking like "no support plans".
+  it("says when the support plans couldn't be loaded", () => {
+    quoteSettings.error = new Error("down");
+    render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL" }} />);
+    expect(screen.getByText(/Couldn't load the support plans, so this quote's support isn't checked/)).toBeInTheDocument();
+  });
+
+  it("won't add a support product whose classification isn't set up", () => {
+    quoteSettings.supportPlans = plans;
+    supportProducts.data = supportProducts.data.map((p) =>
+      p.id === "01tENT" ? { ...p, classificationProblem: "WSO2 Enterprise Support Plan's classification, SS, isn't set up in QuickQuote." } : p,
+    );
+    render(<Harness />);
+    expect(screen.getByRole("button", { name: "Add Enterprise Support" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add Standard Support" })).toBeEnabled();
+  });
+
+  // D155: a year with a subscription is reminded of its support plan; nothing is added by itself.
+  it("warns a year with no support plan and adds Enterprise Support in one click", async () => {
+    quoteSettings.supportPlans = plans;
+    const user = userEvent.setup();
+    render(<Harness />);
+    const warning = screen.getByRole("alert", { name: "Support plan" });
+    expect(warning).toHaveTextContent("Year 1 has no support plan.");
+    expect(screen.queryByText("WSO2 Enterprise Support Plan")).toBeNull();
+
+    await user.click(within(warning).getByRole("button", { name: "Add Enterprise Support" }));
+    expect(screen.getByText("WSO2 Enterprise Support Plan")).toBeInTheDocument();
+    expect(screen.queryByRole("alert", { name: "Support plan" })).toBeNull();
+  });
+
+  it("has no switch between plans: the AM removes one and adds the other", () => {
+    quoteSettings.supportPlans = plans;
+    const enterprise = { ...line("WSO2 Enterprise Support Plan", "SUPPORT"), productId: "01tENT" };
+    render(<Harness values={{ lines: [line("WSO2 Gateway", "SUBSCRIPTION"), enterprise] }} />);
+    expect(screen.queryByRole("alert", { name: "Support plan" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Switch to/ })).toBeNull();
+  });
+
+  it("warns about two support plans, and offers Premium with Enterprise until one is added", async () => {
+    quoteSettings.supportPlans = plans;
+    const user = userEvent.setup();
+    const enterprise = { ...line("WSO2 Enterprise Support Plan", "SUPPORT"), productId: "01tENT" };
+    const standard = { ...line("WSO2 Standard Support Plan", "SUPPORT"), productId: "01tSTD" };
+    render(<Harness values={{ lines: [line("WSO2 Gateway", "SUBSCRIPTION"), enterprise, standard] }} />);
+    expect(screen.getByRole("alert", { name: "Support plan" })).toHaveTextContent(
+      "Year 1 has 2 support plans (Enterprise and Standard). Keep one.",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add Premium Support" }));
+    await user.click(screen.getByRole("menuitem", { name: "Premium Support Subscription · SV-PREMIUM-SUPPORT" }));
+    expect(screen.getByText("Premium Support Subscription")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Premium Support" })).toBeNull();
+  });
+
+  it("checks nothing while no support plan is set up", () => {
+    render(<Harness />);
+    expect(screen.queryByRole("alert", { name: "Support plan" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add Premium Support" })).toBeNull();
+  });
+
+  // D159: a renewal's previous opportunities' products, read only, synced or not.
+  it("shows the previous year's products on a renewal once its previous opportunities are chosen", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal" }} />);
+    expect(screen.queryByRole("button", { name: "Previous year's products" })).toBeNull(); // a first sale
+    unmount();
+
+    // None chosen in Overview yet: disabled, saying where to choose them.
+    const none = render(<Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL" }} />);
+    expect(screen.getByRole("button", { name: "Previous year's products" })).toBeDisabled();
+    await user.hover(screen.getByRole("button", { name: "Previous year's products" }).parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Choose the opportunities this renewal replaces in Overview to see their products.");
+    none.unmount();
+
+    render(
+      <Harness values={{ opportunityId: "006A", opportunityName: "Acme renewal", dealKind: "RENEWAL", previousOpportunityIds: ["006P1"] }} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Previous year's products" }));
+    const dialog = within(screen.getByRole("dialog", { name: /Previous year's products/ }));
+    expect(dialog.getByText("Acme - Integration 2026")).toBeInTheDocument();
+    expect(dialog.getByText("API Manager")).toBeInTheDocument();
+    expect(dialog.queryByRole("button", { name: /Load|Add/ })).toBeNull(); // read only
+    await user.click(dialog.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("WSO2 Gateway")).toBeInTheDocument(); // the quote's own lines untouched
+  });
+
+  // D151: a rate per year, from the Partner Commission card.
+  it("splits the commission into a rate per year, and back to one after asking", async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<Harness values={{ dealType: "PARTNER", partnerCommissionPercent: "10", yearCount: 1 }} />);
+    expect(screen.queryByRole("checkbox", { name: "Different rate per year" })).toBeNull(); // one year
+    unmount();
+
+    render(<Harness values={{ dealType: "PARTNER", partnerCommissionPercent: "10", yearCount: 3 }} />);
+    await user.click(screen.getByRole("checkbox", { name: "Different rate per year" }));
+    const perYear = within(screen.getByLabelText("Commission per year"));
+    expect(perYear.getAllByRole("textbox").map((t) => (t as HTMLInputElement).value)).toEqual(["10", "10", "10"]);
+    const year1 = perYear.getByRole("textbox", { name: "Year 1" });
+    await user.clear(year1);
+    await user.type(year1, "15");
+
+    await user.click(screen.getByRole("checkbox", { name: "Different rate per year" }));
+    expect(screen.getByText("Every year will use Year 1's 15%.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Use 15%" }));
+    expect(screen.queryByLabelText("Commission per year")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Commission" })).toHaveValue("15");
+  });
+
   // D78: products can be added and kept before the start date; they are
   // priced once it is chosen.
   it("lets the AM add products before the start date is chosen", () => {
@@ -157,7 +302,7 @@ describe("ProductsStep (Products & Pricing)", () => {
     expect(screen.queryByRole("button", { name: "Delete Year 1" })).toBeNull();
     unmount();
     render(<Harness />);
-    expect(screen.getByRole("region", { name: "Year 1" })).toHaveTextContent("2 products");
+    expect(screen.getByRole("region", { name: "Year 1" })).not.toHaveTextContent(/\d+ products?/); // no product count (2026-11-08)
     expect(screen.queryByRole("button", { name: "Delete Year 1" })).toBeNull();
   });
 
@@ -197,51 +342,23 @@ describe("ProductsStep (Products & Pricing)", () => {
     expect(regions).not.toContain("Payment Terms");
   });
 
-  // D93: a plain "Uncategorised" heading, no amber and no chip; the line's edit button opens the dialog.
-  it("puts a line whose product isn't mapped under Uncategorised; its category is chosen in the line's dialog", async () => {
+  // D152: a line whose classification isn't set up sits first under "Not set up"; only an Admin can fix it.
+  it("puts a line whose classification isn't set up under Not set up, saying an Admin sets it", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     const table = screen.getByRole("table", { name: "Products" });
     expect(within(table).queryByRole("combobox")).toBeNull(); // no dropdown on the line
-    expect(within(table).getByText("Uncategorised")).toBeInTheDocument(); // its own section, first
-    // Framed by a thin red line.
-    const group = within(table).getByRole("rowgroup", { name: "Uncategorised" });
+    // Framed by a thin red line, first.
+    const group = within(table).getByRole("rowgroup", { name: "Not set up" });
     expect(within(group).getByText("WSO2 Integrator")).toBeInTheDocument();
     expect(within(group).queryByText("WSO2 Gateway")).toBeNull();
-    // Says what to do (D95).
-    expect(within(table).getByText(/to choose a category/)).toBeInTheDocument();
-    expect(within(table).queryByRole("button", { name: /Category not set/ })).toBeNull();
+    expect(within(table).getByText(/Classification not set up · ask an Admin/)).toBeInTheDocument();
 
-    // Line 2 is WSO2 Integrator, the one without a category.
+    // Line 2 is WSO2 Integrator: its dialog says the same, with nothing to choose.
     await user.click(within(table).getByRole("button", { name: "Edit line 2" }));
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("No category is set up for this product");
-    await user.click(within(dialog).getByRole("combobox", { name: "Category" }));
-    await user.click(screen.getByRole("option", { name: "Support" }));
-    await user.click(within(dialog).getByRole("button", { name: "Save product" }));
-
-    expect(within(table).getByText("Support")).toBeInTheDocument(); // now in its group
-    expect(within(table).queryByText("Uncategorised")).toBeNull(); // gone once empty
-    expect(within(table).queryByRole("rowgroup", { name: "Uncategorised" })).toBeNull();
-  });
-
-  // D125: a bundle child's quantity follows its rule when the AM changes the parent's.
-  it("updates the children's quantities when the parent's changes", async () => {
-    const user = userEvent.setup();
-    const gw = { ...line("WSO2 Gateway", "SUBSCRIPTION"), key: "gw", quantity: "5" };
-    const monitoring = { ...line("Monitoring", "SUBSCRIPTION"), key: "mon", parentKey: "gw", quantity: "5" };
-    const support = { ...line("Enterprise Support", "SUPPORT"), key: "sup", parentKey: "gw", quantity: "1", bundleFixedQuantity: 1 };
-    render(<Harness values={{ lines: [gw, monitoring, support] }} />);
-    expect(screen.getByLabelText("Quantities")).toHaveTextContent("gw=5 mon=5 sup=1");
-
-    await user.click(screen.getByRole("button", { name: "Edit line 1" }));
-    const dialog = screen.getByRole("dialog");
-    const qty = within(dialog).getByRole("textbox", { name: "Quantity" });
-    await user.clear(qty);
-    await user.type(qty, "10");
-    await user.click(within(dialog).getByRole("button", { name: "Save product" }));
-
-    expect(screen.getByLabelText("Quantities")).toHaveTextContent("gw=10 mon=10 sup=1");
+    expect(within(dialog).getByRole("alert", { name: "Classification" })).toHaveTextContent(/ask an Admin/);
+    expect(within(dialog).queryByRole("combobox", { name: "Category" })).toBeNull();
   });
 
   // D91, amended 2026-10-23: the commission card sits above the term and the products, before any product too.

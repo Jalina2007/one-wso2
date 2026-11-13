@@ -114,18 +114,21 @@ function contactName(c: ContactValue): ReactNode {
       </SalesforceLink>
     );
   }
-  if (c.mode === "manual" && c.name.trim()) return c.name.trim();
+  // Typed in: its name, or its email when it has none (D165).
+  if (c.mode === "manual" && (c.name.trim() || c.email.trim())) return c.name.trim() || c.email.trim();
   return null;
 }
 
 /** A contact's detail line: their email, and whether they were typed in. */
 function contactDetail(c: ContactValue): string | undefined {
-  const parts = [c.email.trim(), c.mode === "manual" && c.name.trim() ? "typed in" : ""].filter(Boolean);
+  const typed = c.mode === "manual" && (c.name.trim() || c.email.trim());
+  // Without a name the email is already the label.
+  const parts = [c.name.trim() ? c.email.trim() : "", typed ? "typed in" : ""].filter(Boolean);
   return parts.length ? parts.join(" · ") : undefined;
 }
 
 const hasContact = (c: ContactValue) =>
-  (c.mode === "salesforce" && Boolean(c.sfContactId)) || (c.mode === "manual" && c.name.trim() !== "");
+  (c.mode === "salesforce" && Boolean(c.sfContactId)) || (c.mode === "manual" && (c.name.trim() !== "" || c.email.trim() !== ""));
 
 /**
  * The wizard's sticky summary (F5 reviews, 2026-09-25): the totals, then every
@@ -306,6 +309,9 @@ export default function SummaryPanel({ values: v, legalEntityName, totals, prici
           </Field>
           <Field label="Security contact (optional)" detail={contactDetail(v.securityContact)}>
             {hasContact(v.securityContact) ? contactName(v.securityContact) : null}
+          </Field>
+          <Field label="Legal contact (optional)" detail={contactDetail(v.legalContact)}>
+            {hasContact(v.legalContact) ? contactName(v.legalContact) : null}
           </Field>
         </Group>
       </Stack>

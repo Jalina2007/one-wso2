@@ -19,8 +19,8 @@ import {
 // the wire and the camelCase every consumer reads, and a type declaration
 // alone will not do it: declaring the camelCase shape and skipping the
 // transform costs nothing at compile time and silently reads `undefined` for
-// every field at runtime, so each update level renders as "N/A" and each
-// build status falls through to "Failed".
+// every field at runtime, so each update level and each build status renders
+// as "N/A".
 describe("mapUmtReleaseChunk", () => {
   it("turns a pending chunk's kebab-case update levels into camelCase", () => {
     const raw: RawUmtReleaseChunk = {

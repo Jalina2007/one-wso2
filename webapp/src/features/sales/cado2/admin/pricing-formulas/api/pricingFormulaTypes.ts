@@ -26,16 +26,18 @@ export interface FormulaProductOption {
 /** A binding as the Admin sends it: products by Id only (names come from Salesforce). */
 export interface FormulaBindingInput {
   readonly name: string;
-  readonly kind: "VALUE" | "PRODUCTS";
+  readonly kind: "VALUE" | "PRODUCTS" | "CATEGORY";
   readonly value: string;
   readonly productIds: readonly string[];
+  /** CATEGORY only (D153); "" otherwise. */
+  readonly category: string;
 }
 
 /** A formula worked out with sample values; nothing is saved. */
 export interface PricingFormulaTryInput {
   readonly expression: string;
   readonly bindings: readonly FormulaBindingInput[];
-  /** A sample total for each PRODUCTS placeholder: { "$3": "320000" }. */
+  /** A sample total for each PRODUCTS or CATEGORY placeholder: { "$3": "320000" }. */
   readonly samples: Record<string, string>;
   readonly quantity: number;
   readonly listPrice: string;

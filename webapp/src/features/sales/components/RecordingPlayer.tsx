@@ -41,6 +41,14 @@ export interface RecordingPlayerHandle {
  */
 const RecordingPlayer = forwardRef<RecordingPlayerHandle, {
   meetingId: number;
+  /** Which recording of the call, when it has several; the backend's first when omitted. */
+  recordingId?: number;
+  /**
+   * Seconds to start playing from once this recording loads. Set when a transcript line
+   * from another recording was clicked: the page switches to that recording, and the new
+   * element can only be seeked once it has read the file's metadata.
+   */
+  startAt?: number;
   /** Called as playback proceeds, so a transcript can mark the current line. */
   onTimeUpdate?: (seconds: number) => void;
   /**
@@ -50,7 +58,7 @@ const RecordingPlayer = forwardRef<RecordingPlayerHandle, {
    * the last person stopped talking, which is not where the recording ends.
    */
   onDurationChange?: (seconds: number) => void;
-}>(function RecordingPlayer({ meetingId, onTimeUpdate, onDurationChange }, ref) {
+}>(function RecordingPlayer({ meetingId, recordingId, startAt, onTimeUpdate, onDurationChange }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useImperativeHandle(ref, () => ({
@@ -66,13 +74,15 @@ const RecordingPlayer = forwardRef<RecordingPlayerHandle, {
       video.scrollIntoView({ behavior: "smooth", block: "nearest" });
     },
   }), []);
-  const { data, isLoading, error, refetch } = useRecordingPlayback(meetingId);
+  const { data, isLoading, error, refetch } = useRecordingPlayback(meetingId, recordingId);
   // Raised only after a retry has already failed, so a single expiry recovers silently
   // rather than blaming the viewer for a token they never saw.
   const [playbackFailed, setPlaybackFailed] = useState(false);
   const retriedRef = useRef(false);
-  // Position to restore after a re-minted URL reloads the element. 0 means nothing to do.
-  const resumeAtRef = useRef(0);
+  // Position to restore after a re-minted URL reloads the element, or to start from when
+  // the page asked for one. 0 means nothing to do. The player is remounted per recording,
+  // so startAt is read once, here.
+  const resumeAtRef = useRef(startAt ?? 0);
 
   /**
    * Recover from a token that expired mid-playback.

@@ -36,7 +36,7 @@ function open(at: string) {
     <MemoryRouter initialEntries={[at]}>
       <Where />
       <Routes>
-        <Route path="sales/cado2/admin" element={<Cado2AdminLayout />}>
+        <Route path="sales/quickquote/admin" element={<Cado2AdminLayout />}>
           {ADMIN_SECTIONS.map((s) => (
             <Route key={s.id} path={s.id} element={<p>{s.label} content</p>} />
           ))}
@@ -49,31 +49,31 @@ function open(at: string) {
 describe("CadO2 Admin's section list", () => {
   it("lists every section under its group, and marks the open one", () => {
     wide.value = true;
-    open("/sales/cado2/admin/currencies");
+    open("/sales/quickquote/admin/pricing-formulas");
     const nav = screen.getByRole("navigation", { name: "QuickQuote Admin sections" });
     for (const group of ADMIN_SECTION_GROUPS) expect(within(nav).getByText(group.label)).toBeInTheDocument();
     expect(within(nav).getAllByRole("link")).toHaveLength(ADMIN_SECTIONS.length);
-    expect(within(nav).getByRole("link", { name: "Currencies" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByText("Currencies content")).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Pricing Formulas" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("Pricing Formulas content")).toBeInTheDocument();
   });
 
   it("gives each section its own address", () => {
     wide.value = true;
-    open("/sales/cado2/admin/currencies");
+    open("/sales/quickquote/admin/pricing-formulas");
     expect(screen.getByRole("link", { name: "Legal Entities" })).toHaveAttribute(
       "href",
-      "/sales/cado2/admin/legal-entities",
+      "/sales/quickquote/admin/legal-entities",
     );
   });
 
   it("becomes a select above the content on a narrow screen", async () => {
     wide.value = false;
-    open("/sales/cado2/admin/approval-matrix");
+    open("/sales/quickquote/admin/approval-matrix");
     expect(screen.queryByRole("navigation", { name: "QuickQuote Admin sections" })).toBeNull();
     const user = userEvent.setup();
     await user.click(screen.getByRole("combobox", { name: "Admin section" }));
-    await user.click(screen.getByRole("option", { name: "Product Categories" }));
-    expect(screen.getByTestId("where").textContent).toBe("/sales/cado2/admin/product-categories");
+    await user.click(screen.getByRole("option", { name: "Product Classifications" }));
+    expect(screen.getByTestId("where").textContent).toBe("/sales/quickquote/admin/product-classifications");
   });
 
   it("opens on the approval matrix", () => {
@@ -83,7 +83,7 @@ describe("CadO2 Admin's section list", () => {
   // 2026-10-30: grouped by what the Admin changes, in the quote's order.
   it("groups the sections by what they change", () => {
     expect(ADMIN_SECTION_GROUPS.map((g) => [g.label, g.sections.map((s) => s.label)])).toEqual([
-      ["Products & Pricing", ["Product Categories", "Product Bundles", "Pricing Formulas", "Currencies"]],
+      ["Products & Pricing", ["Product Classifications", "Support Plans", "Pricing Formulas"]],
       ["Approvals", ["Approval Matrix", "Approval SLAs"]],
       ["Order Form", ["Legal Entities", "Legal Texts", "Supporting Documents"]],
       ["Settings", ["Quote Access", "Salesforce Sync", "Email Notifications"]],

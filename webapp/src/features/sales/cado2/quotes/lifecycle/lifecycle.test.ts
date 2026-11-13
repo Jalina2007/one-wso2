@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 import type { AuditEvent, DraftResponse } from "@features/sales/cado2/quotes/api/quoteTypes";
 import { gateway, ready } from "@features/sales/cado2/quotes/testing/fixtures";
-import { compareVersions, describeEvent, groupHistory, quoteLabel, quoteStatusLabel } from "./lifecycle";
+import { compareVersions, describeEvent, groupHistory, quoteLabel, quoteStatusLabel, syncedDraft } from "./lifecycle";
 
 const v2: DraftResponse = {
   ...ready,
@@ -83,6 +83,18 @@ const event = (over: Partial<AuditEvent>): AuditEvent => ({
 });
 
 describe("history", () => {
+  // Legal's writing reads as words, saying what it wrote; an unknown event is never a raw code.
+  it("says what Legal wrote, in words", () => {
+    const [both] = groupHistory([event({ eventType: "LEGAL_TERMS_WRITTEN", versionNumber: 2, metadata: { onPrem: true, saas: true, special: false } })]);
+    expect(describeEvent(both)).toBe("Legal wrote the on-premises terms and SaaS terms of version 2");
+    const [all] = groupHistory([event({ eventType: "LEGAL_TERMS_WRITTEN", metadata: { onPrem: true, saas: true, special: true } })]);
+    expect(describeEvent(all)).toBe("Legal wrote the on-premises terms, SaaS terms and special terms of version 1");
+    const [special] = groupHistory([event({ eventType: "LEGAL_TERMS_WRITTEN", metadata: { onPrem: false, saas: false, special: true } })]);
+    expect(describeEvent(special)).toBe("Legal wrote the special terms of version 1");
+    const [unknown] = groupHistory([event({ eventType: "SOME_NEW_EVENT" as AuditEvent["eventType"] })]);
+    expect(describeEvent(unknown)).toBe("Some new event");
+  });
+
   it("groups consecutive saves by the same person on the same version", () => {
     const entries = groupHistory([
       event({ id: 1, eventType: "QUOTE_CREATED" }),
@@ -188,5 +200,15 @@ describe("Salesforce sync history", () => {
     expect(describeEvent({ event: refused, count: 1 })).toBe(
       "Salesforce refused the sync of version 1: Closed Won opportunities can't be edited",
     );
+  });
+});
+
+// 2026-11-11: a draft synced to Salesforce can't be deleted; a later, never-synced one can.
+describe("syncedDraft", () => {
+  it("is the version last synced, or any version when it isn't recorded", () => {
+    expect(syncedDraft({ sfSyncedAt: null, sfSyncedVersion: null }, 1)).toBe(false);
+    expect(syncedDraft({ sfSyncedAt: "2026-11-10T12:00:00Z", sfSyncedVersion: 1 }, 1)).toBe(true);
+    expect(syncedDraft({ sfSyncedAt: "2026-11-10T12:00:00Z", sfSyncedVersion: 1 }, 2)).toBe(false);
+    expect(syncedDraft({ sfSyncedAt: "2026-11-10T12:00:00Z", sfSyncedVersion: null }, 2)).toBe(true);
   });
 });

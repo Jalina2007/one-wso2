@@ -71,6 +71,14 @@ export default function MeetingCoverageCell({
       </Typography>
     );
   }
+  // Nothing was said while transcription ran. Not a failure, so not in red.
+  if (coverage.status === "EMPTY") {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Transcript is empty
+      </Typography>
+    );
+  }
 
   const inFlight = coverage.status === "PENDING" || coverage.status === "RUNNING" || reanalysing;
   const reanalyse = canReanalyse && !inFlight && (
